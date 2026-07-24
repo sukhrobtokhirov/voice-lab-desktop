@@ -80,7 +80,11 @@ jobs:
       - name: Build and publish macOS ${{ matrix.arch }}
         run: |
           npm run build:renderer
-          npx cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --${{ matrix.arch }} --publish always
+          # Arch-specific channel → latest-arm64-mac.yml / latest-x64-mac.yml
+          # (matches src/updater.js; default "latest" races on latest-mac.yml)
+          npx cross-env CSC_IDENTITY_AUTO_DISCOVERY=false \
+            electron-builder --mac --${{ matrix.arch }} --publish always \
+            -c.publish.channel=latest-${{ matrix.arch }}
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
           UPDATE_OWNER: voicelab-uz

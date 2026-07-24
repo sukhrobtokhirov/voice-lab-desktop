@@ -14,16 +14,16 @@ The app’s `electron-updater` feed points at that repo (`voicelab-uz` / `deskto
 
 ## Ship a new version
 
-1. Bump `version` in `package.json` (e.g. `1.7.7`).
+1. Bump `version` in `package.json` (e.g. `1.7.8`).
 2. Commit and tag:
    ```bash
-   git tag v1.7.7
+   git tag v1.7.8
    git push origin main
-   git push origin v1.7.7
+   git push origin v1.7.8
    ```
 3. GitHub Action **Release VoiceLab Desktop** builds macOS arm64/x64 and uploads:
-   - `VoiceLab-*-arm64-mac.zip` / `.dmg`
-   - `latest-arm64-mac.yml` / `latest-x64-mac.yml` (updater metadata)
+   - `VoiceLab-*-arm64-mac.zip` / `.dmg` (and x64 equivalents)
+   - `latest-arm64-mac.yml` / `latest-x64-mac.yml` (updater metadata; required — not `latest-mac.yml`)
 4. In a previous install: Settings → Check for Updates (or wait for startup check).
 
 ## Notes
