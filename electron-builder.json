@@ -1,10 +1,10 @@
 {
-  "appId": "com.gizmolabs.openwhispr",
+  "appId": "uz.voicelab.desktop",
   "afterPack": "scripts/afterPack.js",
-  "productName": "OpenWhispr",
+  "productName": "VoiceLab",
   "protocols": {
-    "name": "OpenWhispr Protocol",
-    "schemes": ["openwhispr"]
+    "name": "VoiceLab Protocol",
+    "schemes": ["voicelab"]
   },
   "directories": {
     "output": "dist"
@@ -159,9 +159,9 @@
     "extendInfo": {
       "LSUIElement": false,
       "CFBundleIconName": "openwhispr",
-      "NSMicrophoneUsageDescription": "OpenWhispr uses the microphone to capture your voice for transcription.",
-      "NSAudioCaptureUsageDescription": "OpenWhispr uses system audio to capture other participants' audio from calls and meetings.",
-      "NSAccessibilityUsageDescription": "OpenWhispr needs accessibility permissions to paste transcribed text into other applications."
+      "NSMicrophoneUsageDescription": "VoiceLab uses the microphone to capture your voice for transcription.",
+      "NSAudioCaptureUsageDescription": "VoiceLab uses system audio to capture other participants' audio from calls and meetings.",
+      "NSAccessibilityUsageDescription": "VoiceLab needs accessibility permissions to paste transcribed text into other applications."
     }
   },
   "win": {
@@ -254,7 +254,7 @@
     "include": "resources/nsis/installer.nsh"
   },
   "dmg": {
-    "title": "OpenWhispr",
+    "title": "VoiceLab",
     "icon": "src/assets/icon.icns",
     "window": {
       "width": 540,
@@ -263,9 +263,9 @@
   },
   "publish": {
     "provider": "github",
-    "owner": "OpenWhispr",
-    "repo": "openwhispr",
+    "owner": "voicelab-uz",
+    "repo": "desktop",
     "private": false,
-    "releaseType": "draft"
+    "releaseType": "release"
   }
 }

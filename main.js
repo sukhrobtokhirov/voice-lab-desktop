@@ -28,9 +28,36 @@ const {
   systemPreferences,
 } = require("electron");
 const path = require("path");
+const fs = require("fs");
 const http = require("http");
 const tls = require("tls");
+// Dev: project-root .env. Packaged: electron-builder extraResources/.env
 require("dotenv").config({ path: path.join(__dirname, ".env") });
+if (app.isPackaged) {
+  require("dotenv").config({
+    path: path.join(process.resourcesPath, ".env"),
+    override: false,
+  });
+}
+
+/**
+ * Fill AISHA_API_KEY from an env file only when unset.
+ * User-saved keys in userData must always win over packaged Resources/.env.
+ */
+function ensureAishaApiKeyFromFile(envPath) {
+  if (process.env.AISHA_API_KEY) return false;
+  try {
+    if (!fs.existsSync(envPath)) return false;
+    const match = fs.readFileSync(envPath, "utf8").match(/^AISHA_API_KEY\s*=\s*(.+)$/m);
+    if (!match?.[1]) return false;
+    const value = match[1].trim().replace(/^['"]|['"]$/g, "");
+    if (!value) return false;
+    process.env.AISHA_API_KEY = value;
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // Extend Node's TLS trust with the OS store so ws and https.get see corporate
 // CAs that Chromium already trusts.
@@ -48,9 +75,9 @@ try {
 
 const VALID_CHANNELS = new Set(["development", "staging", "production"]);
 const DEFAULT_OAUTH_PROTOCOL_BY_CHANNEL = {
-  development: "openwhispr-dev",
-  staging: "openwhispr-staging",
-  production: "openwhispr",
+  development: "voicelab-dev",
+  staging: "voicelab-staging",
+  production: "voicelab",
 };
 const BASE_WINDOWS_APP_ID = "com.gizmolabs.openwhispr";
 const DEFAULT_AUTH_BRIDGE_PORT = 5199;
@@ -99,10 +126,20 @@ configureChannelUserDataPath();
 
 // Load userData .env (contains DICTATION_KEY, API keys, etc.) early — before
 // hotkey registration, which needs DICTATION_KEY before the renderer loads.
+// override:true so the user's saved AISHA_API_KEY wins over any bundled fallback.
 require("dotenv").config({
   path: path.join(app.getPath("userData"), ".env"),
-  override: false,
+  override: true,
 });
+
+// Dev / packaged Resources/.env only fill AISHA_API_KEY when still unset.
+if (!process.env.AISHA_API_KEY) {
+  if (app.isPackaged) {
+    ensureAishaApiKeyFromFile(path.join(process.resourcesPath, ".env"));
+  } else {
+    ensureAishaApiKeyFromFile(path.join(__dirname, ".env"));
+  }
+}
 
 // Fix transparent window flickering on Linux: --enable-transparent-visuals requires
 // the compositor to set up an ARGB visual before any windows are created.
@@ -416,6 +453,7 @@ function initializeCoreManagers() {
   windowsKeyManager = new WindowsKeyManager();
   linuxKeyManager = new LinuxKeyManager();
   textEditMonitor = new TextEditMonitor();
+  textEditMonitor.rememberOwnPid(process.pid);
   audioTapManager = new AudioTapManager();
   linuxPortalAudioManager = new LinuxPortalAudioManager();
   windowsLoopbackAudioManager = new WindowsLoopbackAudioManager();
@@ -652,62 +690,32 @@ function resolveAuthUrl() {
     process.env.AUTH_URL ||
     process.env.VITE_AUTH_URL ||
     runtimeEnv.VITE_AUTH_URL ||
-    "https://auth.openwhispr.com"
+    "https://voicelab.uz"
   );
 }
 
-function getOauthCookieName() {
-  return process.env.NODE_ENV === "production"
-    ? "__Secure-openwhispr.session_token"
-    : "openwhispr.session_token";
-}
-
-// Older website builds send the signed cookie value as `?token=`; trade it
-// for the raw session.token the bearer plugin expects.
-async function exchangeSignedTokenForRawBearer(signedToken) {
-  try {
-    const res = await net.fetch(`${resolveAuthUrl()}/api/auth/get-session`, {
-      headers: { Cookie: `${getOauthCookieName()}=${signedToken}` },
-      signal: AbortSignal.timeout(5000),
-      useSessionCookies: false,
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data?.session?.token || null;
-  } catch (err) {
-    if (debugLogger) {
-      debugLogger.warn("Signed-token bearer exchange failed (non-fatal)", {
-        error: err?.message,
-      });
-    }
-    return null;
-  }
-}
-
-// One-time bridge for users upgrading from a build that injected the session
-// cookie into Electron's jar: exchange the existing cookie for a raw bearer
-// token, store it, and remove the cookie. Non-fatal — failures fall through
-// to the normal sign-in flow.
+/** Prefer VoiceLab access_token cookie from the site origin when present. */
 async function migrateCookieToBearerToken() {
   const tokenStore = require("./src/helpers/tokenStore");
   if (tokenStore.get()) return;
 
-  const cookieName = getOauthCookieName();
   const authUrl = resolveAuthUrl();
-
   try {
-    const cookies = await session.defaultSession.cookies.get({ url: authUrl, name: cookieName });
-    if (!cookies.length) return;
+    const accessCookies = await session.defaultSession.cookies.get({
+      url: authUrl,
+      name: "access_token",
+    });
+    if (!accessCookies.length) return;
 
-    const rawToken = await exchangeSignedTokenForRawBearer(cookies[0].value);
-    if (!rawToken) return;
-
-    tokenStore.set(rawToken);
-    await session.defaultSession.cookies.remove(authUrl, cookieName);
-    if (debugLogger) debugLogger.debug("Migrated cookie to bearer token");
+    const refreshCookies = await session.defaultSession.cookies.get({
+      url: authUrl,
+      name: "refresh_token",
+    });
+    tokenStore.setSession(accessCookies[0].value, refreshCookies[0]?.value || "");
+    if (debugLogger) debugLogger.debug("Migrated VoiceLab cookies to token store");
   } catch (err) {
     if (debugLogger) {
-      debugLogger.warn("Cookie→bearer token migration failed (non-fatal)", {
+      debugLogger.warn("Cookie→token migration failed (non-fatal)", {
         error: err?.message,
       });
     }
@@ -716,12 +724,13 @@ async function migrateCookieToBearerToken() {
 
 // Persist the bearer token and reload the control panel so the renderer's
 // authClient sends `Authorization: Bearer <token>` on its next request.
-async function applySessionTokenAndRefresh(token) {
+async function applySessionTokenAndRefresh(token, refreshToken = "") {
   if (!token) return;
   if (!isLiveWindow(windowManager?.controlPanelWindow)) return;
 
   const tokenStore = require("./src/helpers/tokenStore");
-  tokenStore.set(token);
+  if (refreshToken) tokenStore.setSession(token, refreshToken);
+  else tokenStore.set(token);
 
   const appUrl = DevServerManager.getAppUrl(true);
   if (appUrl) {
@@ -747,15 +756,13 @@ async function applySessionTokenAndRefresh(token) {
 async function handleOAuthDeepLink(deepLinkUrl) {
   try {
     const parsed = new URL(deepLinkUrl);
-    const bearerToken = parsed.searchParams.get("bearer_token");
-    if (bearerToken) {
-      void applySessionTokenAndRefresh(bearerToken);
-      return;
-    }
-    const signedToken = parsed.searchParams.get("token");
-    if (!signedToken) return;
-    const rawToken = await exchangeSignedTokenForRawBearer(signedToken);
-    if (rawToken) void applySessionTokenAndRefresh(rawToken);
+    const bearerToken =
+      parsed.searchParams.get("bearer_token") ||
+      parsed.searchParams.get("access_token") ||
+      parsed.searchParams.get("token");
+    if (!bearerToken) return;
+    const refreshToken = parsed.searchParams.get("refresh_token") || "";
+    void applySessionTokenAndRefresh(bearerToken, refreshToken);
   } catch (err) {
     if (debugLogger) debugLogger.error("Failed to handle OAuth deep link:", err);
   }
@@ -820,11 +827,16 @@ function startAuthBridgeServer() {
       return;
     }
 
-    let token = requestUrl.searchParams.get("bearer_token") || requestUrl.searchParams.get("token");
+    let token =
+      requestUrl.searchParams.get("bearer_token") ||
+      requestUrl.searchParams.get("access_token") ||
+      requestUrl.searchParams.get("token");
+    let refreshToken = requestUrl.searchParams.get("refresh_token") || "";
     if (!token && req.method === "POST") {
       try {
         const body = await parseJsonBody(req);
-        token = body?.bearer_token || body?.token || null;
+        token = body?.bearer_token || body?.access_token || body?.token || null;
+        refreshToken = body?.refresh_token || refreshToken;
       } catch (error) {
         res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
         res.end(error.message || "Invalid request");
@@ -838,11 +850,11 @@ function startAuthBridgeServer() {
       return;
     }
 
-    void applySessionTokenAndRefresh(token);
+    void applySessionTokenAndRefresh(token, refreshToken);
 
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(
-      "<html><body><h3>OpenWhispr sign-in complete.</h3><p>You can close this tab.</p></body></html>"
+      "<html><body><h3>VoiceLab sign-in complete.</h3><p>You can close this tab.</p></body></html>"
     );
   });
 

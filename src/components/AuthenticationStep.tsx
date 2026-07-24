@@ -2,14 +2,15 @@ import React, { useCallback, useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../hooks/useAuth";
 import {
-  authClient,
   AUTH_URL,
+  authClient,
+  signInWithPassword,
   signInWithSocial,
   signInWithSSO,
+  signUpWithPassword,
   updateLastSignInTime,
   type SocialProvider,
 } from "../lib/auth";
-import { OPENWHISPR_API_URL } from "../config/constants";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { AlertCircle, ArrowRight, Check, Loader2, ChevronLeft } from "lucide-react";
@@ -168,32 +169,10 @@ export default function AuthenticationStep({
 
     setIsCheckingEmail(true);
     setError(null);
-
-    try {
-      if (!OPENWHISPR_API_URL) {
-        setAuthMode("sign-up");
-        return;
-      }
-
-      const response = await fetch(`${OPENWHISPR_API_URL}/api/check-user`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
-      });
-
-      if (!response.ok) {
-        throw new Error(t("auth.errors.failedUserCheck"));
-      }
-
-      const data = await response.json().catch(() => ({}));
-      setAuthMode(data.exists ? "sign-in" : "sign-up");
-    } catch (err) {
-      logger.error("Error checking user existence", err, "auth");
-      setAuthMode("sign-up");
-    } finally {
-      setIsCheckingEmail(false);
-    }
-  }, [email, t]);
+    // VoiceLab/Aisha has no check-user endpoint — default to sign-in; user can switch.
+    setAuthMode("sign-in");
+    setIsCheckingEmail(false);
+  }, [email]);
 
   const errorMessageIncludes = (message: string | undefined, keywords: string[]): boolean => {
     if (!message) return false;
@@ -215,10 +194,9 @@ export default function AuthenticationStep({
 
       try {
         if (authMode === "sign-up") {
-          // Set before signup — SDK may trigger isSignedIn before returning
           needsVerificationRef.current = true;
 
-          const result = await authClient.signUp.email({
+          const result = await signUpWithPassword({
             email: email.trim(),
             password,
             name: fullName.trim() || email.trim().split("@")[0],
@@ -235,15 +213,16 @@ export default function AuthenticationStep({
             } else {
               setError(result.error.message || t("auth.errors.createAccountFailed"));
             }
-          } else {
+          } else if (result.requiresVerification) {
             updateLastSignInTime();
             onNeedsVerification(email.trim());
+          } else {
+            needsVerificationRef.current = false;
+            updateLastSignInTime();
+            onAuthComplete();
           }
         } else {
-          const result = await authClient.signIn.email({
-            email: email.trim(),
-            password,
-          });
+          const result = await signInWithPassword(email.trim(), password);
 
           if (result.error) {
             if (errorMessageIncludes(result.error.message, ["not found", "no user"])) {

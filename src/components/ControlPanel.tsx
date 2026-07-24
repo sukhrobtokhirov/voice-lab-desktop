@@ -411,6 +411,33 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     return () => cleanup?.();
   }, [toast, t]);
 
+  // One-shot prompt when onboarding is done but no Aisha key is saved yet.
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (localStorage.getItem("onboardingCompleted") !== "true") return;
+      if (sessionStorage.getItem("aishaKeyPromptShown") === "true") return;
+      try {
+        const key = await window.electronAPI?.getAishaApiKey?.();
+        if (cancelled || (typeof key === "string" && key.trim())) return;
+        sessionStorage.setItem("aishaKeyPromptShown", "true");
+        setSettingsSection("account");
+        setShowSettings(true);
+        toast({
+          title: t("settingsPage.account.aishaKey.missingTitle"),
+          description: t("settingsPage.account.aishaKey.missingBody"),
+          duration: 12000,
+        });
+      } catch {
+        /* ignore */
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [toast, t]);
+
   useEffect(() => {
     fetchStreamingProviders();
   }, []);

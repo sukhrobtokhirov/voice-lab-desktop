@@ -6,6 +6,7 @@ import itPrompts from "./it/prompts.json";
 import jaPrompts from "./ja/prompts.json";
 import ptPrompts from "./pt/prompts.json";
 import ruPrompts from "./ru/prompts.json";
+import uzPrompts from "./uz/prompts.json";
 import zhCNPrompts from "./zh-CN/prompts.json";
 import zhTWPrompts from "./zh-TW/prompts.json";
 
@@ -16,6 +17,7 @@ export interface PromptBundle {
   translatePrompt: string;
 }
 
+export const uz: PromptBundle = uzPrompts;
 export const en: PromptBundle = enPrompts;
 export const es: PromptBundle = esPrompts;
 export const fr: PromptBundle = frPrompts;
@@ -28,6 +30,7 @@ export const zhCN: PromptBundle = zhCNPrompts;
 export const zhTW: PromptBundle = zhTWPrompts;
 
 export const PROMPTS_BY_LOCALE = {
+  uz,
   en,
   es,
   fr,

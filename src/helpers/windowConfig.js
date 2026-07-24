@@ -29,7 +29,8 @@ const FLOATING_OVERLAY_TYPE =
       : "normal";
 
 const WINDOW_SIZES = {
-  BASE: { width: 96, height: 96 },
+  // Slightly larger than the mic (w-14) so the bigger floating button isn’t clipped.
+  BASE: { width: 112, height: 112 },
   WITH_MENU: { width: 240, height: 280 },
   WITH_TOAST: { width: 400, height: 500 },
   EXPANDED: { width: 400, height: 500 },

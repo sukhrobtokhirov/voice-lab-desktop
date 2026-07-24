@@ -96,6 +96,7 @@ export default function App() {
   const prevAutoHideRef = useRef(floatingIconAutoHide);
 
   const setWindowInteractivity = React.useCallback((shouldCapture) => {
+    // Main process captures target PID when enabling interactivity.
     window.electronAPI?.setMainWindowInteractivity?.(shouldCapture);
   }, []);
 
@@ -217,6 +218,15 @@ export default function App() {
     onToggle: handleDictationToggle,
   });
 
+  const captureTargetThenToggle = React.useCallback(async () => {
+    try {
+      await window.electronAPI?.captureTargetPid?.();
+    } catch {
+      /* non-fatal — paste path will try again */
+    }
+    toggleListening();
+  }, [toggleListening]);
+
   // Sync auto-hide from main process — setState directly to avoid IPC echo
   useEffect(() => {
     const unsubscribe = window.electronAPI?.onFloatingIconAutoHideChanged?.((enabled) => {
@@ -309,7 +319,7 @@ export default function App() {
 
   const getMicButtonProps = () => {
     const baseClasses =
-      "rounded-full w-10 h-10 flex items-center justify-center relative overflow-hidden border-2 border-white/70 cursor-pointer";
+      "rounded-full w-14 h-14 flex items-center justify-center relative overflow-hidden border-2 border-white/70 cursor-pointer";
 
     switch (micState) {
       case "idle":
@@ -424,7 +434,7 @@ export default function App() {
               onClick={(e) => {
                 if (!hasDragged) {
                   setIsCommandMenuOpen(false);
-                  toggleListening();
+                  void captureTargetThenToggle();
                 }
                 e.preventDefault();
               }}
@@ -464,13 +474,13 @@ export default function App() {
 
               {/* Dynamic content based on state */}
               {micState === "idle" || micState === "hover" ? (
-                <SoundWaveIcon size={micState === "idle" ? 12 : 14} />
+                <SoundWaveIcon size={micState === "idle" ? 18 : 20} />
               ) : micState === "recording" ? (
                 <LoadingDots />
               ) : micState === "processing" ? (
                 <VoiceWaveIndicator isListening={true} />
               ) : micState === "unavailable" ? (
-                <span className="text-white text-base font-bold">!</span>
+                <span className="text-white text-lg font-bold">!</span>
               ) : null}
 
               {/* State indicator ring for recording */}
@@ -503,7 +513,7 @@ export default function App() {
               <button
                 className="w-full px-3 py-2 text-left text-sm font-medium hover:bg-muted focus:bg-muted focus:outline-none"
                 onClick={() => {
-                  toggleListening();
+                  void captureTargetThenToggle();
                 }}
               >
                 {isRecording

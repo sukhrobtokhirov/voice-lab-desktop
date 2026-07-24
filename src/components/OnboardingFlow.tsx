@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Check,
+  Cloud,
   Flag,
   Settings,
   Shield,
@@ -14,6 +15,7 @@ import {
   Sparkles,
   UserCircle,
   Users,
+  KeyRound,
 } from "lucide-react";
 import TitleBar from "./TitleBar";
 import WindowControls from "./WindowControls";
@@ -30,9 +32,8 @@ import { useSystemAudioPermission } from "../hooks/useSystemAudioPermission";
 import { useSettings } from "../hooks/useSettings";
 import { useSettingsStore } from "../stores/settingsStore";
 import LanguageSelector from "./ui/LanguageSelector";
-import AuthenticationStep from "./AuthenticationStep";
-import EmailVerificationStep from "./EmailVerificationStep";
 import { setAgentName as saveAgentName } from "../utils/agentName";
+import logoIcon from "../assets/icon.png";
 import {
   formatHotkeyLabel,
   formatHotkeyListLabel,
@@ -41,7 +42,6 @@ import {
   parseHotkeyList,
   serializeHotkeyList,
 } from "../utils/hotkeys";
-import { useAuth } from "../hooks/useAuth";
 import { HotkeyInput } from "./ui/HotkeyInput";
 import { useHotkeyRegistration } from "../hooks/useHotkeyRegistration";
 import { useHotkeyModeInfo } from "../hooks/useHotkeyModeInfo";
@@ -50,16 +50,17 @@ import { validateHotkeyForSlot } from "../utils/hotkeyValidation";
 import { getCachedPlatform, getPlatform } from "../utils/platform";
 import logger from "../utils/logger";
 import { ActivationModeSelector } from "./ui/ActivationModeSelector";
-import TranscriptionModelPicker from "./TranscriptionModelPicker";
+import { Badge } from "./ui/badge";
 import { ACCESSIBILITY_SKIPPED_KEY, areRequiredPermissionsMet } from "../utils/permissions";
 import UseCaseStep from "./onboarding/UseCaseStep";
 import MeetingSetupStep from "./onboarding/MeetingSetupStep";
 import FinishStep from "./onboarding/FinishStep";
+import AishaKeyStep from "./onboarding/AishaKeyStep";
 import { USE_CASE_IDS } from "./onboarding/useCases";
 import { cloudPost } from "../services/cloudApi";
 
-// Highest possible step index across flow variants (skip-auth with meeting step).
-const MAX_STEP_INDEX = 7;
+// Highest possible step index across flow variants (skip-auth with aisha + meeting).
+const MAX_STEP_INDEX = 8;
 
 // Steps whose primary action is optional — the user can advance without it.
 const SKIPPABLE_STEPS = new Set(["usecase", "voiceAgent", "meeting"]);
@@ -70,7 +71,9 @@ interface OnboardingFlowProps {
 
 export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const { t } = useTranslation();
-  const { isSignedIn } = useAuth();
+  // Account auth removed for now — cloud STT uses AISHA_API_KEY.
+  const isSignedIn = false;
+  const skipAuth = true;
 
   const [currentStep, setCurrentStep, removeCurrentStep] = useLocalStorage(
     "onboardingCurrentStep",
@@ -103,6 +106,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     parakeetModel,
     cloudTranscriptionProvider,
     cloudTranscriptionModel,
+    cloudTranscriptionMode,
     cloudTranscriptionBaseUrl,
     openaiApiKey,
     groqApiKey,
@@ -134,9 +138,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const [hotkey, setHotkey] = useState(
     () => parseHotkeyList(dictationKey)[0] || getDefaultHotkey()
   );
-  const [agentName, setAgentName] = useState("OpenWhispr");
-  const [skipAuth, setSkipAuth] = useState(false);
-  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
+  const [agentName, setAgentName] = useState("VoiceLab");
   const [isModelDownloaded, setIsModelDownloaded] = useState(false);
   const { isUsingNativeShortcut, isUsingHyprland, hyprlandConfigStatus, supportsPushToTalk } =
     useHotkeyModeInfo("onboarding");
@@ -204,9 +206,26 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   //   systemAudio.granted || onboardingUseCases.includes(USE_CASE_IDS.meetings)
   const showMeetingStep = false;
 
+  const [aishaApiKey, setAishaApiKey] = useState("");
+  const [aishaKeyError, setAishaKeyError] = useState<string | null>(null);
+  const [aishaKeyValidating, setAishaKeyValidating] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.electronAPI?.getAishaApiKey?.().then((key) => {
+      if (!cancelled && typeof key === "string" && key.trim()) {
+        setAishaApiKey(key.trim());
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const steps = useMemo(() => {
     const list = [
       { id: "welcome", title: t("onboarding.steps.welcome"), icon: UserCircle },
+      { id: "aishaKey", title: t("onboarding.steps.aishaKey"), icon: KeyRound },
       { id: "usecase", title: t("onboarding.steps.useCase"), icon: Sparkles },
       { id: "setup", title: t("onboarding.steps.setup"), icon: Settings },
     ];
@@ -378,11 +397,11 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     // via productName-keyed userData), so they never reach this code.
     void window.electronAPI?.markBundleMigrated?.();
 
-    // Non-signed-in users in cloud mode default to BYOK to avoid
-    // "OpenWhispr Cloud requires sign-in" errors.
-    if (!isSignedIn && !useLocalWhisper) {
-      updateTranscriptionSettings({ cloudTranscriptionMode: "byok" });
-    }
+    // Aisha-only STT — lock dictation/meeting/upload to VoiceLab Cloud.
+    useSettingsStore.getState().setCloudTranscriptionForAllScopes({
+      useLocalWhisper: false,
+      cloudTranscriptionMode: "openwhispr",
+    });
 
     try {
       await window.electronAPI?.saveAllKeysToEnv?.();
@@ -398,9 +417,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     setDictationKey,
     ensureHotkeyRegistered,
     isSignedIn,
-    useLocalWhisper,
     skipAuth,
-    updateTranscriptionSettings,
   ]);
 
   const [isFinishing, setIsFinishing] = useState(false);
@@ -412,6 +429,35 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     }
 
     const currentStepId = steps[currentStep]?.id;
+
+    if (currentStepId === "aishaKey") {
+      const trimmed = aishaApiKey.trim();
+      if (!trimmed) {
+        setAishaKeyError(t("onboarding.aishaKey.errors.required"));
+        return;
+      }
+      setAishaKeyValidating(true);
+      setAishaKeyError(null);
+      try {
+        await window.electronAPI?.saveAishaApiKey?.(trimmed);
+        const result = await window.electronAPI?.validateAishaApiKey?.(trimmed);
+        if (!result?.ok && !result?.keyAccepted) {
+          setAishaKeyError(result?.message || t("onboarding.aishaKey.errors.invalid"));
+          return;
+        }
+        if (result?.code === "BILLING") {
+          // Key is valid but balance is low — allow continue with a soft notice.
+          setAishaKeyError(null);
+        }
+      } catch (error) {
+        logger.error("Failed to save/validate Aisha API key", { error }, "onboarding");
+        setAishaKeyError(t("onboarding.aishaKey.errors.saveFailed"));
+        return;
+      } finally {
+        setAishaKeyValidating(false);
+      }
+    }
+
     const isPermissionsGate =
       currentStepId === "permissions" || (currentStepId === "setup" && isSignedIn && !skipAuth);
     if (
@@ -452,6 +498,8 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     onboardingUseCaseNote,
     permissionsHook.accessibilityPermissionGranted,
     setAccessibilitySkipped,
+    aishaApiKey,
+    t,
   ]);
 
   const prevStep = useCallback(() => {
@@ -472,7 +520,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         }
 
         const cloudHealthCheck = window.electronAPI?.cloudHealthCheck;
-        if (useLocalWhisper || !cloudHealthCheck) {
+        if (!cloudHealthCheck) {
           removeCurrentStep();
           onComplete({ openSettings });
           return;
@@ -502,48 +550,54 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         setIsFinishing(false);
       }
     },
-    [saveSettings, removeCurrentStep, onComplete, useLocalWhisper, t]
+    [saveSettings, removeCurrentStep, onComplete, t]
   );
 
   const resolveConnectivity = useCallback(
-    (useLocal: boolean) => {
-      if (useLocal) {
-        setUseLocalWhisper(true);
-      }
+    (_useLocal: boolean) => {
+      // Aisha-only — continue without switching to local STT.
       setConnectivityDialog({ open: false, cause: "" });
       removeCurrentStep();
       onComplete({ openSettings: openSettingsOnCompleteRef.current });
     },
-    [setUseLocalWhisper, removeCurrentStep, onComplete]
+    [removeCurrentStep, onComplete]
   );
 
   const renderStep = () => {
     switch (currentStepId) {
       case "welcome":
-        if (pendingVerificationEmail) {
-          return (
-            <EmailVerificationStep
-              email={pendingVerificationEmail}
-              onVerified={() => {
-                setPendingVerificationEmail(null);
-                nextStep();
-              }}
-              onBack={() => setPendingVerificationEmail(null)}
-            />
-          );
-        }
         return (
-          <AuthenticationStep
-            onContinueWithoutAccount={() => {
-              setSkipAuth(true);
-              nextStep();
+          <div className="space-y-6 text-center">
+            <img
+              src={logoIcon}
+              alt="VoiceLab"
+              className="w-16 h-16 mx-auto rounded-2xl shadow-sm"
+            />
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold text-foreground">
+                {t("auth.welcomeTitle", { defaultValue: "VoiceLab-ga xush kelibsiz" })}
+              </h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {t("onboarding.aishaKey.description")}
+              </p>
+            </div>
+            <Button className="w-full h-10" onClick={() => nextStep()}>
+              {t("common.continue", { defaultValue: "Davom etish" })}
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        );
+
+      case "aishaKey":
+        return (
+          <AishaKeyStep
+            apiKey={aishaApiKey}
+            onApiKeyChange={(key) => {
+              setAishaApiKey(key);
+              setAishaKeyError(null);
             }}
-            onAuthComplete={() => {
-              nextStep();
-            }}
-            onNeedsVerification={(email) => {
-              setPendingVerificationEmail(email);
-            }}
+            error={aishaKeyError}
+            validating={aishaKeyValidating}
           />
         );
 
@@ -614,47 +668,23 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
               </p>
             </div>
 
-            {/* Unified configuration with integrated mode toggle */}
-            <TranscriptionModelPicker
-              selectedCloudProvider={cloudTranscriptionProvider}
-              onCloudProviderSelect={(provider) =>
-                updateTranscriptionSettings({ cloudTranscriptionProvider: provider })
-              }
-              selectedCloudModel={cloudTranscriptionModel}
-              onCloudModelSelect={(model) =>
-                updateTranscriptionSettings({ cloudTranscriptionModel: model })
-              }
-              selectedLocalModel={
-                localTranscriptionProvider === "nvidia" ? parakeetModel : whisperModel
-              }
-              onLocalModelSelect={(modelId) => {
-                if (localTranscriptionProvider === "nvidia") {
-                  updateTranscriptionSettings({ parakeetModel: modelId });
-                } else {
-                  updateTranscriptionSettings({ whisperModel: modelId });
-                }
-              }}
-              selectedLocalProvider={localTranscriptionProvider}
-              onLocalProviderSelect={(provider) =>
-                updateTranscriptionSettings({
-                  localTranscriptionProvider: provider as "whisper" | "nvidia",
-                })
-              }
-              useLocalWhisper={useLocalWhisper}
-              onModeChange={(isLocal) => {
-                updateTranscriptionSettings({
-                  useLocalWhisper: isLocal,
-                  ...(!isLocal && !isSignedIn ? { cloudTranscriptionMode: "byok" } : {}),
-                });
-              }}
-              cloudTranscriptionBaseUrl={cloudTranscriptionBaseUrl}
-              setCloudTranscriptionBaseUrl={(url) =>
-                updateTranscriptionSettings({ cloudTranscriptionBaseUrl: url })
-              }
-              variant="onboarding"
-            />
+            <div className="flex items-start gap-3 p-3 bg-muted/50 border border-border/60 rounded">
+              <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                <Cloud className="w-4 h-4 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {t("settingsPage.transcription.modes.openwhispr")}
+                  </p>
+                  <Badge variant="success">Aisha</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {t("settingsPage.transcription.modes.openwhisprDesc")}
+                </p>
+              </div>
+            </div>
 
-            {/* Language Selection - shown for both modes */}
             <div className="space-y-2 p-3 bg-muted/50 border border-border/60 rounded">
               <label className="block text-xs font-medium text-muted-foreground">
                 {t("onboarding.transcription.preferredLanguage")}
@@ -663,6 +693,10 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                 value={preferredLanguage}
                 onChange={(value) => {
                   updateTranscriptionSettings({ preferredLanguage: value });
+                  useSettingsStore.getState().setCloudTranscriptionForAllScopes({
+                    useLocalWhisper: false,
+                    cloudTranscriptionMode: "openwhispr",
+                  });
                 }}
                 className="w-full"
               />
@@ -898,6 +932,8 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     switch (currentStepId) {
       case "welcome":
         return isSignedIn || skipAuth;
+      case "aishaKey":
+        return aishaApiKey.trim().length > 0 && !aishaKeyValidating;
       case "usecase":
         return true; // Selection is optional — Next doubles as skip
       case "setup":
@@ -906,31 +942,8 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
           return areRequiredPermissionsMet(permissionsHook.micPermissionGranted);
         }
 
-        // For non-signed-in users: Setup - check if configuration is complete
-        if (useLocalWhisper) {
-          const modelToCheck =
-            localTranscriptionProvider === "nvidia" ? parakeetModel : whisperModel;
-          return modelToCheck !== "" && isModelDownloaded;
-        } else {
-          // For cloud mode, check if appropriate API key is set
-          if (cloudTranscriptionProvider === "openai") {
-            return openaiApiKey.trim().length > 0;
-          } else if (cloudTranscriptionProvider === "groq") {
-            return groqApiKey.trim().length > 0;
-          } else if (cloudTranscriptionProvider === "xai") {
-            return xaiApiKey.trim().length > 0;
-          } else if (cloudTranscriptionProvider === "mistral") {
-            return mistralApiKey.trim().length > 0;
-          } else if (cloudTranscriptionProvider === "corti") {
-            return cortiClientId.trim().length > 0 && cortiClientSecret.trim().length > 0;
-          } else if (cloudTranscriptionProvider === "tinfoil") {
-            return tinfoilApiKey.trim().length > 0;
-          } else if (cloudTranscriptionProvider === "custom") {
-            // Custom can work without API key for local endpoints
-            return true;
-          }
-          return openaiApiKey.trim().length > 0; // Default to OpenAI
-        }
+        // Aisha-only — language chosen here; API key collected in aishaKey step.
+        return true;
       case "permissions":
         return areRequiredPermissionsMet(permissionsHook.micPermissionGranted);
       case "activation":
@@ -983,10 +996,10 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         onOpenChange={(open) => !open && setConnectivityDialog({ open: false, cause: "" })}
         title={t("onboarding.connectivity.title")}
         description={t("onboarding.connectivity.body", { cause: connectivityDialog.cause })}
-        confirmText={t("onboarding.connectivity.useLocal")}
-        cancelText={t("onboarding.connectivity.continue")}
-        onConfirm={() => resolveConnectivity(true)}
-        onCancel={() => resolveConnectivity(false)}
+        confirmText={t("onboarding.connectivity.continue")}
+        cancelText={t("common.cancel", { defaultValue: "Cancel" })}
+        onConfirm={() => resolveConnectivity(false)}
+        onCancel={() => setConnectivityDialog({ open: false, cause: "" })}
       />
 
       <AlertDialog
@@ -1079,12 +1092,14 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                     </Button>
                   )}
                   <Button
-                    onClick={nextStep}
+                    onClick={() => void nextStep()}
                     disabled={!canProceed()}
                     className="h-8 px-6 rounded-full text-xs"
                   >
-                    {t("common.next")}
-                    <ChevronRight className="w-3.5 h-3.5" />
+                    {aishaKeyValidating
+                      ? t("onboarding.aishaKey.validating")
+                      : t("common.next")}
+                    {!aishaKeyValidating && <ChevronRight className="w-3.5 h-3.5" />}
                   </Button>
                 </>
               )}

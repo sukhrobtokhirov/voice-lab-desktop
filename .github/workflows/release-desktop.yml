@@ -1,0 +1,87 @@
+name: Release VoiceLab Desktop
+
+# Publishes macOS (arm64 + x64) artifacts to github.com/voicelab-uz/desktop releases.
+# electron-updater reads latest-arm64-mac.yml / latest-x64-mac.yml from those releases.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install ffmpeg-static for target architecture
+        if: matrix.arch == 'x64'
+        run: |
+          rm -f node_modules/ffmpeg-static/ffmpeg
+          npm_config_arch=x64 node node_modules/ffmpeg-static/install.js
+
+      - name: Cache native binaries
+        uses: actions/cache@v4
+        with:
+          path: resources/bin
+          key: macos-${{ matrix.arch }}-bin-${{ hashFiles('scripts/download-*.js', 'scripts/build-*.js') }}
+
+      - name: Compile native helpers
+        run: |
+          npm run compile:globe -- --arch ${{ matrix.arch }}
+          npm run compile:fast-paste -- --arch ${{ matrix.arch }}
+          npm run compile:media-remote -- --arch ${{ matrix.arch }}
+          npm run compile:audio-tap -- --arch ${{ matrix.arch }}
+          npm run compile:mic-listener
+          npm run compile:text-monitor
+
+      - name: Download bundled binaries
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+        run: |
+          node scripts/download-whisper-cpp.js --current --platform darwin --arch ${{ matrix.arch }}
+          node scripts/download-llama-server.js --current --platform darwin --arch ${{ matrix.arch }}
+          node scripts/download-sherpa-onnx.js --current --platform darwin --arch ${{ matrix.arch }}
+          node scripts/download-yt-dlp.js --current --platform darwin --arch ${{ matrix.arch }}
+          node scripts/download-qdrant.js --current --platform darwin --arch ${{ matrix.arch }}
+          node scripts/download-meeting-aec-helper.js --current --platform darwin --arch ${{ matrix.arch }} || true
+          node scripts/download-whisper-vad-model.js || true
+
+      - name: Create release .env (no shared AISHA key)
+        run: |
+          cat > .env <<'EOF'
+          VITE_AUTH_URL=https://voicelab.uz
+          VITE_AUTH_API_URL=https://api.voicelab.uz
+          VITE_VOICELAB_API_URL=https://back.aisha.group
+          AISHA_API_KEY=
+          OPENWHISPR_PROTOCOL=voicelab
+          VITE_OPENWHISPR_PROTOCOL=voicelab
+          UI_LANGUAGE=uz
+          EOF
+          # Strip accidental leading spaces from indented heredoc lines
+          sed -i '' 's/^[[:space:]]*//' .env
+
+      - name: Build and publish macOS ${{ matrix.arch }}
+        run: |
+          npm run build:renderer
+          npx cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --${{ matrix.arch }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+          UPDATE_OWNER: voicelab-uz
+          UPDATE_REPO: desktop

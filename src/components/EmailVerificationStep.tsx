@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { OPENWHISPR_API_URL } from "../config/constants";
-import { authClient } from "../lib/auth";
+import { resendVerificationEmail } from "../lib/auth";
 import { Button } from "./ui/button";
 import { Mail, Loader2, Check, RefreshCw } from "lucide-react";
 import logoIcon from "../assets/icon.png";
@@ -64,7 +64,7 @@ export default function EmailVerificationStep({
     setIsResending(true);
     setError(null);
     try {
-      const result = await authClient.sendVerificationEmail({ email });
+      const result = await resendVerificationEmail(email);
       if (result.error) {
         setError(result.error.message || t("emailVerification.errors.resendFailed"));
       } else {

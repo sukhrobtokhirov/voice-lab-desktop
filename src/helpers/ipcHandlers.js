@@ -2,6 +2,8 @@ const { ipcMain, app, shell, BrowserWindow, systemPreferences, net } = require("
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const http = require("http");
+const https = require("https");
 const crypto = require("crypto");
 const debugLogger = require("./debugLogger");
 const { BYOK_API_KEYS } = require("../config/secretKeys");
@@ -180,13 +182,19 @@ function resolveAllowedAudioPath(filePath) {
   return null;
 }
 
-function buildMultipartBody(fileBuffer, fileName, contentType, fields = {}) {
-  const boundary = `----OpenWhispr${Date.now()}`;
+function buildMultipartBody(
+  fileBuffer,
+  fileName,
+  contentType,
+  fields = {},
+  { fileFieldName = "file" } = {}
+) {
+  const boundary = `----VoiceLab${Date.now()}`;
   const parts = [];
 
   parts.push(
     `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="file"; filename="${fileName}"\r\n` +
+      `Content-Disposition: form-data; name="${fileFieldName}"; filename="${fileName}"\r\n` +
       `Content-Type: ${contentType}\r\n\r\n`
   );
   parts.push(fileBuffer);
@@ -230,30 +238,144 @@ async function postMultipart(url, body, boundary, headers = {}) {
   }
 }
 
+/** Node https multipart — Electron net.fetch has caused opaque 402s with Aisha STT. */
+function postMultipartNode(url, body, boundary, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const u = typeof url === "string" ? new URL(url) : url;
+    const lib = u.protocol === "http:" ? http : https;
+    const req = lib.request(
+      {
+        protocol: u.protocol,
+        hostname: u.hostname,
+        port: u.port || undefined,
+        path: `${u.pathname}${u.search}`,
+        method: "POST",
+        headers: {
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          "Content-Length": body.length,
+          Accept: "application/json",
+          ...headers,
+        },
+      },
+      (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          const text = Buffer.concat(chunks).toString("utf8");
+          try {
+            resolve({ statusCode: res.statusCode, data: JSON.parse(text) });
+          } catch {
+            reject(
+              Object.assign(new Error(`Server error ${res.statusCode}: ${text.slice(0, 120)}`), {
+                code: "SERVER_ERROR",
+                statusCode: res.statusCode,
+              })
+            );
+          }
+        });
+      }
+    );
+    req.on("error", (error) => {
+      reject(
+        Object.assign(new Error(error.message || "Network error"), {
+          code: "NETWORK_ERROR",
+        })
+      );
+    });
+    req.write(body);
+    req.end();
+  });
+}
+
 function interpretTranscribeResponse(data) {
-  if (data.statusCode === 401) {
-    throw Object.assign(new Error("Session expired"), { code: "AUTH_EXPIRED" });
+  // Aisha: 401/403 bad key, 402 balance, 503 unavailable (see llms-api.txt)
+  if (data.statusCode === 401 || data.statusCode === 403) {
+    throw Object.assign(
+      new Error(data.data?.detail || data.data?.error || "Invalid or missing API key"),
+      { code: "AUTH_EXPIRED" }
+    );
   }
   if (data.statusCode === 503) {
-    throw Object.assign(new Error("Request timed out"), { code: "SERVER_ERROR" });
-  }
-  if (data.statusCode === 429) {
-    throw Object.assign(new Error("Daily word limit reached"), {
-      code: "LIMIT_REACHED",
-      ...data.data,
+    throw Object.assign(new Error(data.data?.detail || "Request timed out"), {
+      code: "SERVER_ERROR",
     });
+  }
+  if (data.statusCode === 402 || data.statusCode === 429) {
+    const detail = data.data?.detail || data.data?.error || "";
+    const looksLikeTransientBilling =
+      /transaction failed/i.test(detail) || data.data?.error_key === "transaction_failed";
+    // 402 "Transaction failed" is often transient — not a daily quota.
+    // Persistent 402/429 is Aisha billing/balance, not VoiceLab daily limits.
+    throw Object.assign(
+      new Error(
+        looksLikeTransientBilling
+          ? detail || "Aisha billing transaction failed. Please try again."
+          : detail || "Aisha balance insufficient. Top up at https://space.aisha.group"
+      ),
+      {
+        code: looksLikeTransientBilling ? "SERVER_ERROR" : "LIMIT_REACHED",
+        statusCode: data.statusCode,
+        retryable: looksLikeTransientBilling,
+        messageKey: looksLikeTransientBilling
+          ? "hooks.audioRecording.errorDescriptions.aishaBillingRetry"
+          : "hooks.audioRecording.errorDescriptions.aishaBillingFailed",
+        ...data.data,
+      }
+    );
   }
   if (data.statusCode === 422 && data.data?.code === "NO_SPEECH_DETECTED") {
     throw Object.assign(new Error(data.data.error || "No speech detected in audio"), {
       code: "NO_SPEECH_DETECTED",
     });
   }
-  if (data.statusCode !== 200) {
-    throw Object.assign(new Error(data.data?.error || `API error: ${data.statusCode}`), {
-      statusCode: data.statusCode,
-    });
+  if (data.statusCode !== 200 && data.statusCode !== 201) {
+    throw Object.assign(
+      new Error(data.data?.detail || data.data?.error || `API error: ${data.statusCode}`),
+      { statusCode: data.statusCode }
+    );
   }
-  return data.data;
+  const payload = data.data || {};
+  // Normalize Aisha `{ transcript }` to OpenWhispr-shaped `{ text }`
+  return {
+    ...payload,
+    text: payload.text || payload.transcript || "",
+    transcript: payload.transcript || payload.text || "",
+  };
+}
+
+function getAishaSttPath(audioBytes) {
+  // Short sync v1; longer audio uses async v2 (poll separately when needed)
+  const INLINE_V1_LIMIT = 8 * 1024 * 1024;
+  return audioBytes > INLINE_V1_LIMIT ? "/api/v2/stt/post/" : "/api/v1/stt/post/";
+}
+
+async function pollAishaSttV2(apiUrl, authHeader, id, { maxAttempts = 60, intervalMs = 2000 } = {}) {
+  const base = apiUrl.replace(/\/+$/, "");
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const res = await net.fetch(`${base}/api/v2/stt/get/${id}/`, {
+      method: "GET",
+      headers: { ...authHeader },
+      useSessionCookies: false,
+      signal: AbortSignal.timeout(15000),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw Object.assign(new Error(data.detail || data.error || `STT poll failed: ${res.status}`), {
+        statusCode: res.status,
+        code: res.status === 401 || res.status === 403 ? "AUTH_EXPIRED" : "SERVER_ERROR",
+      });
+    }
+    if (data.status === "SUCCESS") {
+      return interpretTranscribeResponse({ statusCode: 200, data });
+    }
+    if (data.status === "FAILED") {
+      throw Object.assign(new Error(data.detail || "Transcription failed"), {
+        code: "SERVER_ERROR",
+      });
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw Object.assign(new Error("Transcription timed out"), { code: "SERVER_ERROR" });
 }
 
 const NON_RETRYABLE_CHUNK_CODES = new Set(["AUTH_EXPIRED", "LIMIT_REACHED", "NO_SPEECH_DETECTED"]);
@@ -272,8 +394,11 @@ async function chunkedCloudTranscribe({
   onProgress,
   concurrencyLimit = CLOUD_CHUNK_CONCURRENCY,
   segmentDuration = CLOUD_CHUNK_SEGMENT_SECONDS,
+  inputExt = "webm",
+  postFn = postMultipart,
 }) {
   const { splitAudioFile } = require("./ffmpegUtils");
+  const post = typeof postFn === "function" ? postFn : postMultipart;
 
   const jobId = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
   const chunkDir = path.join(os.tmpdir(), `ow-chunks-${jobId}`);
@@ -281,7 +406,8 @@ async function chunkedCloudTranscribe({
 
   let inputPath = filePath;
   if (!inputPath && buffer) {
-    tmpInputPath = path.join(os.tmpdir(), `ow-audio-${jobId}.webm`);
+    const ext = (inputExt || "webm").replace(/^\./, "") || "webm";
+    tmpInputPath = path.join(os.tmpdir(), `ow-audio-${jobId}.${ext}`);
     fs.writeFileSync(tmpInputPath, buffer);
     inputPath = tmpInputPath;
   }
@@ -307,13 +433,14 @@ async function chunkedCloudTranscribe({
         chunkBuffer,
         chunkName,
         "audio/mpeg",
-        multipartFields
+        multipartFields,
+        { fileFieldName: "audio" }
       );
-      const url = new URL(`${apiUrl}/api/transcribe`);
+      const url = new URL(`${apiUrl.replace(/\/+$/, "")}/api/v1/stt/post/`);
 
       for (let attempt = 1; ; attempt++) {
         try {
-          const data = await postMultipart(url, body, boundary, authHeader);
+          const data = await post(url, body, boundary, authHeader);
           results[index] = interpretTranscribeResponse(data);
           break;
         } catch (err) {
@@ -901,6 +1028,12 @@ class IPCHandlers {
     ipcMain.handle("set-main-window-interactivity", (event, shouldCapture) => {
       this.windowManager.setMainWindowInteractivity(Boolean(shouldCapture));
       return { success: true };
+    });
+
+    // Renderer (floating mic click) can force a fresh target-PID capture.
+    ipcMain.handle("capture-target-pid", async () => {
+      if (!this.textEditMonitor) return null;
+      return this.textEditMonitor.captureTargetPid();
     });
 
     ipcMain.handle("set-notification-interactivity", (event, interactive) => {
@@ -1868,7 +2001,14 @@ class IPCHandlers {
 
     ipcMain.handle("paste-text", async (event, text, options) => {
       const mainWindow = this.windowManager?.mainWindow;
-      const targetPid = this.textEditMonitor?.lastTargetPid || null;
+
+      // Finish any in-flight hover/hotkey capture; click-to-dictate often races.
+      let targetPid = null;
+      if (process.platform === "darwin" && this.textEditMonitor) {
+        targetPid = await this.textEditMonitor.ensureTargetPid();
+      } else {
+        targetPid = this.textEditMonitor?.lastTargetPid || null;
+      }
 
       // Activating the target by PID is more reliable than hide()'s implicit
       // focus hand-off for Chromium apps like Claude desktop and Brave (#668).
@@ -1877,12 +2017,16 @@ class IPCHandlers {
         activated = await this.textEditMonitor.activateTargetPid();
       }
 
-      if (!activated && mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) {
+      if (!activated && mainWindow && !mainWindow.isDestroyed()) {
+        // focusable:false overlays rarely report isFocused(); still hide so
+        // Cmd+V cannot land on VoiceLab when PID activation failed.
         if (process.platform === "darwin") {
-          mainWindow.hide();
-          await new Promise((resolve) => setTimeout(resolve, 120));
-          mainWindow.showInactive();
-        } else {
+          if (mainWindow.isVisible()) {
+            mainWindow.hide();
+            await new Promise((resolve) => setTimeout(resolve, 120));
+            mainWindow.showInactive();
+          }
+        } else if (mainWindow.isFocused()) {
           mainWindow.blur();
           await new Promise((resolve) => setTimeout(resolve, 80));
         }
@@ -3213,6 +3357,12 @@ class IPCHandlers {
     ipcMain.handle("save-azure-api-key", async (event, key) => {
       return this.environmentManager.saveAzureApiKey(key);
     });
+    ipcMain.handle("get-aisha-api-key", async () => {
+      return this.environmentManager.getAishaApiKey();
+    });
+    ipcMain.handle("save-aisha-api-key", async (_event, key) => {
+      return this.environmentManager.saveAishaApiKey(typeof key === "string" ? key.trim() : "");
+    });
     ipcMain.handle("get-azure-deployment", async () => {
       return this.environmentManager.getAzureDeployment();
     });
@@ -4127,16 +4277,28 @@ class IPCHandlers {
     })();
 
     const getApiUrl = () =>
+      process.env.VOICELAB_API_URL ||
+      process.env.VITE_VOICELAB_API_URL ||
       process.env.OPENWHISPR_API_URL ||
       process.env.VITE_OPENWHISPR_API_URL ||
+      runtimeEnv.VITE_VOICELAB_API_URL ||
       runtimeEnv.VITE_OPENWHISPR_API_URL ||
-      "";
+      "https://back.aisha.group";
 
     const getAuthUrl = () =>
       process.env.AUTH_URL ||
       process.env.VITE_AUTH_URL ||
       runtimeEnv.VITE_AUTH_URL ||
-      "https://auth.openwhispr.com";
+      "https://voicelab.uz";
+
+    // Aisha cloud STT/TTS uses X-Api-Key (https://aisha.group/llms-api.txt)
+    // Prefer user-saved key from EnvironmentManager / userData over bundled env.
+    const getAishaApiKey = () =>
+      this.environmentManager?.getAishaApiKey?.() ||
+      process.env.AISHA_API_KEY ||
+      process.env.VITE_AISHA_API_KEY ||
+      runtimeEnv.AISHA_API_KEY ||
+      "";
 
     const getSessionCookiesFromWindow = async (win) => {
       const scopedUrls = [getAuthUrl(), getApiUrl()].filter(Boolean);
@@ -4190,9 +4352,10 @@ class IPCHandlers {
       return getSessionCookiesFromWindow(win);
     };
 
-    // Bearer auth is preferred. Cookie fallback covers the brief window before
-    // main.js's startup migration bridge runs (or if it failed for this user).
+    // Prefer Aisha API key for cloud STT. Bearer/cookie kept for account APIs.
     const getAuthHeaderFromWindow = async (win) => {
+      const apiKey = getAishaApiKey();
+      if (apiKey) return { "X-Api-Key": apiKey };
       const token = tokenStore.get();
       if (token) return { Authorization: `Bearer ${token}` };
       const cookieHeader = win ? await getSessionCookiesFromWindow(win) : "";
@@ -4204,6 +4367,12 @@ class IPCHandlers {
       return getAuthHeaderFromWindow(win);
     };
 
+    const getCloudSttAuthHeader = async (event) => {
+      const apiKey = getAishaApiKey();
+      if (apiKey) return { "X-Api-Key": apiKey };
+      return getAuthHeader(event);
+    };
+
     // Honors system proxy via Electron's net stack. useSessionCookies:false so
     // Electron doesn't auto-attach jar cookies on top of our explicit headers.
     const proxyFetch = (url, init = {}) => net.fetch(url, { ...init, useSessionCookies: false });
@@ -4211,34 +4380,63 @@ class IPCHandlers {
     ipcMain.handle("cloud-transcribe", async (event, audioBuffer, opts = {}) => {
       try {
         const apiUrl = getApiUrl();
-        if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
+        if (!apiUrl) throw new Error("Aisha API URL not configured");
 
-        const authHeader = await getAuthHeader(event);
-        if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
+        const authHeader = await getCloudSttAuthHeader(event);
+        if (!Object.keys(authHeader).length) {
+          throw Object.assign(
+            new Error(
+              "Aisha API key not configured. Add your key in Settings → Account (from https://space.aisha.group)."
+            ),
+            {
+              code: "API_KEY_MISSING",
+              messageKey: "hooks.audioRecording.errorDescriptions.aishaKeyMissing",
+            }
+          );
+        }
 
-        const audioData = Buffer.from(audioBuffer);
+        const { prepareAishaSttAudio } = require("./ffmpegUtils");
+        // Aisha accepts mp3/wav/ogg/m4a only — MediaRecorder webm must be converted.
+        const prepared = await prepareAishaSttAudio(Buffer.from(audioBuffer), {
+          hintExt: opts.mimeType?.includes("ogg")
+            ? "ogg"
+            : opts.mimeType?.includes("mp4")
+              ? "m4a"
+              : "webm",
+        });
+        const audioData = prepared.buffer;
         // Reused for the local SQLite row so SyncService upserts the existing
         // cloud row (filling in text) instead of creating a duplicate.
         const clientTranscriptionId = crypto.randomUUID();
-        const multipartFields = {
-          language: opts.language,
-          prompt: opts.prompt,
-          sendLogs: opts.sendLogs,
-          clientType: "desktop",
-          appVersion: app.getVersion(),
-          clientVersion: app.getVersion(),
-          sessionId: this.sessionId,
-          clientTranscriptionId,
+        const language = opts.language || "uz";
+        const apiKey = getAishaApiKey();
+        const aishaFields = {
+          language,
+          ...(opts.hasDiarization ? { has_diarization: "true" } : {}),
         };
 
-        debugLogger.debug("Cloud transcribe request", { audioSize: audioData.length }, "cloud-api");
+        debugLogger.debug(
+          "Cloud transcribe request (Aisha STT)",
+          {
+            audioSize: audioData.length,
+            language,
+            fileName: prepared.fileName,
+            contentType: prepared.contentType,
+            converted: prepared.converted,
+            keyPrefix: apiKey ? `${apiKey.slice(0, 8)}…` : "(none)",
+            transport: "node-https",
+          },
+          "cloud-api"
+        );
 
         if (audioData.length > CLOUD_INLINE_LIMIT) {
           const { text, responses, lastResponse, warning } = await chunkedCloudTranscribe({
             buffer: audioData,
             apiUrl,
             authHeader,
-            multipartFields,
+            multipartFields: aishaFields,
+            inputExt: prepared.fileName.split(".").pop(),
+            postFn: postMultipartNode,
           });
           const sum = (field) => responses.reduce((s, r) => s + (r?.[field] || 0), 0);
           return {
@@ -4250,29 +4448,67 @@ class IPCHandlers {
             wordsRemaining: lastResponse?.wordsRemaining,
             plan: lastResponse?.plan,
             limitReached: lastResponse?.limitReached || false,
-            sttProvider: lastResponse?.sttProvider,
+            sttProvider: "aisha",
             sttModel: lastResponse?.sttModel,
             sttProcessingMs: sum("sttProcessingMs"),
             sttWordCount: sum("sttWordCount"),
-            sttLanguage: lastResponse?.sttLanguage,
-            audioDurationMs: sum("audioDurationMs"),
+            sttLanguage: lastResponse?.sttLanguage || language,
+            audioDurationMs: sum("audioDurationMs") || Math.round((lastResponse?.duration || 0) * 1000),
           };
         }
 
-        const { body, boundary } = buildMultipartBody(
-          audioData,
-          "audio.webm",
-          "audio/webm",
-          multipartFields
-        );
-        const url = new URL(`${apiUrl}/api/transcribe`);
-        const data = await postMultipart(url, body, boundary, authHeader);
+        const sttPath = getAishaSttPath(audioData.length);
+        const url = new URL(`${apiUrl.replace(/\/+$/, "")}${sttPath}`);
+
+        const postOnce = async () => {
+          const { body, boundary } = buildMultipartBody(
+            audioData,
+            prepared.fileName,
+            prepared.contentType,
+            aishaFields,
+            { fileFieldName: "audio" }
+          );
+          return postMultipartNode(url, body, boundary, authHeader);
+        };
+
+        let data = await postOnce();
+        // Aisha occasionally returns 402 "Transaction failed" transiently — retry once.
+        if (
+          data.statusCode === 402 &&
+          /transaction failed/i.test(data.data?.detail || data.data?.error || "")
+        ) {
+          debugLogger.warn(
+            "Aisha STT transient billing error, retrying once",
+            { detail: data.data?.detail, keyPrefix: apiKey ? `${apiKey.slice(0, 8)}…` : "(none)" },
+            "cloud-api"
+          );
+          await new Promise((r) => setTimeout(r, 700));
+          data = await postOnce();
+        }
 
         debugLogger.debug(
           "Cloud transcribe response",
-          { statusCode: data.statusCode },
+          {
+            statusCode: data.statusCode,
+            path: sttPath,
+            detail: data.data?.detail || data.data?.error_key || null,
+          },
           "cloud-api"
         );
+
+        // v2 async: poll detail until SUCCESS
+        if (sttPath.startsWith("/api/v2/") && data.statusCode === 200 && data.data?.id) {
+          const detail = await pollAishaSttV2(apiUrl, authHeader, data.data.id);
+          return {
+            success: true,
+            text: detail.text,
+            clientTranscriptionId,
+            sttProvider: "aisha",
+            sttLanguage: language,
+            audioDurationMs: Math.round((detail.duration || 0) * 1000),
+            cloudId: detail.id,
+          };
+        }
 
         const result = interpretTranscribeResponse(data);
         return {
@@ -4283,15 +4519,25 @@ class IPCHandlers {
           wordsRemaining: result.wordsRemaining,
           plan: result.plan,
           limitReached: result.limitReached || false,
-          sttProvider: result.sttProvider,
+          sttProvider: "aisha",
           sttModel: result.sttModel,
           sttProcessingMs: result.sttProcessingMs,
           sttWordCount: result.sttWordCount,
-          sttLanguage: result.sttLanguage,
-          audioDurationMs: result.audioDurationMs,
+          sttLanguage: result.sttLanguage || language,
+          audioDurationMs: result.audioDurationMs || Math.round((result.duration || 0) * 1000),
+          cloudId: result.id,
         };
       } catch (error) {
-        debugLogger.error("Cloud transcription error", { error: error.message }, "cloud-api");
+        debugLogger.error(
+          "Cloud transcription error",
+          {
+            error: error.message,
+            code: error.code,
+            statusCode: error.statusCode,
+            detail: error.detail || error.error_key,
+          },
+          "cloud-api"
+        );
         if (error.code) {
           return { success: false, error: error.message, code: error.code, ...error };
         }
@@ -4308,10 +4554,13 @@ class IPCHandlers {
           messageKey: "streaming.errors.cloudUnreachable.generic",
         };
       }
-      const url = `${apiUrl}/api/health`;
+      const apiKey = getAishaApiKey();
+      // Aisha has no /api/health — probe STT history with the API key
+      const url = `${apiUrl.replace(/\/+$/, "")}/api/v1/stt/get/?page=1&limit=1`;
       try {
         const res = await proxyFetch(url, {
           method: "GET",
+          headers: apiKey ? { "X-Api-Key": apiKey } : {},
           signal: AbortSignal.timeout(3000),
         });
         return { ok: res.ok, status: res.status };
@@ -4328,6 +4577,58 @@ class IPCHandlers {
       }
     });
 
+    ipcMain.handle("validate-aisha-api-key", async (_event, key) => {
+      const apiUrl = getApiUrl();
+      const testKey =
+        (typeof key === "string" ? key.trim() : "") || getAishaApiKey();
+      if (!apiUrl) {
+        return { ok: false, code: "NO_API_URL", message: "Aisha API URL not configured" };
+      }
+      if (!testKey) {
+        return { ok: false, code: "MISSING", message: "Aisha API key is required" };
+      }
+      const url = `${apiUrl.replace(/\/+$/, "")}/api/v1/stt/get/?page=1&limit=1`;
+      try {
+        const res = await proxyFetch(url, {
+          method: "GET",
+          headers: { "X-Api-Key": testKey },
+          signal: AbortSignal.timeout(8000),
+        });
+        if (res.status === 401 || res.status === 403) {
+          return {
+            ok: false,
+            code: "AUTH",
+            status: res.status,
+            message: "Invalid Aisha API key. Create one at https://space.aisha.group",
+          };
+        }
+        if (res.status === 402) {
+          return {
+            ok: false,
+            code: "BILLING",
+            status: res.status,
+            message: "Aisha balance is insufficient. Top up at https://space.aisha.group",
+            keyAccepted: true,
+          };
+        }
+        if (res.ok) {
+          return { ok: true, status: res.status };
+        }
+        return {
+          ok: false,
+          code: "HTTP",
+          status: res.status,
+          message: `Aisha returned HTTP ${res.status}`,
+        };
+      } catch (err) {
+        return {
+          ok: false,
+          code: "NETWORK",
+          message: err?.message || "Could not reach Aisha. Check your internet connection.",
+        };
+      }
+    });
+
     ipcMain.handle("retry-transcription", async (event, id, settings) => {
       const buffer = this.audioStorageManager.getAudioBuffer(id);
       if (!buffer) return { success: false, error: "Audio file not found" };
@@ -4338,159 +4639,62 @@ class IPCHandlers {
           preferredLanguage && preferredLanguage !== "auto"
             ? preferredLanguage.split("-")[0]
             : undefined;
-        const { resolveSelfHostedRetryRoute } = await import("./retryTranscriptionRouting.js");
-        const selfHostedRoute = resolveSelfHostedRetryRoute(settings);
 
-        if (selfHostedRoute?.kind === "configuration-error") {
-          throw new Error(selfHostedRoute.error);
-        }
-
-        if (selfHostedRoute?.kind === "self-hosted") {
-          const formData = new FormData();
-          formData.append("file", new Blob([buffer], { type: "audio/webm" }), "audio.webm");
-          if (selfHostedRoute.model) {
-            formData.append("model", selfHostedRoute.model);
-          }
-          if (language) {
-            formData.append("language", language);
-          }
-
-          const response = await proxyFetch(selfHostedRoute.endpoint, {
-            method: "POST",
-            body: formData,
-          });
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Self-hosted API Error: ${response.status} ${errorText}`);
-          }
-          const data = await response.json();
-          if (data?.text) {
-            result = {
-              text: data.text,
-              source: "self-hosted",
-              model: selfHostedRoute.model,
-            };
-          }
-        } else if (settings?.useLocalWhisper) {
-          if (settings.localTranscriptionProvider === "nvidia") {
-            const model =
-              settings.parakeetModel || process.env.PARAKEET_MODEL || "parakeet-tdt-0.6b-v3";
-            result = await this.parakeetManager.transcribeLocalParakeet(buffer, { model });
-          } else if (this.whisperManager?.serverManager?.isAvailable?.()) {
-            const vadOptions = this._resolveWhisperVadOptions("noteRecording");
-            result = await this.whisperManager.transcribeLocalWhisper(buffer, {
-              model: settings.whisperModel,
-              language,
-              ...vadOptions,
-            });
-          }
-        } else if (settings?.cloudTranscriptionMode === "openwhispr") {
-          const win = BrowserWindow.fromWebContents(event.sender);
-          if (win) {
-            const authHeader = await getAuthHeaderFromWindow(win);
-            if (Object.keys(authHeader).length) {
-              const apiUrl = getApiUrl();
-              if (apiUrl) {
-                const multipartFields = {
-                  language,
-                  clientType: "desktop",
-                  appVersion: app.getVersion(),
-                  sessionId: this.sessionId,
-                };
-                if (buffer.length > CLOUD_INLINE_LIMIT) {
-                  const { text } = await chunkedCloudTranscribe({
-                    buffer,
-                    apiUrl,
-                    authHeader,
-                    multipartFields,
-                  });
-                  result = { text, source: "openwhispr", model: "cloud" };
-                } else {
-                  const { body, boundary } = buildMultipartBody(
-                    buffer,
-                    "audio.webm",
-                    "audio/webm",
-                    multipartFields
-                  );
-                  const url = new URL(`${apiUrl}/api/transcribe`);
-                  const data = await postMultipart(url, body, boundary, authHeader);
-                  const responseData = interpretTranscribeResponse(data);
-                  result = {
-                    text: responseData.text,
-                    source: "openwhispr",
-                    model: "cloud",
-                  };
-                }
+        // Aisha-only — retries always go to VoiceLab Cloud.
+        {
+          const apiKey = getAishaApiKey();
+          const apiUrl = getApiUrl();
+          if (!apiKey) {
+            throw Object.assign(
+              new Error(
+                "Aisha API key not configured. Add your key in Settings → Account (from https://space.aisha.group)."
+              ),
+              {
+                code: "API_KEY_MISSING",
+                messageKey: "hooks.audioRecording.errorDescriptions.aishaKeyMissing",
               }
-            }
+            );
           }
-        } else if (settings?.cloudTranscriptionProvider === "tinfoil") {
-          // Attested transport, so this can't reuse the generic fetch below.
-          const { text, model } = await transcribeWithTinfoil({
-            audioBuffer: buffer,
-            fileName: "audio.webm",
-            contentType: "audio/webm",
-            language,
-            apiKey: this.environmentManager.getTinfoilKey(),
-          });
-          if (text) result = { text, source: "tinfoil", model };
-        } else {
-          const provider = settings?.cloudTranscriptionProvider || "openai";
-          const model = this._resolveByokModel(provider, settings?.cloudTranscriptionModel);
-
-          let apiKey, endpoint;
-          if (provider === "groq") {
-            apiKey = this.environmentManager.getGroqKey();
-            endpoint = "https://api.groq.com/openai/v1/audio/transcriptions";
-          } else if (provider === "xai") {
-            apiKey = this.environmentManager.getXaiKey();
-            endpoint = XAI_STT_URL;
-          } else if (provider === "mistral") {
-            apiKey = this.environmentManager.getMistralKey();
-            endpoint = MISTRAL_TRANSCRIPTION_URL;
-          } else if (provider === "custom") {
-            apiKey = this.environmentManager.getCustomTranscriptionKey();
-            const base = (settings?.cloudTranscriptionBaseUrl || "").trim();
-            endpoint = base
-              ? /\/audio\/(transcriptions|translations)$/i.test(base)
-                ? base
-                : `${base}/audio/transcriptions`
-              : "https://api.openai.com/v1/audio/transcriptions";
+          if (!apiUrl) throw new Error("Aisha API URL not configured");
+          const { prepareAishaSttAudio } = require("./ffmpegUtils");
+          const prepared = await prepareAishaSttAudio(buffer);
+          const multipartFields = {
+            language: language || "uz",
+            has_diarization: "false",
+          };
+          const sttAuth = { "X-Api-Key": apiKey };
+          if (prepared.buffer.length > CLOUD_INLINE_LIMIT) {
+            const { text } = await chunkedCloudTranscribe({
+              buffer: prepared.buffer,
+              apiUrl,
+              authHeader: sttAuth,
+              multipartFields,
+              inputExt: prepared.fileName.split(".").pop(),
+              postFn: postMultipartNode,
+            });
+            result = { text, source: "aisha", model: "cloud" };
           } else {
-            apiKey = this.environmentManager.getOpenAIKey();
-            endpoint = "https://api.openai.com/v1/audio/transcriptions";
-          }
-          if (!apiKey && provider !== "custom") {
-            throw new Error(`${provider} API key not configured`);
-          }
-
-          const formData = new FormData();
-          formData.append("file", new Blob([buffer], { type: "audio/webm" }), "audio.webm");
-          if (provider === "xai") {
-            // xAI STT does not accept a model field; language only when in supported set
-            if (language && XAI_STT_LANGUAGES.has(language)) {
-              formData.append("language", language);
-              formData.append("format", "true");
+            const { body, boundary } = buildMultipartBody(
+              prepared.buffer,
+              prepared.fileName,
+              prepared.contentType,
+              multipartFields,
+              { fileFieldName: "audio" }
+            );
+            const sttPath = getAishaSttPath(prepared.buffer.length);
+            const url = new URL(`${apiUrl.replace(/\/+$/, "")}${sttPath}`);
+            const data = await postMultipartNode(url, body, boundary, sttAuth);
+            if (sttPath.startsWith("/api/v2/") && data.statusCode === 200 && data.data?.id) {
+              const detail = await pollAishaSttV2(apiUrl, sttAuth, data.data.id);
+              result = { text: detail.text, source: "aisha", model: "cloud" };
+            } else {
+              const responseData = interpretTranscribeResponse(data);
+              result = {
+                text: responseData.text,
+                source: "aisha",
+                model: "cloud",
+              };
             }
-          } else {
-            formData.append("model", model);
-            if (language) formData.append("language", language);
-          }
-          const headers = {};
-          if (provider === "mistral") {
-            headers["x-api-key"] = apiKey;
-          } else if (apiKey) {
-            headers.Authorization = `Bearer ${apiKey}`;
-          }
-
-          const response = await proxyFetch(endpoint, { method: "POST", headers, body: formData });
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`${provider} API Error: ${response.status} ${errorText}`);
-          }
-          const data = await response.json();
-          if (data?.text) {
-            result = { text: data.text, source: provider, model };
           }
         }
 
@@ -5701,7 +5905,45 @@ class IPCHandlers {
 
       try {
         let result;
-        if (meetingLocalProvider === "nvidia") {
+        if (meetingLocalProvider === "aisha") {
+          const apiUrl = getApiUrl();
+          const apiKey = getAishaApiKey();
+          if (!apiUrl || !apiKey) {
+            throw Object.assign(
+            new Error(
+              "Aisha API key not configured. Add your key in Settings → Account (from https://space.aisha.group)."
+            ),
+            {
+              code: "API_KEY_MISSING",
+              messageKey: "hooks.audioRecording.errorDescriptions.aishaKeyMissing",
+            }
+          );
+          }
+          const authHeader = { "X-Api-Key": apiKey };
+          const language = meetingLocalLanguage || "uz";
+          const multipartFields = {
+            language,
+            has_diarization: "false",
+          };
+          const sttPath = getAishaSttPath(wav.length);
+          const { body, boundary } = buildMultipartBody(
+            wav,
+            "meeting-chunk.wav",
+            "audio/wav",
+            multipartFields,
+            { fileFieldName: "audio" }
+          );
+          const url = new URL(`${apiUrl.replace(/\/+$/, "")}${sttPath}`);
+          const data = await postMultipartNode(url, body, boundary, authHeader);
+          let text = "";
+          if (sttPath.startsWith("/api/v2/") && data.statusCode === 200 && data.data?.id) {
+            const detail = await pollAishaSttV2(apiUrl, authHeader, data.data.id);
+            text = detail.text || "";
+          } else {
+            text = interpretTranscribeResponse(data).text || "";
+          }
+          result = { success: true, text, source: "aisha" };
+        } else if (meetingLocalProvider === "nvidia") {
           result = await this.parakeetManager.transcribeLocalParakeet(wav, {
             model: meetingLocalModel,
           });
@@ -7331,51 +7573,68 @@ class IPCHandlers {
         if (!realCloud) return { success: false, error: "File path not allowed" };
 
         const apiUrl = getApiUrl();
-        if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
+        if (!apiUrl) throw new Error("Aisha API URL not configured");
 
-        const authHeader = await getAuthHeader(event);
-        if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
+        const authHeader = await getCloudSttAuthHeader(event);
+        if (!Object.keys(authHeader).length) {
+          throw Object.assign(
+            new Error(
+              "Aisha API key not configured. Add your key in Settings → Account (from https://space.aisha.group)."
+            ),
+            {
+              code: "API_KEY_MISSING",
+              messageKey: "hooks.audioRecording.errorDescriptions.aishaKeyMissing",
+            }
+          );
+        }
 
         const multipartFields = {
-          source: "file_upload",
-          clientType: "desktop",
-          appVersion: app.getVersion(),
-          clientVersion: app.getVersion(),
-          sessionId: this.sessionId,
+          language: "uz",
+          has_diarization: "false",
+          title: path.basename(realCloud),
         };
 
-        const fileSize = fs.statSync(realCloud).size;
+        const { prepareAishaSttAudio } = require("./ffmpegUtils");
+        const hintExt = path.extname(realCloud).toLowerCase().replace(".", "");
+        const prepared = await prepareAishaSttAudio(realCloud, { hintExt });
+        const fileSize = prepared.buffer.length;
 
         if (fileSize > CLOUD_INLINE_LIMIT) {
           debugLogger.debug("Large file detected, using client-side chunking", {
             fileSize,
             filePath: path.basename(realCloud),
+            converted: prepared.converted,
           });
           const { text, warning } = await chunkedCloudTranscribe({
-            filePath: realCloud,
+            buffer: prepared.buffer,
             apiUrl,
             authHeader,
             multipartFields,
+            inputExt: prepared.fileName.split(".").pop(),
+            postFn: postMultipartNode,
             onProgress: (payload) => event.sender.send("upload-transcription-progress", payload),
           });
           return { success: true, text, ...(warning ? { warning } : {}) };
         }
 
-        const audioBuffer = fs.readFileSync(realCloud);
-        const ext = path.extname(realCloud).toLowerCase().replace(".", "");
-        const contentType = AUDIO_MIME_TYPES[ext] || "audio/mpeg";
-        const fileName = path.basename(realCloud);
+        const sttPath = getAishaSttPath(prepared.buffer.length);
 
         const { body, boundary } = buildMultipartBody(
-          audioBuffer,
-          fileName,
-          contentType,
-          multipartFields
+          prepared.buffer,
+          prepared.fileName,
+          prepared.contentType,
+          multipartFields,
+          { fileFieldName: "audio" }
         );
-        const url = new URL(`${apiUrl}/api/transcribe`);
-        const data = await postMultipart(url, body, boundary, authHeader);
-        const result = interpretTranscribeResponse(data);
+        const url = new URL(`${apiUrl.replace(/\/+$/, "")}${sttPath}`);
+        const data = await postMultipartNode(url, body, boundary, authHeader);
 
+        if (sttPath.startsWith("/api/v2/") && data.statusCode === 200 && data.data?.id) {
+          const detail = await pollAishaSttV2(apiUrl, authHeader, data.data.id);
+          return { success: true, text: detail.text };
+        }
+
+        const result = interpretTranscribeResponse(data);
         return { success: true, text: result.text };
       } catch (error) {
         debugLogger.error("Cloud audio file transcription error", { error: error.message });

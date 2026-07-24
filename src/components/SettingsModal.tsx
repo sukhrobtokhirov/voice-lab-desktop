@@ -102,13 +102,7 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         description: t("settingsModal.sections.speechToText.description"),
         group: t("settingsModal.groups.aiModels"),
       },
-      {
-        id: "llms",
-        label: t("settingsModal.sections.llms.label"),
-        icon: Brain,
-        description: t("settingsModal.sections.llms.description"),
-        group: t("settingsModal.groups.aiModels"),
-      },
+      // LLM BYOK hidden — VoiceLab Desktop is Aisha STT only for now.
       {
         id: "privacyData",
         label: t("settingsModal.sections.privacyData.label"),
@@ -131,6 +125,8 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
     if (!section) return "account";
     const resolved = (SECTION_ALIASES[section] ?? section) as SettingsSectionType;
     if (resolved === "workspace" && !WORKSPACES_ENABLED) return "account";
+    // LLM section removed from sidebar — map deep links to speech
+    if (resolved === "llms") return "speechToText";
     return resolved;
   };
 

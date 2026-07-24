@@ -1237,47 +1237,11 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     }
 
     try {
-      const useLocalWhisper = settings.useLocalWhisper;
-      const localProvider = settings.localTranscriptionProvider;
-      const whisperModel = settings.whisperModel;
-      const parakeetModel = settings.parakeetModel || "parakeet-tdt-0.6b-v3";
+      // Aisha-only STT — ignore local/BYOK settings; always VoiceLab Cloud.
+      logger.debug("Transcription routing", { force: "aisha-cloud" }, "transcription");
 
-      const cloudTranscriptionMode = settings.cloudTranscriptionMode;
-      const isSignedIn = settings.isSignedIn;
-
-      const isOpenWhisprCloudMode = !useLocalWhisper && cloudTranscriptionMode === "openwhispr";
-      const useCloud = isOpenWhisprCloudMode && isSignedIn;
-      logger.debug(
-        "Transcription routing",
-        { useLocalWhisper, useCloud, isSignedIn, cloudTranscriptionMode },
-        "transcription"
-      );
-
-      let result;
-      let activeModel;
-      if (useLocalWhisper) {
-        if (localProvider === "nvidia") {
-          activeModel = parakeetModel;
-          result = await this.processWithLocalParakeet(audioBlob, parakeetModel, metadata);
-        } else {
-          activeModel = whisperModel;
-          result = await this.processWithLocalWhisper(audioBlob, whisperModel, metadata);
-        }
-      } else if (isOpenWhisprCloudMode) {
-        if (!isSignedIn) {
-          const err = new Error(
-            "OpenWhispr Cloud requires sign-in. Please sign in again or switch to BYOK mode."
-          );
-          err.code = "AUTH_REQUIRED";
-          err.messageKey = "hooks.audioRecording.errorDescriptions.sessionExpired";
-          throw err;
-        }
-        activeModel = "openwhispr-cloud";
-        result = await this.processWithOpenWhisprCloud(audioBlob, metadata);
-      } else {
-        activeModel = this.getTranscriptionModel();
-        result = await this.processWithOpenAIAPI(audioBlob, metadata);
-      }
+      const activeModel = "voicelab-cloud";
+      const result = await this.processWithOpenWhisprCloud(audioBlob, metadata);
 
       if (!this.isProcessing) {
         return;
@@ -1287,20 +1251,20 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         durationMs: metadata?.durationSeconds
           ? Math.round(metadata.durationSeconds * 1000)
           : Math.round(performance.now() - pipelineStart),
-        provider: result?.source || (useLocalWhisper ? localProvider : "cloud"),
+        provider: result?.source || "aisha",
         model: activeModel || null,
       };
 
       this.onTranscriptionComplete?.(result);
 
-      if (result?.source === "openwhispr") {
+      if (result?.source === "openwhispr" || result?.source === "aisha") {
         window.dispatchEvent(new Event("usage-changed"));
       }
 
       const roundTripDurationMs = Math.round(performance.now() - pipelineStart);
 
       const timingData = {
-        mode: useLocalWhisper ? `local-${localProvider}` : "cloud",
+        mode: "cloud",
         model: activeModel,
         audioDurationMs: metadata.durationSeconds
           ? Math.round(metadata.durationSeconds * 1000)
@@ -1312,9 +1276,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         outputTextLength: result?.text?.length,
       };
 
-      if (useLocalWhisper) {
-        timingData.audioConversionDurationMs = result?.timings?.audioConversionDurationMs ?? null;
-      }
       timingData.transcriptionProcessingDurationMs =
         result?.timings?.transcriptionProcessingDurationMs ?? null;
 
@@ -2147,6 +2108,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     const audioFormat = audioBlob.type;
     const opts = {};
     if (language) opts.language = language;
+    if (audioFormat) opts.mimeType = audioFormat;
     const cleanupCloudMode = settings.cleanupCloudMode || "openwhispr";
     if (
       (settings.useCleanupModel && !this.skipReasoning && cleanupCloudMode === "openwhispr") ||
@@ -2168,6 +2130,11 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       if (!res.success) {
         const err = new Error(res.error || "Cloud transcription failed");
         err.code = res.code;
+        if (res.messageKey) err.messageKey = res.messageKey;
+        else if (res.code === "LIMIT_REACHED") {
+          err.messageKey =
+            res.messageKey || "hooks.audioRecording.errorDescriptions.aishaBillingFailed";
+        }
         throw err;
       }
       return res;
@@ -3158,47 +3125,9 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     };
   }
 
-  shouldUseStreaming(isSignedInOverride) {
-    const s = getSettings();
-    if (s.useLocalWhisper) return false;
-
-    // Self-hosted transcription is batch HTTP to the user's server, never cloud realtime WS.
-    if (isSelfHostedTranscription(s)) return false;
-
-    // Corti (BYOK) streams over its own WSS — independent of OpenWhispr Cloud.
-    if (s.cloudTranscriptionProvider === "corti" && s.cloudTranscriptionMode === "byok") {
-      return !!(s.cortiClientId && s.cortiClientSecret);
-    }
-
-    // Tinfoil realtime streams without an OpenWhispr account.
-    if (s.cloudTranscriptionProvider === "tinfoil") {
-      const provider = getTranscriptionProvider("tinfoil");
-      const model = provider?.models.find((m) => m.id === s.cloudTranscriptionModel);
-      return !!model?.streaming && !!s.tinfoilApiKey;
-    }
-
-    // For dictation/agent: respect sttConfig mode from the API — this allows
-    // batch mode even for realtime-capable models (e.g. gpt-4o-mini-transcribe).
-    if (this.context !== "notes" && this.sttConfig?.dictation?.mode === "batch") {
-      return false;
-    }
-
-    if (REALTIME_MODELS.has(s.cloudTranscriptionModel)) {
-      // Realtime WS is OpenAI-only — other providers fall through to HTTP.
-      if ((s.cloudTranscriptionProvider || "openai") !== "openai") return false;
-      if (s.cloudTranscriptionMode === "byok") return !!s.openaiApiKey;
-      if (s.cloudTranscriptionMode === "openwhispr") return !!(isSignedInOverride ?? s.isSignedIn);
-      return false;
-    }
-
-    if (s.cloudTranscriptionMode !== "openwhispr" || !(isSignedInOverride ?? s.isSignedIn)) {
-      return false;
-    }
-    if (this.context === "notes") {
-      return localStorage.getItem("notesStreamingPreference") === "streaming";
-    }
-    if (!this.sttConfig) return false;
-    return this.sttConfig.dictation?.mode === "streaming";
+  shouldUseStreaming(_isSignedInOverride) {
+    // Aisha realtime WebSocket is not wired yet — always use sync cloud dictation.
+    return false;
   }
 
   async warmupStreamingConnection({ isSignedIn: isSignedInOverride } = {}) {

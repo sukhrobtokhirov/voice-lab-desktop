@@ -28,8 +28,8 @@ class UpdateManager {
 
     autoUpdater.setFeedURL({
       provider: "github",
-      owner: "OpenWhispr",
-      repo: "openwhispr",
+      owner: process.env.UPDATE_OWNER || "voicelab-uz",
+      repo: process.env.UPDATE_REPO || "desktop",
       private: false,
     });
 

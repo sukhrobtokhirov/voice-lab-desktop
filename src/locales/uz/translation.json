@@ -1,20 +1,20 @@
 {
   "settings": {
     "language": {
-      "sectionTitle": "Language",
-      "sectionDescription": "Set interface and transcription languages independently",
-      "uiLabel": "Interface language",
-      "uiDescription": "Choose the language used throughout VoiceLab's interface",
-      "transcriptionLabel": "Transcription language",
-      "transcriptionDescription": "Choose the language you speak for more accurate transcription"
+      "sectionTitle": "Til",
+      "sectionDescription": "Interfeys va transkripsiya tillarini alohida sozlang",
+      "uiLabel": "Interfeys tili",
+      "uiDescription": "VoiceLab interfeysida ishlatiladigan tilni tanlang",
+      "transcriptionLabel": "Transkripsiya tili",
+      "transcriptionDescription": "Aniqroq transkripsiya uchun gapiradigan tilingizni tanlang"
     },
     "noteFiles": {
-      "title": "Save notes as files",
-      "description": "Automatically save notes and transcripts as files on disk, organized by folder",
-      "path": "Save location",
-      "changePath": "Change location",
-      "rebuild": "Rebuild all files",
-      "rebuildDescription": "Re-sync all notes and transcripts to disk",
+      "title": "Eslatmalarni fayl sifatida saqlash",
+      "description": "Eslatma va transkriptlarni diskda papkalar bo‘yicha avtomatik saqlang",
+      "path": "Saqlash joyi",
+      "changePath": "Joyni o‘zgartirish",
+      "rebuild": "Barcha fayllarni qayta yaratish",
+      "rebuildDescription": "Barcha eslatma va transkriptlarni diskka qayta sinxronlash",
       "rebuildError": {
         "title": "Rebuild failed",
         "description": "Could not rebuild note files. Make sure the feature is enabled and the folder is writable."
@@ -29,58 +29,58 @@
   },
   "tray": {
     "toggleDictation": {
-      "show": "Show Dictation Panel",
-      "hide": "Hide Dictation Panel"
+      "show": "Diktant panelini ko‘rsatish",
+      "hide": "Diktant panelini yashirish"
     },
-    "openControlPanel": "Open Control Panel",
-    "hideControlPanel": "Hide Control Panel",
-    "quit": "Quit VoiceLab",
-    "tooltip": "VoiceLab - Voice Dictation"
+    "openControlPanel": "Boshqaruv panelini ochish",
+    "hideControlPanel": "Boshqaruv panelini yashirish",
+    "quit": "VoiceLab-dan chiqish",
+    "tooltip": "VoiceLab — ovozli diktant"
   },
   "menu": {
     "appLabel": "VoiceLab",
-    "quit": "Quit VoiceLab",
-    "speech": "Speech",
-    "settings": "Settings...",
-    "help": "Help",
-    "learnMore": "Learn More",
-    "file": "File",
-    "closeWindow": "Close Window"
+    "quit": "VoiceLab-dan chiqish",
+    "speech": "Nutq",
+    "settings": "Sozlamalar...",
+    "help": "Yordam",
+    "learnMore": "Batafsil",
+    "file": "Fayl",
+    "closeWindow": "Oynani yopish"
   },
   "window": {
-    "voiceRecorderTitle": "Voice Recorder",
-    "controlPanelTitle": "Control Panel",
-    "agentChatTitle": "Agent Chat"
+    "voiceRecorderTitle": "Ovoz yozuvchi",
+    "controlPanelTitle": "Boshqaruv paneli",
+    "agentChatTitle": "Agent chat"
   },
   "dialog": {
     "openLink": {
-      "title": "Unable to Open Link",
-      "message": "Failed to open the link in your browser:\n{{url}}\n\nError: {{error}}"
+      "title": "Havolani ochib bo‘lmadi",
+      "message": "Havolani brauzerda ochib bo‘lmadi:\n{{url}}\n\nXato: {{error}}"
     },
     "loadFailure": {
-      "title": "VoiceLab failed to load",
-      "message": "VoiceLab could not load its UI.",
+      "title": "VoiceLab yuklanmadi",
+      "message": "VoiceLab interfeysini yuklay olmadi.",
       "detail": {
-        "window": "Window: {{windowName}}",
-        "error": "Error {{errorCode}}: {{errorDescription}}",
+        "window": "Oyna: {{windowName}}",
+        "error": "Xato {{errorCode}}: {{errorDescription}}",
         "url": "URL: {{url}}",
-        "hint": "Try reinstalling the app or launching with --log-level=debug."
+        "hint": "Ilovani qayta o‘rnating yoki --log-level=debug bilan ishga tushiring."
       }
     }
   },
   "startup": {
     "error": {
-      "title": "VoiceLab Startup Error",
-      "message": "Failed to start the application:\n\n{{error}}\n\nPlease report this issue."
+      "title": "VoiceLab ishga tushirish xatosi",
+      "message": "Ilovani ishga tushirib bo‘lmadi:\n\n{{error}}\n\nIltimos, bu muammoni xabar qiling."
     },
     "globeHotkey": {
-      "title": "Globe Hotkey Unavailable",
-      "message": "VoiceLab could not activate the Globe key hotkey.",
+      "title": "Globe yorlig‘i mavjud emas",
+      "message": "VoiceLab Globe tugmasi yorlig‘ini faollashtira olmadi.",
       "details": {
-        "unknown": "Unknown error occurred while starting the Globe listener.",
-        "fallback": "The Globe key shortcut will remain disabled; existing keyboard shortcuts continue to work.",
-        "devHint": "Run `npm run compile:globe` and rebuild the app to regenerate the listener binary.",
-        "reinstallHint": "Try reinstalling VoiceLab or contact support if the issue persists."
+        "unknown": "Globe tinglovchisini ishga tushirishda noma’lum xato yuz berdi.",
+        "fallback": "Globe tugmasi o‘chirilgan holda qoladi; mavjud klaviatura yorliqlari ishlashda davom etadi.",
+        "devHint": "`npm run compile:globe` ni ishga tushiring va tinglovchi binaryni yangilash uchun ilovani qayta yarating.",
+        "reinstallHint": "VoiceLab-ni qayta o‘rnating yoki muammo davom etsa qo‘llab-quvvatlashga murojaat qiling."
       }
     }
   },
@@ -128,140 +128,140 @@
     "pttUnavailable": "Push-to-Talk native listener not available"
   },
   "common": {
-    "retry": "Retry",
-    "back": "Back",
-    "next": "Next",
-    "complete": "Complete",
-    "reset": "Reset",
-    "refresh": "Refresh",
-    "download": "Download",
-    "cancel": "Cancel",
-    "recommended": "Recommended",
-    "active": "Active",
-    "freeAccountRequired": "Free account required",
-    "cloud": "Cloud",
-    "local": "Local",
-    "apiKey": "API Key",
+    "retry": "Qayta urinish",
+    "back": "Orqaga",
+    "next": "Keyingi",
+    "complete": "Yakunlash",
+    "reset": "Qayta tiklash",
+    "refresh": "Yangilash",
+    "download": "Yuklab olish",
+    "cancel": "Bekor qilish",
+    "recommended": "Tavsiya etiladi",
+    "active": "Faol",
+    "freeAccountRequired": "Bepul hisob kerak",
+    "cloud": "Bulut",
+    "local": "Mahalliy",
+    "apiKey": "API kalit",
     "model": "Model",
-    "loading": "Loading...",
-    "unknown": "Unknown",
-    "availableModels": "Available Models",
-    "fast": "Fast",
-    "hold": "Hold",
-    "private": "Private",
-    "tap": "Tap",
-    "close": "Close",
-    "dismiss": "Dismiss",
-    "save": "Save",
-    "saving": "Saving…",
-    "create": "Create",
-    "delete": "Delete",
-    "actions": "Actions",
-    "error": "Something went wrong",
-    "unknownError": "An unknown error occurred",
-    "copy": "Copy",
-    "copied": "Copied",
-    "done": "Done",
-    "skip": "Skip"
+    "loading": "Yuklanmoqda...",
+    "unknown": "Noma’lum",
+    "availableModels": "Mavjud modellar",
+    "fast": "Tez",
+    "hold": "Ushlab turish",
+    "private": "Maxfiy",
+    "tap": "Bosish",
+    "close": "Yopish",
+    "dismiss": "Yopish",
+    "save": "Saqlash",
+    "saving": "Saqlanmoqda…",
+    "create": "Yaratish",
+    "delete": "O‘chirish",
+    "actions": "Amallar",
+    "error": "Xatolik yuz berdi",
+    "unknownError": "Noma’lum xato yuz berdi",
+    "copy": "Nusxa olish",
+    "copied": "Nusxa olindi",
+    "done": "Tayyor",
+    "skip": "O‘tkazib yuborish"
   },
   "onboarding": {
     "steps": {
-      "welcome": "Welcome",
-      "aishaKey": "Aisha key",
-      "setup": "Setup",
-      "permissions": "Permissions",
-      "activation": "Dictation",
-      "useCase": "About you",
-      "meeting": "Meetings",
-      "finish": "Finish",
-      "voiceAgent": "Voice Agent"
+      "welcome": "Xush kelibsiz",
+      "aishaKey": "Aisha kaliti",
+      "setup": "Sozlash",
+      "permissions": "Ruxsatlar",
+      "activation": "Diktant",
+      "useCase": "Siz haqingizda",
+      "meeting": "Uchrashuvlar",
+      "finish": "Yakunlash",
+      "voiceAgent": "Ovozli agent"
     },
     "aishaKey": {
-      "title": "Connect your Aisha API key",
-      "description": "VoiceLab Cloud uses Aisha for speech-to-text. Create a personal API key at space.aisha.group and paste it below.",
-      "getKeyHint": "Don’t have a key yet?",
-      "openSpace": "Open space.aisha.group",
-      "inputLabel": "Aisha API key",
-      "placeholder": "Paste your API key",
-      "helpText": "Stored only on this device. You can change it later in Settings → Account.",
-      "validating": "Checking key…",
+      "title": "Aisha API kalitingizni ulang",
+      "description": "VoiceLab Cloud nutqni matnga aylantirish uchun Aisha’dan foydalanadi. space.aisha.group da shaxsiy API kalit yarating va quyiga joylashtiring.",
+      "getKeyHint": "Hali kalitingiz yo‘qmi?",
+      "openSpace": "space.aisha.group ni ochish",
+      "inputLabel": "Aisha API kaliti",
+      "placeholder": "API kalitingizni joylashtiring",
+      "helpText": "Faqat shu qurilmada saqlanadi. Keyinroq Sozlamalar → Hisob orqali o‘zgartirish mumkin.",
+      "validating": "Kalit tekshirilmoqda…",
       "errors": {
-        "required": "Enter your Aisha API key to continue.",
-        "invalid": "That key was rejected. Create a new one at space.aisha.group.",
-        "saveFailed": "Could not save the key. Try again."
+        "required": "Davom etish uchun Aisha API kalitini kiriting.",
+        "invalid": "Kalit rad etildi. space.aisha.group da yangisini yarating.",
+        "saveFailed": "Kalitni saqlab bo‘lmadi. Qayta urinib ko‘ring."
       }
     },
     "hotkey": {
-      "couldNotRegisterTitle": "Couldn't register that hotkey",
-      "couldNotRegisterDescription": "That key combination might already be in use. Try a different one."
+      "couldNotRegisterTitle": "Bu yorliqni ro‘yxatdan o‘tkazib bo‘lmadi",
+      "couldNotRegisterDescription": "Bu tugmalar kombinatsiyasi allaqachon band bo‘lishi mumkin. Boshqasini sinab ko‘ring."
     },
     "setup": {
-      "title": "Setup",
-      "description": "Choose your language and grant permissions",
-      "language": "Language"
+      "title": "Sozlash",
+      "description": "Tilingizni tanlang va ruxsatlarni bering",
+      "language": "Til"
     },
     "permissions": {
-      "title": "Permissions",
-      "microphoneTitle": "Microphone",
-      "microphoneDescription": "Turns your speech into text. Nothing is recorded until you press your hotkey.",
-      "grant": "Grant",
-      "grantAccess": "Grant Access",
-      "accessibilityTitle": "Accessibility",
-      "accessibilityDescription": "Types the finished text straight into whatever app you're in — docs, email, chat.",
-      "testAndGrant": "Test & Grant",
-      "requiredForApp": "Required for VoiceLab to work",
-      "microphoneRequired": "Microphone access required",
-      "openSystemSettings": "Open System Settings",
-      "systemAudioTitle": "System Audio",
-      "systemAudioDescription": "Lets the meeting recorder hear the other side of your calls — meetings, lectures, podcasts. You can turn this on later in Settings.",
-      "optional": "Optional",
-      "recommended": "Recommended",
-      "accessibilityTroubleshooting": "In System Settings → Accessibility, switch VoiceLab's toggle off and back on. If that doesn't work, remove VoiceLab from the list and add it back. Still stuck? Email info@voicelab.uz."
+      "title": "Ruxsatlar",
+      "microphoneTitle": "Mikrofon",
+      "microphoneDescription": "Nutqingizni matnga aylantiradi. Yorliqni bosmaguncha hech narsa yozib olinmaydi.",
+      "grant": "Ruxsat berish",
+      "grantAccess": "Ruxsat berish",
+      "accessibilityTitle": "Qulayliklar",
+      "accessibilityDescription": "Tayyor matnni ochiq ilovaga — hujjat, email yoki chatga — to‘g‘ridan-to‘g‘ri yozadi",
+      "testAndGrant": "Sinash va ruxsat berish",
+      "requiredForApp": "VoiceLab ishlashi uchun zarur",
+      "microphoneRequired": "Mikrofon ruxsati kerak",
+      "openSystemSettings": "Tizim sozlamalarini ochish",
+      "systemAudioTitle": "Tizim audiosi",
+      "systemAudioDescription": "Uchrashuv yozuvchisiga qo‘ng‘iroqning ikkinchi tomonini — uchrashuv, ma’ruza va boshqalarni — eshitish imkonini beradi",
+      "optional": "Ixtiyoriy",
+      "recommended": "Tavsiya etiladi",
+      "accessibilityTroubleshooting": "Tizim sozlamalari → Qulayliklar bo‘limida VoiceLab tugmasini o‘chirib, qayta yoqing. Yordam bermasa, VoiceLab-ni ro‘yxatdan olib tashlab, qayta qo‘shing. Hali ham ishlamasa? info@voicelab.uz ga yozing."
     },
     "transcription": {
-      "title": "Transcription Setup",
-      "description": "VoiceLab Cloud (Aisha) — choose your language",
-      "preferredLanguage": "Preferred Language"
+      "title": "Transkripsiya sozlamalari",
+      "description": "VoiceLab Cloud (Aisha) — tilni tanlang",
+      "preferredLanguage": "Afzal til"
     },
     "activation": {
-      "title": "Dictation Setup",
-      "description": "Configure how you trigger dictation",
-      "hotkey": "Hotkey",
-      "mode": "Mode",
-      "tapDescription": "Press to start/stop",
-      "holdDescription": "Hold while speaking",
-      "test": "Test",
-      "hotkeyToStartStop": "{{hotkey}} to start/stop",
-      "holdHotkey": "Hold {{hotkey}}",
-      "textareaPlaceholder": "Click here and use your hotkey to dictate..."
+      "title": "Diktant sozlamalari",
+      "description": "Diktantni qanday ishga tushirishni sozlang",
+      "hotkey": "Yorliq",
+      "mode": "Rejim",
+      "tapDescription": "Boshlash/to‘xtatish uchun bosing",
+      "holdDescription": "Gapirayotganda ushlab turing",
+      "test": "Sinash",
+      "hotkeyToStartStop": "Boshlash/to‘xtatish: {{hotkey}}",
+      "holdHotkey": "{{hotkey}} ni ushlab turing",
+      "textareaPlaceholder": "Bu yerni bosing va diktant uchun yorliqdan foydalaning..."
     },
     "voiceAgent": {
-      "title": "Voice Agent Setup",
-      "description": "Talk to your AI agent with a single keypress",
-      "hotkey": "Hotkey",
-      "howItWorks": "Press the key and say what you want — for example “write a short thank-you note”. {{agentName}} types the result wherever your cursor is. No need to say “Hey {{agentName}}” first.",
-      "test": "Try it",
-      "testInstruction": "Click below, press {{hotkey}} and say a command",
-      "testSetHotkey": "Set a hotkey above to try it",
-      "testPlaceholder": "Click here, press your hotkey and say one of the examples...",
+      "title": "Ovozli agent sozlamalari",
+      "description": "Bitta tugma bosishi bilan AI agentingiz bilan gaplashing",
+      "hotkey": "Yorliq",
+      "howItWorks": "Tugmani bosing va nima kerakligini ayting — masalan, “qisqa minnatdorchilik xati yoz”",
+      "test": "Sinab ko‘rish",
+      "testInstruction": "Pastdagi maydonni bosing, {{hotkey}} ni bosing va buyruq ayting",
+      "testSetHotkey": "Sinash uchun yuqorida yorliq belgilang",
+      "testPlaceholder": "Bu yerni bosing, yorliqni bosing va misollardan birini ayting...",
       "examples": [
         "Translate to Italian: “I talk faster than I type”",
         "Write a short email to my boss telling him I want a promotion, his name is Mark",
         "What is 5 × 5?"
       ],
-      "optionalNote": "Optional — you can set or change it anytime in Settings."
+      "optionalNote": "Ixtiyoriy — istalgan vaqt Sozlamalarda o‘zgartirishingiz mumkin."
     },
     "connectivity": {
-      "title": "We can't reach VoiceLab Cloud from this network",
-      "body": "{{cause}} You can switch to the local engine, or continue and try again later.",
-      "useLocal": "Use local engine",
-      "continue": "Continue anyway"
+      "title": "Bu tarmoqdan VoiceLab Cloud-ga ulanib bo‘lmadi",
+      "body": "{{cause}} Mahalliy dvigatelga o‘tishingiz yoki davom etib keyinroq urinib ko‘rishingiz mumkin.",
+      "useLocal": "Mahalliy dvigateldan foydalanish",
+      "continue": "Baribir davom etish"
     },
     "useCase": {
-      "title": "Why are you here?",
-      "description": "We're a small team shipping every week. What you pick sets up the app for you — and tells us what to build next.",
-      "noteLabel": "Anything else you'd like us to know?",
-      "notePlaceholder": "Optional",
+      "title": "Nima uchun keldingiz?",
+      "description": "Biz har hafta yangilik chiqaradigan kichik jamoamiz. Tanlovingiz ilovani siz uchun sozlaydi.",
+      "noteLabel": "Yana nimadir aytmoqchimisiz?",
+      "notePlaceholder": "Ixtiyoriy",
       "options": {
         "dictation": {
           "title": "Writing faster",
@@ -288,22 +288,22 @@
           "description": "Upload and transcribe MP3, OGG and more"
         }
       },
-      "selectHint": "Select all that apply"
+      "selectHint": "Mos keladiganlarning barchasini tanlang"
     },
     "meeting": {
-      "title": "Meeting notes",
-      "description": "Capture and summarize your meetings",
-      "autoDetect": "VoiceLab automatically detects when you're in a meeting and offers to start notes — nothing is recorded without you.",
-      "hotkeyLabel": "Meeting hotkey",
-      "hotkeyHint": "Optional — press it in any meeting to start a note instantly."
+      "title": "Uchrashuv eslatmalari",
+      "description": "Uchrashuvlaringizni yozib oling va xulosa qiling",
+      "autoDetect": "VoiceLab uchrashuvda ekanligingizni avtomatik aniqlaydi va eslatma boshlashni taklif qiladi — siz tasdiqlamasangiz hech narsa yozilmaydi.",
+      "hotkeyLabel": "Uchrashuv yorlig‘i",
+      "hotkeyHint": "Ixtiyoriy — istalgan uchrashuvda eslatmani darhol boshlash uchun bosing."
     },
     "finish": {
-      "title": "You're all set",
-      "cloudDescription": "You're on VoiceLab Cloud — fast, accurate, zero data retention, 2,000 words free every week. Prefer everything on-device? Switch to local processing in Settings.",
-      "localDescription": "You're set up with local processing or your own key. Adjust how your audio is processed anytime in Settings.",
-      "cleanupNote": "AI text cleanup runs with sensible defaults. You can adjust it anytime in Settings.",
-      "openSettings": "Open Settings",
-      "skipForNow": "Skip for now",
+      "title": "Hammasi tayyor",
+      "cloudDescription": "Siz VoiceLab Cloud-dan foydalanmoqdasiz — tez, aniq, ma’lumot saqlanmaydi, har hafta 2 000 so‘z bepul. Hammasi qurilmada bo‘lishini xohlaysizmi? Sozlamalarda mahalliyga o‘ting.",
+      "localDescription": "Siz mahalliy qayta ishlash yoki o‘z kalitingiz bilan sozlandingiz. Audio qanday qayta ishlanishini Sozlamalarda o‘zgartirishingiz mumkin.",
+      "cleanupNote": "AI matn tozalash oqilona standartlar bilan ishlaydi. Istalgan vaqt Sozlamalarda o‘zgartirishingiz mumkin.",
+      "openSettings": "Sozlamalarni ochish",
+      "skipForNow": "Hozircha o‘tkazib yuborish",
       "corti": {
         "title": "You told us you're here for clinical transcription",
         "description": "We've partnered with Corti — clinical-grade speech-to-text with the highest accuracy, and it's HIPAA compliant.",
@@ -317,7 +317,9 @@
         "step2": "Open the Corti console and create API credentials",
         "step3": "Paste your Client ID and Secret below"
       }
-    }
+    },
+    "welcomeTitle": "VoiceLab-ga xush kelibsiz",
+    "welcomeSubtitle": "Ovozingiz bilan istalgan joyda diktant qiling"
   },
   "streaming": {
     "errors": {
@@ -334,27 +336,27 @@
   },
   "controlPanel": {
     "update": {
-      "readyTitle": "Update ready to install",
-      "readyDescription": "Click 'Install Update' to restart with the latest version.",
+      "readyTitle": "Yangilanish o‘rnatishga tayyor",
+      "readyDescription": "Eng so‘nggi versiyaga o‘tish uchun «Yangilanishni o‘rnatish» ni bosing.",
       "problemTitle": "Update ran into a problem",
       "problemDescription": "We couldn't complete the update. Please try again later.",
-      "installTitle": "Install Update",
-      "installDescription": "VoiceLab will restart to apply the update. Any in-progress work will be saved.",
+      "installTitle": "Yangilanishni o‘rnatish",
+      "installDescription": "Yangilanishni qo‘llash uchun VoiceLab qayta ishga tushadi. Davom etayotgan ish saqlanadi.",
       "couldNotInstallTitle": "Couldn't install update",
       "couldNotInstallDescription": "Something went wrong. Please try again.",
       "couldNotDownloadTitle": "Couldn't download update",
       "couldNotDownloadDescription": "Check your internet connection and try again.",
-      "installing": "Installing...",
-      "installButton": "Install Update",
-      "availableButton": "Update Available"
+      "installing": "O‘rnatilmoqda...",
+      "installButton": "Yangilanishni o‘rnatish",
+      "availableButton": "Yangilanish mavjud"
     },
     "limit": {
       "weeklyTitle": "Weekly limit reached",
       "weeklyDescription": "Your limit resets on a rolling basis. Upgrade to Pro or use your own API key for unlimited use."
     },
     "accessibilityMissing": {
-      "title": "Accessibility permissions needed",
-      "description": "We've detected that VoiceLab needs accessibility permissions to work properly. Please enable them below."
+      "title": "Qulayliklar ruxsati kerak",
+      "description": "VoiceLab to‘g‘ri ishlashi uchun qulayliklar ruxsati kerakligini aniqladik. Pastda yoqing."
     },
     "billing": {
       "pastDueTitle": "We couldn't process your payment",
@@ -374,17 +376,17 @@
       "couldNotDeleteTitle": "Couldn't delete",
       "couldNotDeleteDescription": "This transcription may have already been removed.",
       "couldNotDeleteDescriptionGeneric": "Something went wrong. Please try again.",
-      "empty": "No transcriptions yet",
+      "empty": "Hali transkriptlar yo‘q",
       "dataRetentionDisabled": "Data retention is off. Transcriptions and audio are not saved to history.",
-      "press": "Press",
-      "toStart": "to start",
+      "press": "Bosing",
+      "toStart": "boshlash uchun",
       "dateGroups": {
         "today": "Today",
         "yesterday": "Yesterday"
       },
-      "copyText": "Copy text",
+      "copyText": "Matndan nusxa olish",
       "copyRawTranscript": "Copy raw transcript",
-      "deleteItem": "Delete",
+      "deleteItem": "O‘chirish",
       "viewRawTranscript": "View raw transcript",
       "showInFolder": "Reveal in Finder",
       "showInFolderWindows": "Show in Explorer",
@@ -400,10 +402,10 @@
       "failedCtaSettings": "Set up your transcription provider",
       "failedCtaAndRetry": "then click retry",
       "failedCtaSettingsOnly": "Set up your transcription provider in Settings",
-      "failedLimitReached": "Aisha balance insufficient — top up at space.aisha.group",
+      "failedLimitReached": "Aisha balansi yetarli emas — space.aisha.group da to‘ldiring",
       "failedOffline": "You're offline",
       "rawTranscript": "Raw Transcript",
-      "clearAll": "Clear all",
+      "clearAll": "Hammasini tozalash",
       "clearAllTitle": "Clear All Transcriptions",
       "clearAllDescription": "All transcriptions and audio files will be permanently removed.",
       "clearAllSuccess": "History cleared",
@@ -420,23 +422,23 @@
       }
     },
     "cloudMigration": {
-      "title": "Welcome to VoiceLab Cloud",
-      "description": "We've switched your transcription to VoiceLab Cloud for faster, more accurate results. Your previous settings are saved — switch back anytime in Settings.",
-      "viewSettings": "View Settings"
+      "title": "VoiceLab Cloud-ga xush kelibsiz",
+      "description": "Tezroq va aniqroq natijalar uchun transkripsiya VoiceLab Cloud-ga o‘tkazildi. Oldingi sozlamalaringiz saqlangan — istalgan vaqt Sozlamalarda qaytishingiz mumkin.",
+      "viewSettings": "Sozlamalarni ko‘rish"
     },
     "aiCta": {
       "title": "Enhance your transcriptions with AI",
       "description": "Automatically fix grammar, punctuation, and formatting as you speak.",
       "enable": "Enable AI Enhancement"
     },
-    "loading": "Loading...",
+    "loading": "Yuklanmoqda...",
     "gpu": {
       "bannerTitle": "GPU acceleration available",
       "bannerDescription": "Enable GPU acceleration for faster performance.",
       "enableButton": "Enable GPU",
       "dismissButton": "Not now"
     },
-    "backToNotes": "Back to notes"
+    "backToNotes": "Eslatmalarga qaytish"
   },
   "reasoning": {
     "mode": {
@@ -571,9 +573,9 @@
       "errorTitles": {
         "sessionExpired": "Session Expired",
         "offline": "You're Offline",
-        "dailyLimitReached": "Aisha Billing Issue",
-        "aishaBillingFailed": "Aisha Billing Issue",
-        "aishaBillingRetry": "Transcription Failed",
+        "dailyLimitReached": "Aisha to‘lov/balans xatosi",
+        "aishaBillingFailed": "Aisha to‘lov/balans xatosi",
+        "aishaBillingRetry": "Transkripsiya muvaffaqiyatsiz",
         "providerRateLimited": "Provider Rate Limited"
       },
       "fallback": {
@@ -606,10 +608,10 @@
       "errorDescriptions": {
         "sessionExpired": "Your VoiceLab Cloud session is unavailable. Please sign in again from Settings.",
         "offline": "You're offline. Cloud transcription requires an internet connection.",
-        "dailyLimitReached": "Aisha billing failed or balance is insufficient. Try again, or top up at space.aisha.group.",
-        "aishaBillingFailed": "Aisha balance is insufficient. Top up at space.aisha.group, then try again.",
-        "aishaBillingRetry": "Aisha billing transaction failed. Please try again in a moment.",
-        "aishaKeyMissing": "Add your Aisha API key in Settings → Account (create one at space.aisha.group).",
+        "dailyLimitReached": "Aisha to‘lovi muvaffaqiyatsiz yoki balans yetarli emas. Qayta urinib ko‘ring yoki space.aisha.group da to‘ldiring.",
+        "aishaBillingFailed": "Aisha balansi yetarli emas. space.aisha.group da to‘ldiring, so‘ng qayta urinib ko‘ring.",
+        "aishaBillingRetry": "Aisha to‘lov tranzaksiyasi muvaffaqiyatsiz. Birozdan keyin qayta urinib ko‘ring.",
+        "aishaKeyMissing": "Sozlamalar → Hisob bo‘limida Aisha API kalitini qo‘shing (space.aisha.group).",
         "providerRateLimited": "Your transcription provider rate-limited the request. Wait a moment and try again."
       }
     },
@@ -803,8 +805,8 @@
       "continueWithMicrosoft": "Continue with Microsoft",
       "protocolUnavailable": "Browser sign-in unavailable — re-register the openwhispr:// protocol in your system's Default Apps settings."
     },
-    "welcomeSubtitle": "Dictate anywhere using your voice",
-    "welcomeTitle": "Welcome to VoiceLab",
+    "welcomeSubtitle": "Ovozingiz bilan istalgan joyda diktant qiling",
+    "welcomeTitle": "VoiceLab-ga xush kelibsiz",
     "sessionExpired": "Session expired. Please restart the sign-up process."
   },
   "calendar": {
@@ -1002,7 +1004,7 @@
   "hotkeyGuidance": {
     "blockedDescription": "These shortcuts are blocked because they are commonly used by the system.",
     "blockedTitle": "Blocked shortcuts",
-    "description": "Use these platform rules to choose a shortcut that won't conflict with your system.",
+    "description": "Diktantni ishga tushirish uchun yorliq tanlang",
     "examplesTitle": "Valid examples",
     "platforms": {
       "linux": "Linux",
@@ -1035,7 +1037,7 @@
     "rulesTitle": "Shortcut rules",
     "showAll": "Show all",
     "showFewer": "Show fewer",
-    "title": "Shortcut Guide",
+    "title": "Yorliqni sozlash",
     "validationRules": {
       "0": "Must use at least one modifier (Ctrl, Alt, Shift, etc.)",
       "1": "Cannot use reserved system shortcuts",
@@ -1064,8 +1066,8 @@
     "duplicate": "Already added"
   },
   "languageSelector": {
-    "noLanguagesFound": "No languages found",
-    "searchPlaceholder": "Search..."
+    "noLanguagesFound": "Tillar topilmadi",
+    "searchPlaceholder": "Qidirish..."
   },
   "microphoneSettings": {
     "builtIn": "(Built-in)",
@@ -1217,7 +1219,7 @@
         "label": "System"
       }
     },
-    "title": "Settings"
+    "title": "Sozlamalar"
   },
   "settingsPage": {
     "workspace": {
@@ -1307,22 +1309,22 @@
     },
     "account": {
       "aishaKey": {
-        "sectionDescription": "VoiceLab Cloud uses your personal Aisha API key. No VoiceLab account sign-in is required.",
-        "label": "Aisha API key",
-        "description": "Create a key at space.aisha.group, then paste it here.",
-        "openSpace": "Open space.aisha.group",
-        "helpText": "Stored only on this device.",
-        "placeholder": "Paste your API key",
-        "validating": "Checking key…",
-        "valid": "Key looks good.",
-        "invalid": "That key was rejected.",
-        "billing": "Key accepted, but Aisha balance is low. Top up at space.aisha.group.",
-        "saved": "Aisha API key saved",
-        "cleared": "Aisha API key cleared.",
-        "saveFailed": "Could not save the key.",
-        "missingTitle": "Aisha API key required",
-        "missingBody": "Add your personal Aisha API key to use VoiceLab Cloud dictation. Get one at space.aisha.group.",
-        "missingCta": "Open Account settings"
+        "sectionDescription": "VoiceLab Cloud shaxsiy Aisha API kalitingizdan foydalanadi. VoiceLab hisobiga kirish shart emas.",
+        "label": "Aisha API kaliti",
+        "description": "space.aisha.group da kalit yarating va bu yerga joylashtiring.",
+        "openSpace": "space.aisha.group ni ochish",
+        "helpText": "Faqat shu qurilmada saqlanadi.",
+        "placeholder": "API kalitingizni joylashtiring",
+        "validating": "Kalit tekshirilmoqda…",
+        "valid": "Kalit mos keladi.",
+        "invalid": "Kalit rad etildi.",
+        "billing": "Kalit qabul qilindi, lekin Aisha balansi past. space.aisha.group da to‘ldiring.",
+        "saved": "Aisha API kaliti saqlandi",
+        "cleared": "Aisha API kaliti o‘chirildi.",
+        "saveFailed": "Kalitni saqlab bo‘lmadi.",
+        "missingTitle": "Aisha API kaliti kerak",
+        "missingBody": "VoiceLab Cloud diktantsidan foydalanish uchun shaxsiy Aisha API kalitini qo‘shing. Kalitni space.aisha.group dan oling.",
+        "missingCta": "Hisob sozlamalarini ochish"
       },
       "badges": {
         "free": "Free",
@@ -1349,7 +1351,7 @@
       "featuresDisabled": "Account Features Disabled",
       "featuresDisabledDescription": "Set VITE_AUTH_URL in your .env file to enable account features.",
       "notConfigured": "Authentication is not configured",
-      "notSignedIn": "Not signed in",
+      "notSignedIn": "Tizimga kirilmagan",
       "notSignedInDescription": "Create an account to unlock premium features.",
       "offline": "Offline",
       "pastDue": {
@@ -1369,7 +1371,7 @@
         "business": "Business",
         "trial": "Trial"
       },
-      "planTitle": "Plan",
+      "planTitle": "Tarif",
       "pricing": {
         "title": "Plans",
         "billedYearly": "Billed yearly",
@@ -1468,8 +1470,8 @@
         "signOut": "Sign Out",
         "signingOut": "Signing out..."
       },
-      "signedIn": "Signed in",
-      "title": "Account",
+      "signedIn": "Tizimga kirilgan",
+      "title": "Hisob",
       "toasts": {
         "approachingLimit": {
           "description": "You've used {{used}} of {{limit}} free words this week. Upgrade to Pro for unlimited use.",
@@ -1501,8 +1503,8 @@
       }
     },
     "agentConfig": {
-      "agentName": "Agent Name",
-      "description": "Name your AI assistant so you can address it directly during dictation",
+      "agentName": "Agent nomi",
+      "description": "Diktant paytida to‘g‘ridan-to‘g‘ri murojaat qilish uchun AI yordamchingizga nom bering",
       "dialogs": {
         "updatedDescription": "Your agent is now named \"{{name}}\". Address it by saying \"Hey {{name}}\" followed by your instructions.",
         "updatedTitle": "Agent Name Updated"
@@ -1513,8 +1515,8 @@
       "howItWorksTitle": "How it works",
       "instructionMode": "Instruction",
       "placeholder": "e.g. Jarvis, Nova, Atlas...",
-      "save": "Save",
-      "title": "Voice Agent",
+      "save": "Saqlash",
+      "title": "Ovozli agent",
       "examples": {
         "formalEmail": "Hey {{agentName}}, write a formal email about the budget",
         "professional": "Hey {{agentName}}, make this more professional",
@@ -1522,26 +1524,26 @@
       }
     },
     "aiModels": {
-      "customSetup": "Custom Setup",
-      "customSetupDescription": "Use your own provider and API key.",
-      "description": "Clean up transcriptions, handle commands, and fix errors while preserving your tone.",
-      "enableTextCleanup": "Enable text cleanup",
-      "enableTextCleanupDescription": "Use AI to remove filler words, fix grammar, and polish punctuation",
+      "customSetup": "Maxsus sozlash",
+      "customSetupDescription": "O‘z provayderingiz va API kalitingizdan foydalaning.",
+      "description": "Transkriptlarni tozalang, buyruqlarni bajaring va xatolarni tuzating — ohangingiz saqlanadi",
+      "enableTextCleanup": "Matn tozalashni yoqish",
+      "enableTextCleanupDescription": "AI yordamida to‘ldiruvchi so‘zlarni olib tashlang, grammatika va tinish belgilarini tuzating",
       "modes": {
         "openwhispr": "VoiceLab Cloud",
         "providers": "Cloud Providers",
         "local": "Local",
         "selfHosted": "Self-Hosted",
         "enterprise": "Enterprise",
-        "openwhisprDesc": "Aisha speech-to-text. Reliable accuracy — no provider setup.",
+        "openwhisprDesc": "Aisha nutqni matnga. Ishonchli aniqlik — sozlash shart emas.",
         "providersDesc": "Bring your own API key.",
         "localDesc": "On-device models. Fully private.",
         "selfHostedDesc": "Your own server on your network.",
         "enterpriseDesc": "Use your organization's cloud account (AWS, Azure, GCP)."
       },
       "openwhisprCloud": "VoiceLab Cloud",
-      "openwhisprCloudDescription": "Reliable accuracy. No setup needed.",
-      "title": "AI Text Enhancement",
+      "openwhisprCloudDescription": "Ishonchli aniqlik. Sozlash shart emas.",
+      "title": "AI matn yaxshilash",
       "toasts": {
         "switchedCloud": {
           "description": "Text enhancement will use VoiceLab's cloud service.",
@@ -1622,30 +1624,30 @@
     },
     "general": {
       "appearance": {
-        "auto": "Auto",
-        "dark": "Dark",
-        "description": "Control how VoiceLab looks",
-        "light": "Light",
-        "theme": "Theme",
-        "themeDescription": "Choose light, dark, or match your system",
-        "title": "Appearance"
+        "auto": "Avto",
+        "dark": "Qorong‘u",
+        "description": "VoiceLab ko‘rinishini boshqaring",
+        "light": "Yorug‘",
+        "theme": "Mavzu",
+        "themeDescription": "Yorug‘, qorong‘u yoki tizimga moslashni tanlang",
+        "title": "Ko‘rinish"
       },
       "floatingIcon": {
-        "autoHide": "Auto-hide when idle",
-        "autoHideDescription": "Keep the icon hidden until you start dictating",
-        "startPosition": "Start position",
-        "startPositionDescription": "Where the voice recorder panel appears on screen",
-        "bottomRight": "Bottom Right",
-        "center": "Bottom Center",
-        "bottomLeft": "Bottom Left",
-        "description": "Control when the dictation icon is visible on your screen",
-        "title": "Floating Icon"
+        "autoHide": "Bo‘sh turganda yashirish",
+        "autoHideDescription": "Diktant boshlanmaguncha belgini yashiring",
+        "startPosition": "Boshlang‘ich joylashuv",
+        "startPositionDescription": "Ovoz yozuvchi paneli ekranda qayerda paydo bo‘ladi",
+        "bottomRight": "Pastki o‘ng",
+        "center": "Pastki markaz",
+        "bottomLeft": "Pastki chap",
+        "description": "Diktant belgisi ekranda qachon ko‘rinishini boshqaring",
+        "title": "Suzuvchi belgi"
       },
       "hotkey": {
-        "activationMode": "Activation Mode",
-        "description": "The key combination that starts and stops voice dictation",
-        "resetToDefault": "Reset to {{hotkey}}",
-        "title": "Dictation Hotkey",
+        "activationMode": "Faollashtirish rejimi",
+        "description": "Ovozli diktantni boshlaydigan va to‘xtatadigan tugmalar kombinatsiyasi",
+        "resetToDefault": "{{hotkey}} ga qaytarish",
+        "title": "Diktant yorlig‘i",
         "linuxPttPermissionTitle": "Hold to Speak needs extra setup",
         "linuxPttPermissionDescription": "Run this command and log out/in: sudo usermod -aG input $USER",
         "linuxPttSetupTitle": "Hold to Speak needs setup",
@@ -1656,54 +1658,54 @@
         "hyprlandUnbindDescription": "On Hyprland, VoiceLab claims the selected shortcut. Any existing Hyprland bind that uses the same key combination will be unbound when VoiceLab registers its shortcut."
       },
       "meetingHotkey": {
-        "title": "Meeting Mode Hotkey",
-        "description": "Start meeting mode and snap the panel to the side of the screen",
-        "layoutLabel": "When triggered by hotkey, open in:",
-        "layoutFullWidth": "Full width",
-        "layoutSidePanel": "Side panel"
+        "title": "Uchrashuv rejimi yorlig‘i",
+        "description": "Uchrashuv rejimini boshlang va panelni ekran chetiga yopishtiring",
+        "layoutLabel": "Yorliq bilan ochilganda:",
+        "layoutFullWidth": "To‘liq kenglik",
+        "layoutSidePanel": "Yon panel"
       },
       "voiceAgentHotkey": {
-        "title": "Voice Agent Hotkey",
-        "description": "Speak a request — your AI agent types the result, not your words"
+        "title": "Ovozli agent yorlig‘i",
+        "description": "So‘rov ayting — AI agent natijani yozadi, so‘zlaringizni emas"
       },
       "translationHotkey": {
-        "title": "Translation Hotkey",
-        "description": "Dictate in any language — the pasted text comes out translated"
+        "title": "Tarjima yorlig‘i",
+        "description": "Istalgan tilda diktant qiling — joylashtirilgan matn tarjima qilingan holda chiqadi"
       },
       "microphone": {
-        "description": "Select which input device to use for dictation",
-        "title": "Microphone"
+        "description": "Diktant uchun qaysi kirish qurilmasidan foydalanishni tanlang",
+        "title": "Mikrofon"
       },
       "soundEffects": {
-        "dictationSounds": "Dictation sounds",
-        "dictationSoundsDescription": "Play a tone when recording starts and stops",
-        "pauseMedia": "Pause media",
-        "pauseMediaDescription": "Automatically pause music when dictation starts",
-        "title": "Sound Effects"
+        "dictationSounds": "Diktant tovushlari",
+        "dictationSoundsDescription": "Yozuv boshlanishi va tugashi bilan ohang ijro etilsin",
+        "pauseMedia": "Medianni pauza qilish",
+        "pauseMediaDescription": "Diktant boshlanganda musiqani avtomatik pauza qilish",
+        "title": "Tovush effektlari"
       },
       "notifications": {
-        "title": "Notifications",
-        "description": "Control which notifications VoiceLab can show",
-        "disableAll": "Disable all notifications",
-        "disableAllDescription": "Silence everything except error messages",
-        "meetingDetection": "Meeting detection",
-        "meetingDetectionDescription": "Notify when a meeting is detected so you can start recording",
-        "calendarReminders": "Calendar reminders",
-        "calendarRemindersDescription": "Notify when a scheduled meeting is about to start",
-        "updates": "App updates",
-        "updatesDescription": "Notify when a new version is available"
+        "title": "Bildirishnomalar",
+        "description": "VoiceLab qanday bildirishnomalar ko‘rsatishi mumkinligini sozlang",
+        "disableAll": "Barcha bildirishnomalarni o‘chirish",
+        "disableAllDescription": "Xato xabarlaridan tashqari hammasini jim qilish",
+        "meetingDetection": "Uchrashuvni aniqlash",
+        "meetingDetectionDescription": "Uchrashuv aniqlanganda yozishni boshlashingiz uchun xabar berish",
+        "calendarReminders": "Kalendar eslatmalari",
+        "calendarRemindersDescription": "Rejalashtirilgan uchrashuv boshlanishiga yaqin xabar berish",
+        "updates": "Ilova yangilanishlari",
+        "updatesDescription": "Yangi versiya mavjudligida xabar berish"
       },
       "clipboard": {
-        "title": "Clipboard",
-        "autoPaste": "Automatic pasting",
-        "autoPasteDescription": "Automatically paste transcribed text into the active app when dictation finishes",
-        "keepInClipboard": "Keep transcription in clipboard",
-        "keepInClipboardDescription": "Keep dictated text in your clipboard so you can paste it manually if needed"
+        "title": "Bufer",
+        "autoPaste": "Avtomatik joylashtirish",
+        "autoPasteDescription": "Diktant tugaganda transkriptni faol ilovaga avtomatik joylashtirish",
+        "keepInClipboard": "Transkriptni buferda saqlash",
+        "keepInClipboardDescription": "Kerak bo‘lsa qo‘lda joylashtirish uchun diktant matnini buferda saqlang"
       },
       "startup": {
-        "launchAtLogin": "Launch at login",
-        "launchAtLoginDescription": "Start VoiceLab automatically when you log in",
-        "title": "Startup",
+        "launchAtLogin": "Kirishda ishga tushirish",
+        "launchAtLoginDescription": "Tizimga kirganingizda VoiceLab avtomatik ishga tushsin",
+        "title": "Ishga tushirish",
         "description": "Control how VoiceLab behaves when it launches",
         "startMinimized": "Start minimized",
         "startMinimizedDescription": "Launch without showing the control panel window"
@@ -1838,7 +1840,7 @@
     "permissions": {
       "accessibilityDescription": "Required for auto-paste to work after transcription",
       "accessibilityTitle": "Accessibility",
-      "description": "Test and manage system permissions required for VoiceLab to function correctly",
+      "description": "VoiceLab to‘g‘ri ishlashi uchun zarur tizim ruxsatlarini sinang va boshqaring",
       "microphoneDescription": "Captures your voice for dictation and transcription",
       "microphoneTitle": "Microphone",
       "resetAccessibility": {
@@ -1850,22 +1852,22 @@
       "optional": "Optional",
       "systemAudioTitle": "System Audio",
       "systemAudioDescription": "Transcribe meetings, calls, lectures, podcasts, and other system audio.",
-      "grantAccess": "Grant Access",
-      "test": "Test",
-      "testAndGrant": "Test & Grant",
-      "title": "Permissions",
-      "troubleshoot": "Troubleshoot",
-      "troubleshootingTitle": "Troubleshooting"
+      "grantAccess": "Ruxsat berish",
+      "test": "Sinash",
+      "testAndGrant": "Sinash va ruxsat berish",
+      "title": "Ruxsatlar",
+      "troubleshoot": "Muammoni bartaraf etish",
+      "troubleshootingTitle": "Muammolarni bartaraf etish"
     },
     "privacy": {
       "cloudBackup": "Cloud backup",
       "cloudBackupDescription": "Back up your transcriptions and notes to the cloud for seamless access across devices.",
       "cloudNotesMigration": "Backing up notes… {{done}} / {{total}}",
       "cloudNotesMigrationDone": "All notes backed up",
-      "description": "Control what data leaves your device. Everything is off by default.",
-      "title": "Privacy",
-      "usageAnalytics": "Usage analytics",
-      "usageAnalyticsDescription": "Help us improve VoiceLab by sharing anonymous performance metrics. We never send transcription content — only timing and error data.",
+      "description": "Qaysi ma’lumotlar qurilmadan chiqishini boshqaring. Standart holatda hammasi o‘chirilgan.",
+      "title": "Maxfiylik",
+      "usageAnalytics": "Foydalanish analitikasi",
+      "usageAnalyticsDescription": "Anonim unumdorlik ko‘rsatkichlarini ulashib VoiceLab-ni yaxshilashga yordam bering. Transkriptlarni hech qachon yubormaymiz — faqat vaqt va xato ma’lumotlari.",
       "audioRetention": "Audio Retention",
       "audioRetentionDescription": "Store audio recordings locally for re-transcription and download. Files are automatically deleted after the retention period.",
       "audioRetentionDisabled": "Disabled",
@@ -1886,12 +1888,12 @@
       "saveDiscardedDescription": "When you cancel a dictation with Escape, keep its audio in history so you can recover it. Requires data and audio retention to be on."
     },
     "prompts": {
-      "description": "View, customize, and test the unified system prompt that powers text cleanup and instruction detection",
+      "description": "Matn tozalash va buyruqlarni boshqaruvchi yagona tizim promptini ko‘ring, sozlang va sinang",
       "title": "Prompt Studio"
     },
     "speechToText": {
-      "title": "Speech-to-Text",
-      "description": "Pick an engine for dictation and note recording",
+      "title": "Nutqdan matnga",
+      "description": "Diktant va eslatma yozish uchun dvigatel tanlang",
       "tabs": {
         "dictation": "Dictation",
         "noteRecording": "Note Recording",
@@ -1900,9 +1902,9 @@
       "selfHostedStreamingNote": "Requires a server that supports streaming transcription."
     },
     "llms": {
-      "title": "Language Models",
-      "description": "Configure models for cleanup, note formatting, and chat",
-      "temporarilyDisabled": "LLM provider settings are temporarily disabled. Speech uses VoiceLab Cloud (Aisha) only.",
+      "title": "Til modellari",
+      "description": "Tozalash, eslatma formatlash va chat uchun modellarni sozlang",
+      "temporarilyDisabled": "LLM provayder sozlamalari vaqtincha o‘chirilgan. Nutq faqat VoiceLab Cloud (Aisha) orqali ishlaydi.",
       "tabs": {
         "dictationCleanup": "Dictation Cleanup",
         "dictationAgent": "Voice Agent",
@@ -1916,22 +1918,22 @@
       "autoGenerateTitleDescription": "Use AI to generate a short title for notes after transcription or enhancement"
     },
     "transcription": {
-      "customSetup": "Custom Setup",
-      "customSetupDescription": "Use your own provider and API key.",
-      "description": "Choose how VoiceLab transcribes your voice",
+      "customSetup": "Maxsus sozlash",
+      "customSetupDescription": "O‘z provayderingiz va API kalitingizdan foydalaning.",
+      "description": "VoiceLab ovozingizni qanday transkripsiya qilishini tanlang",
       "modes": {
         "openwhispr": "VoiceLab Cloud",
         "providers": "Cloud Providers",
         "local": "Local",
         "selfHosted": "Self-Hosted",
-        "openwhisprDesc": "Aisha speech-to-text. Reliable accuracy — no provider setup.",
+        "openwhisprDesc": "Aisha nutqni matnga. Ishonchli aniqlik — sozlash shart emas.",
         "providersDesc": "Bring your own API key.",
         "localDesc": "On-device models. Fully private.",
         "selfHostedDesc": "Your own server on your network."
       },
       "openwhisprCloud": "VoiceLab Cloud",
-      "openwhisprCloudDescription": "Reliable accuracy. No setup needed.",
-      "title": "Speech to Text",
+      "openwhisprCloudDescription": "Ishonchli aniqlik. Sozlash shart emas.",
+      "title": "Nutqdan matnga",
       "toasts": {
         "switchedCloud": {
           "description": "Transcription will use VoiceLab's cloud service.",
@@ -2153,27 +2155,27 @@
     }
   },
   "sidebar": {
-    "home": "Home",
-    "notes": "Notes",
-    "upload": "Upload",
-    "dictionary": "Dictionary",
-    "referral": "Get a free month",
-    "settings": "Settings",
-    "support": "Support",
-    "limitReached": "Weekly limit reached",
-    "limitReachedDescription": "Upgrade to Pro for unlimited transcriptions.",
-    "viewPlans": "View Plans",
-    "upgradeTitle": "Upgrade to Pro",
-    "upgradeDescription": "Unlimited transcriptions and premium features.",
-    "learnMore": "Learn more",
-    "integrations": "Integrations",
-    "defaultUser": "User",
-    "notSignedIn": "Not signed in",
+    "home": "Bosh sahifa",
+    "notes": "Eslatmalar",
+    "upload": "Yuklash",
+    "dictionary": "Lug‘at",
+    "referral": "Bir oy bepul oling",
+    "settings": "Sozlamalar",
+    "support": "Yordam",
+    "limitReached": "Haftalik limit tugadi",
+    "limitReachedDescription": "Cheksiz transkripsiya uchun Pro-ga o‘ting.",
+    "viewPlans": "Tariflarni ko‘rish",
+    "upgradeTitle": "Pro-ga o‘tish",
+    "upgradeDescription": "Cheksiz transkripsiya va premium imkoniyatlar.",
+    "learnMore": "Batafsil",
+    "integrations": "Integratsiyalar",
+    "defaultUser": "Foydalanuvchi",
+    "notSignedIn": "Tizimga kirilmagan",
     "chat": "Chat",
-    "inviteTeammate": "Invite teammate",
-    "createWorkspace": "Create workspace",
-    "collapse": "Collapse sidebar",
-    "expand": "Expand sidebar"
+    "inviteTeammate": "Hamkasbni taklif qilish",
+    "createWorkspace": "Ish maydoni yaratish",
+    "collapse": "Yon panelni yig‘ish",
+    "expand": "Yon panelni yoyish"
   },
   "workspaces": {
     "switcher": {
@@ -2802,7 +2804,7 @@
         "local": "Local",
         "selfHosted": "Self-Hosted",
         "enterprise": "Enterprise",
-        "openwhisprDesc": "Aisha speech-to-text. Reliable accuracy — no provider setup.",
+        "openwhisprDesc": "Aisha nutqni matnga. Ishonchli aniqlik — sozlash shart emas.",
         "providersDesc": "Bring your own API key.",
         "localDesc": "On-device models. Fully private.",
         "selfHostedDesc": "Your own server on your network.",

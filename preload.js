@@ -358,6 +358,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   stopWindowDrag: () => ipcRenderer.invoke("stop-window-drag"),
   setMainWindowInteractivity: (interactive) =>
     ipcRenderer.invoke("set-main-window-interactivity", interactive),
+  captureTargetPid: () => ipcRenderer.invoke("capture-target-pid"),
   setNotificationInteractivity: (interactive) =>
     ipcRenderer.invoke("set-notification-interactivity", interactive),
   resizeMainWindow: (sizeKey) => ipcRenderer.invoke("resize-main-window", sizeKey),
@@ -439,6 +440,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   saveAzureEndpoint: (value) => ipcRenderer.invoke("save-azure-endpoint", value),
   getAzureApiKey: () => ipcRenderer.invoke("get-azure-api-key"),
   saveAzureApiKey: (key) => ipcRenderer.invoke("save-azure-api-key", key),
+  getAishaApiKey: () => ipcRenderer.invoke("get-aisha-api-key"),
+  saveAishaApiKey: (key) => ipcRenderer.invoke("save-aisha-api-key", key),
+  validateAishaApiKey: (key) => ipcRenderer.invoke("validate-aisha-api-key", key),
   getAzureDeployment: () => ipcRenderer.invoke("get-azure-deployment"),
   saveAzureDeployment: (value) => ipcRenderer.invoke("save-azure-deployment", value),
   getAzureApiVersion: () => ipcRenderer.invoke("get-azure-api-version"),

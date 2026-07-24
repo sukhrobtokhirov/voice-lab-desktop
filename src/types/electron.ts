@@ -1045,6 +1045,7 @@ declare global {
       startWindowDrag: () => Promise<void>;
       stopWindowDrag: () => Promise<void>;
       setMainWindowInteractivity: (interactive: boolean) => Promise<void>;
+      captureTargetPid: () => Promise<number | null>;
       setNotificationInteractivity: (interactive: boolean) => Promise<void>;
 
       // App management
@@ -1194,6 +1195,17 @@ declare global {
       saveAzureEndpoint?: (value: string) => Promise<void>;
       getAzureApiKey?: () => Promise<string | null>;
       saveAzureApiKey?: (key: string) => Promise<void>;
+      getAishaApiKey?: () => Promise<string | null>;
+      saveAishaApiKey?: (key: string) => Promise<{ success: boolean } | void>;
+      validateAishaApiKey?: (
+        key?: string
+      ) => Promise<{
+        ok: boolean;
+        code?: string;
+        status?: number;
+        message?: string;
+        keyAccepted?: boolean;
+      }>;
       getAzureDeployment?: () => Promise<string | null>;
       saveAzureDeployment?: (value: string) => Promise<void>;
       getAzureApiVersion?: () => Promise<string | null>;

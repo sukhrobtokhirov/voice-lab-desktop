@@ -35,8 +35,11 @@ export default defineConfig(({ mode }) => {
         name: "write-runtime-env",
         writeBundle() {
           const runtimeEnv = {
+            VITE_VOICELAB_API_URL: env.VITE_VOICELAB_API_URL || "https://back.aisha.group",
             VITE_OPENWHISPR_API_URL: env.VITE_OPENWHISPR_API_URL || "",
-            VITE_AUTH_URL: env.VITE_AUTH_URL || "",
+            VITE_AUTH_URL: env.VITE_AUTH_URL || "https://voicelab.uz",
+            // Main-process cloud STT (not exposed to renderer import.meta.env)
+            AISHA_API_KEY: env.AISHA_API_KEY || "",
           };
           fs.writeFileSync(
             path.resolve(__dirname, "dist", "runtime-env.json"),

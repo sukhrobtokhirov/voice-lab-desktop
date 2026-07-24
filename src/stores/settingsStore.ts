@@ -190,20 +190,36 @@ function migratePreferredLanguage() {
 
 migratePreferredLanguage();
 
-// Map the underlying transcription fields to the InferenceMode the Settings
-// tabs select on. Single source of truth shared by the provider-settings
-// migration and the onboarding "use this provider everywhere" action.
+// Aisha-only product surface — always VoiceLab Cloud (internal id: openwhispr).
 function deriveTranscriptionMode(
-  useLocalWhisper: boolean,
-  cloudTranscriptionMode: string | null,
-  cloudTranscriptionProvider: string | null
+  _useLocalWhisper: boolean,
+  _cloudTranscriptionMode: string | null,
+  _cloudTranscriptionProvider: string | null
 ): InferenceMode {
-  if (useLocalWhisper) return "local";
-  if (cloudTranscriptionMode === "byok") {
-    return cloudTranscriptionProvider === "custom" ? "self-hosted" : "providers";
-  }
   return "openwhispr";
 }
+
+/** Force all STT settings to Aisha / VoiceLab Cloud, including stale localStorage. */
+function migrateAishaOnlyStt() {
+  if (!isBrowser) return;
+  const keysToOpenwhispr = [
+    "transcriptionMode",
+    "meetingTranscriptionMode",
+    "uploadTranscriptionMode",
+    "cloudTranscriptionMode",
+    "meetingCloudTranscriptionMode",
+    "uploadCloudTranscriptionMode",
+  ];
+  for (const key of keysToOpenwhispr) {
+    localStorage.setItem(key, "openwhispr");
+  }
+  for (const key of ["useLocalWhisper", "meetingUseLocalWhisper", "uploadUseLocalWhisper"]) {
+    localStorage.setItem(key, "false");
+  }
+  localStorage.setItem("_aishaOnlySttMigrated", "1");
+}
+
+migrateAishaOnlyStt();
 
 function migrateProviderSettings() {
   if (!isBrowser) return;
@@ -902,7 +918,6 @@ export const MAX_TRANSLATION_TARGETS = 5;
 
 export const useSettingsStore = create<SettingsState>()((set, get) => ({
   uiLanguage: normalizeUiLanguage(isBrowser ? localStorage.getItem("uiLanguage") : null),
-  useLocalWhisper: readBoolean("useLocalWhisper", false),
   whisperModel: readString("whisperModel", "base"),
   localTranscriptionProvider: (readString("localTranscriptionProvider", "whisper") === "nvidia"
     ? "nvidia"
@@ -918,9 +933,9 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     "cloudTranscriptionBaseUrl",
     API_ENDPOINTS.TRANSCRIPTION_BASE
   ),
-  // Secrets aren't hydrated yet at construction; the BYOK default is set
-  // post-hydration in initializeSettings.
-  cloudTranscriptionMode: readString("cloudTranscriptionMode", "openwhispr"),
+  // Aisha-only — always VoiceLab Cloud (internal id openwhispr).
+  cloudTranscriptionMode: "openwhispr",
+  useLocalWhisper: false,
   cleanupCloudMode: readString("cleanupCloudMode", "openwhispr"),
   cleanupCloudBaseUrl: readString("cleanupCloudBaseUrl", API_ENDPOINTS.OPENAI_BASE),
   cortiEnvironment: readString("cortiEnvironment", "us"),
@@ -1064,11 +1079,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   noteFilesPath: readString("noteFilesPath", ""),
   isSignedIn: readBoolean("isSignedIn", false),
 
-  transcriptionMode: (() => {
-    const v = readString("transcriptionMode", "openwhispr");
-    if (v === "openwhispr" || v === "providers" || v === "local" || v === "self-hosted") return v;
-    return "openwhispr" as InferenceMode;
-  })(),
+  transcriptionMode: "openwhispr" as InferenceMode,
   remoteTranscriptionType: (() => {
     const v = readString("remoteTranscriptionType", "lan");
     return v === "openai-compatible" ? "openai-compatible" : ("lan" as SelfHostedType);
@@ -1089,12 +1100,8 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   })(),
   cleanupRemoteUrl: readString("cleanupRemoteUrl", ""),
 
-  meetingTranscriptionMode: (() => {
-    const v = readString("meetingTranscriptionMode", "openwhispr");
-    if (v === "openwhispr" || v === "providers" || v === "local" || v === "self-hosted") return v;
-    return "openwhispr" as InferenceMode;
-  })(),
-  meetingUseLocalWhisper: readBoolean("meetingUseLocalWhisper", false),
+  meetingTranscriptionMode: "openwhispr" as InferenceMode,
+  meetingUseLocalWhisper: false,
   meetingWhisperModel: readString("meetingWhisperModel", ""),
   meetingLocalTranscriptionProvider: (readString("meetingLocalTranscriptionProvider", "whisper") ===
   "nvidia"
@@ -1104,19 +1111,15 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   meetingCloudTranscriptionProvider: readString("meetingCloudTranscriptionProvider", ""),
   meetingCloudTranscriptionModel: readString("meetingCloudTranscriptionModel", ""),
   meetingCloudTranscriptionBaseUrl: readString("meetingCloudTranscriptionBaseUrl", ""),
-  meetingCloudTranscriptionMode: readString("meetingCloudTranscriptionMode", ""),
+  meetingCloudTranscriptionMode: "openwhispr",
   meetingRemoteTranscriptionType: (() => {
     const v = readString("meetingRemoteTranscriptionType", "lan");
     return v === "openai-compatible" ? "openai-compatible" : ("lan" as SelfHostedType);
   })(),
   meetingRemoteTranscriptionUrl: readString("meetingRemoteTranscriptionUrl", ""),
 
-  uploadTranscriptionMode: (() => {
-    const v = readString("uploadTranscriptionMode", "openwhispr");
-    if (v === "openwhispr" || v === "providers" || v === "local" || v === "self-hosted") return v;
-    return "openwhispr" as InferenceMode;
-  })(),
-  uploadUseLocalWhisper: readBoolean("uploadUseLocalWhisper", false),
+  uploadTranscriptionMode: "openwhispr" as InferenceMode,
+  uploadUseLocalWhisper: false,
   uploadWhisperModel: readString("uploadWhisperModel", ""),
   uploadLocalTranscriptionProvider: (readString("uploadLocalTranscriptionProvider", "whisper") ===
   "nvidia"
@@ -1126,7 +1129,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   uploadCloudTranscriptionProvider: readString("uploadCloudTranscriptionProvider", ""),
   uploadCloudTranscriptionModel: readString("uploadCloudTranscriptionModel", ""),
   uploadCloudTranscriptionBaseUrl: readString("uploadCloudTranscriptionBaseUrl", ""),
-  uploadCloudTranscriptionMode: readString("uploadCloudTranscriptionMode", ""),
+  uploadCloudTranscriptionMode: "openwhispr",
 
   noteFormattingMode: (() => {
     const v = readString("noteFormattingMode", "openwhispr");
@@ -2440,6 +2443,20 @@ export async function initializeSettings(): Promise<void> {
         "settings"
       );
     }
+
+    // Aisha-only STT — coerce any stale in-memory / localStorage modes.
+    migrateAishaOnlyStt();
+    useSettingsStore.setState({
+      useLocalWhisper: false,
+      cloudTranscriptionMode: "openwhispr",
+      transcriptionMode: "openwhispr",
+      meetingUseLocalWhisper: false,
+      meetingCloudTranscriptionMode: "openwhispr",
+      meetingTranscriptionMode: "openwhispr",
+      uploadUseLocalWhisper: false,
+      uploadCloudTranscriptionMode: "openwhispr",
+      uploadTranscriptionMode: "openwhispr",
+    });
 
     ensureAgentNameInDictionary();
   }

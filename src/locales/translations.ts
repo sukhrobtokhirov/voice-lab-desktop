@@ -6,10 +6,12 @@ import itTranslation from "./it/translation.json";
 import jaTranslation from "./ja/translation.json";
 import ptTranslation from "./pt/translation.json";
 import ruTranslation from "./ru/translation.json";
+import uzTranslation from "./uz/translation.json";
 import zhCNTranslation from "./zh-CN/translation.json";
 import zhTWTranslation from "./zh-TW/translation.json";
 
 export const TRANSLATIONS_BY_LOCALE = {
+  uz: uzTranslation,
   en: enTranslation,
   es: esTranslation,
   fr: frTranslation,

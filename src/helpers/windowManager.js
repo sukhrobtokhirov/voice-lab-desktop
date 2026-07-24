@@ -113,6 +113,13 @@ class WindowManager {
       return;
     }
 
+    // Capture the user's app BEFORE the overlay accepts clicks. Button-click
+    // dictation never went through the hotkey path, so paste had targetPid=null
+    // and Cmd+V landed with no focused text field (caret gone, no text).
+    if (shouldCapture && process.platform === "darwin" && this.textEditMonitor) {
+      void this.textEditMonitor.captureTargetPid();
+    }
+
     if (process.platform === "win32") {
       // Windows click-through forwarding is unreliable for this floating panel.
       // Keep the panel interactive so the mic button and cancel button are always clickable.

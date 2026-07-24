@@ -424,6 +424,90 @@ function clearCache() {
   cachedFFmpegPath = null;
 }
 
+/** Aisha STT accepts mp3, wav, ogg, m4a — not webm/flac/etc. */
+const AISHA_STT_FORMATS = {
+  wav: { ext: "wav", contentType: "audio/wav" },
+  mp3: { ext: "mp3", contentType: "audio/mpeg" },
+  mpeg: { ext: "mp3", contentType: "audio/mpeg" },
+  ogg: { ext: "ogg", contentType: "audio/ogg" },
+  oga: { ext: "ogg", contentType: "audio/ogg" },
+  m4a: { ext: "m4a", contentType: "audio/mp4" },
+  mp4: { ext: "m4a", contentType: "audio/mp4" },
+};
+
+function detectAudioContainer(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return null;
+  if (isWavFormat(buffer)) return "wav";
+  if (buffer[0] === 0x4f && buffer[1] === 0x67 && buffer[2] === 0x67 && buffer[3] === 0x53) {
+    return "ogg";
+  }
+  if (buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33) return "mp3";
+  if (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0) return "mp3";
+  if (buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3) {
+    return "webm";
+  }
+  // ISO BMFF (m4a/mp4): ....ftyp
+  if (buffer.toString("ascii", 4, 8) === "ftyp") return "m4a";
+  if (buffer[0] === 0x66 && buffer[1] === 0x4c && buffer[2] === 0x61 && buffer[3] === 0x43) {
+    return "flac";
+  }
+  return null;
+}
+
+/**
+ * Normalize audio for Aisha STT uploads.
+ * Passthrough for wav/mp3/ogg/m4a; otherwise FFmpeg → 16 kHz mono WAV.
+ */
+async function prepareAishaSttAudio(input, options = {}) {
+  const hintExt = (options.hintExt || "").replace(/^\./, "").toLowerCase();
+  let buffer = null;
+  let inputPath = null;
+  let tempInputPath = null;
+
+  if (typeof input === "string") {
+    inputPath = input;
+    buffer = fs.readFileSync(inputPath);
+  } else {
+    buffer = Buffer.isBuffer(input) ? input : Buffer.from(input);
+  }
+
+  const detected = detectAudioContainer(buffer) || hintExt || null;
+  const passthrough = detected && AISHA_STT_FORMATS[detected];
+  if (passthrough) {
+    return {
+      buffer,
+      fileName: `audio.${passthrough.ext}`,
+      contentType: passthrough.contentType,
+      converted: false,
+    };
+  }
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aisha-stt-"));
+  const inExt = detected === "webm" ? "webm" : detected === "flac" ? "flac" : hintExt || "webm";
+  tempInputPath = inputPath || path.join(tempDir, `input.${inExt}`);
+  const tempWavPath = path.join(tempDir, "output.wav");
+
+  try {
+    if (!inputPath) {
+      fs.writeFileSync(tempInputPath, buffer);
+    }
+    await convertToWav(tempInputPath, tempWavPath, { sampleRate: 16000, channels: 1 });
+    const wavBuffer = fs.readFileSync(tempWavPath);
+    return {
+      buffer: wavBuffer,
+      fileName: "audio.wav",
+      contentType: "audio/wav",
+      converted: true,
+    };
+  } finally {
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup errors
+    }
+  }
+}
+
 module.exports = {
   getFFmpegPath,
   isWavFormat,
@@ -433,5 +517,7 @@ module.exports = {
   wavToFloat32Samples,
   computeFloat32RMS,
   mergeAudioSegments,
+  detectAudioContainer,
+  prepareAishaSttAudio,
   clearCache,
 };

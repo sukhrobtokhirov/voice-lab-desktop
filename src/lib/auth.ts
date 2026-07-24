@@ -1,33 +1,35 @@
-import { createAuthClient } from "better-auth/react";
-import { ssoClient } from "@better-auth/sso/client";
-import { OPENWHISPR_API_URL } from "../config/constants";
 import { openExternalLink } from "../utils/externalLinks";
 
-export const AUTH_URL = import.meta.env.VITE_AUTH_URL || "https://auth.openwhispr.com";
-export const authClient = createAuthClient({
-  baseURL: AUTH_URL,
-  plugins: [ssoClient()],
-  fetchOptions: {
-    auth: {
-      type: "Bearer",
-      token: async () => (await window.electronAPI?.authGetToken?.()) ?? "",
-    },
-    headers: { "x-openwhispr-source": "desktop" },
-    onSuccess: async (ctx: { response: Response }) => {
-      const newToken = ctx.response.headers.get("set-auth-token");
-      if (newToken) await window.electronAPI?.authSetToken?.(newToken);
-    },
-  },
-});
+/** VoiceLab marketing / BFF origin (cookies + social OAuth). */
+export const AUTH_URL = import.meta.env.VITE_AUTH_URL || "https://voicelab.uz";
+
+/**
+ * Account/session API (JWT login/me/refresh).
+ * Separate from Aisha STT base (`back.aisha.group` + X-Api-Key).
+ */
+export const API_URL =
+  (import.meta.env.VITE_AUTH_API_URL as string) ||
+  (import.meta.env.VITE_VOICELAB_AUTH_API_URL as string) ||
+  "https://api.voicelab.uz";
 
 export type SocialProvider = "google" | "microsoft" | "apple";
 
-const LAST_SIGN_IN_STORAGE_KEY = "openwhispr:lastSignInTime";
+export type VoiceLabUser = {
+  id: string;
+  email: string;
+  name?: string;
+  image?: string | null;
+  [key: string]: unknown;
+};
+
+const LAST_SIGN_IN_STORAGE_KEY = "voicelab:lastSignInTime";
 const GRACE_PERIOD_MS = 60_000;
 const GRACE_RETRY_COUNT = 6;
 const INITIAL_GRACE_RETRY_DELAY_MS = 500;
+const DESKTOP_OAUTH_CALLBACK_PATH = "/auth/desktop-callback";
 
 let lastSignInTime: number | null = null;
+let cachedUser: VoiceLabUser | null = null;
 
 function getLocalStorageSafe(): Storage | null {
   if (typeof window === "undefined") return null;
@@ -41,35 +43,26 @@ function getLocalStorageSafe(): Storage | null {
 function loadLastSignInTimeFromStorage(): number | null {
   const storage = getLocalStorageSafe();
   if (!storage) return null;
-
   const raw = storage.getItem(LAST_SIGN_IN_STORAGE_KEY);
   if (!raw) return null;
-
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     storage.removeItem(LAST_SIGN_IN_STORAGE_KEY);
     return null;
   }
-
   return parsed;
 }
 
 function persistLastSignInTime(value: number | null): void {
   const storage = getLocalStorageSafe();
   if (!storage) return;
-
-  if (value === null) {
-    storage.removeItem(LAST_SIGN_IN_STORAGE_KEY);
-  } else {
-    storage.setItem(LAST_SIGN_IN_STORAGE_KEY, String(value));
-  }
+  if (value === null) storage.removeItem(LAST_SIGN_IN_STORAGE_KEY);
+  else storage.setItem(LAST_SIGN_IN_STORAGE_KEY, String(value));
 }
 
 function getLastSignInTime(): number | null {
   const stored = loadLastSignInTimeFromStorage();
-  if (stored !== null) {
-    lastSignInTime = stored;
-  }
+  if (stored !== null) lastSignInTime = stored;
   return lastSignInTime;
 }
 
@@ -91,6 +84,7 @@ function markSignedOutState(): void {
   const storage = getLocalStorageSafe();
   storage?.setItem("isSignedIn", "false");
   clearLastSignInTime();
+  cachedUser = null;
 }
 
 export function updateLastSignInTime(): void {
@@ -102,27 +96,214 @@ export function updateLastSignInTime(): void {
 export function isWithinGracePeriod(): boolean {
   const startedAt = getLastSignInTime();
   if (!startedAt) return false;
-
-  const elapsed = Math.max(0, Date.now() - startedAt);
-  return elapsed < GRACE_PERIOD_MS;
+  return Math.max(0, Date.now() - startedAt) < GRACE_PERIOD_MS;
 }
 
-export async function deleteAccount(): Promise<{ error?: Error }> {
-  if (!OPENWHISPR_API_URL) {
-    return { error: new Error("API not configured") };
+export function getCachedUser(): VoiceLabUser | null {
+  return cachedUser;
+}
+
+function extractTokens(payload: Record<string, unknown>) {
+  const access =
+    (payload.access_token as string) ||
+    (payload.access as string) ||
+    (payload.accessToken as string) ||
+    "";
+  const refresh =
+    (payload.refresh_token as string) ||
+    (payload.refresh as string) ||
+    (payload.refreshToken as string) ||
+    "";
+  return { access, refresh };
+}
+
+function normalizeUser(payload: unknown): VoiceLabUser | null {
+  if (!payload || typeof payload !== "object") return null;
+  const raw = payload as Record<string, unknown>;
+  const userObj = (raw.user && typeof raw.user === "object" ? raw.user : raw) as Record<
+    string,
+    unknown
+  >;
+  const id = String(userObj.id ?? userObj.pk ?? userObj.user_id ?? "");
+  const email = String(userObj.email ?? userObj.username ?? "");
+  if (!id && !email) return null;
+  return {
+    ...userObj,
+    id: id || email,
+    email,
+    name: String(userObj.full_name ?? userObj.name ?? userObj.username ?? email),
+    image: (userObj.avatar as string) || (userObj.image as string) || null,
+  };
+}
+
+async function persistSession(access: string, refresh?: string) {
+  if (!access) return;
+  const payload = JSON.stringify({ access, refresh: refresh || "" });
+  await window.electronAPI?.authSetToken?.(payload);
+}
+
+async function apiFetch(path: string, init: RequestInit = {}, accessToken?: string) {
+  const headers = new Headers(init.headers || {});
+  if (!headers.has("Content-Type") && init.body && typeof init.body === "string") {
+    headers.set("Content-Type", "application/json");
+  }
+  headers.set("x-voicelab-source", "desktop");
+  const token = accessToken ?? (await window.electronAPI?.authGetToken?.()) ?? "";
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const response = await fetch(`${API_URL.replace(/\/+$/, "")}${path}`, {
+    ...init,
+    headers,
+  });
+  const data = await response.json().catch(() => ({}));
+  return { response, data: data as Record<string, unknown> };
+}
+
+export async function refreshAccessToken(): Promise<boolean> {
+  const raw = await window.electronAPI?.authGetToken?.();
+  if (!raw) return false;
+
+  let refresh = "";
+  try {
+    const parsed = JSON.parse(raw);
+    refresh = parsed?.refresh || parsed?.refresh_token || "";
+  } catch {
+    return false;
+  }
+  if (!refresh) return false;
+
+  const { response, data } = await apiFetch(
+    "/api/auth/token/refresh/",
+    {
+      method: "POST",
+      body: JSON.stringify({ refresh, refresh_token: refresh }),
+    },
+    ""
+  );
+
+  if (!response.ok) return false;
+  const tokens = extractTokens(data);
+  if (!tokens.access) return false;
+  await persistSession(tokens.access, tokens.refresh || refresh);
+  return true;
+}
+
+export async function fetchSession(): Promise<VoiceLabUser | null> {
+  const token = await window.electronAPI?.authGetToken?.();
+  if (!token) {
+    cachedUser = null;
+    return null;
   }
 
-  try {
-    const res = await fetch(`${OPENWHISPR_API_URL}/api/auth/delete-account`, {
-      method: "DELETE",
-      credentials: "include",
-    });
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || "Failed to delete account");
+  let { response, data } = await apiFetch("/api/auth/me/");
+  if (response.status === 401) {
+    const refreshed = await refreshAccessToken();
+    if (!refreshed) {
+      cachedUser = null;
+      return null;
     }
+    ({ response, data } = await apiFetch("/api/auth/me/"));
+  }
 
+  if (!response.ok) {
+    cachedUser = null;
+    return null;
+  }
+
+  cachedUser = normalizeUser(data);
+  return cachedUser;
+}
+
+export async function signInWithPassword(
+  email: string,
+  password: string
+): Promise<{ error?: Error; user?: VoiceLabUser | null }> {
+  const identity = email.trim();
+  const { response, data } = await apiFetch(
+    "/api/auth/login/",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        username_or_email: identity,
+        email: identity.includes("@") ? identity : undefined,
+        username: identity.includes("@") ? undefined : identity,
+        password,
+      }),
+    },
+    ""
+  );
+
+  if (!response.ok) {
+    return {
+      error: new Error(
+        String(data.error || data.detail || data.message || "Invalid credentials")
+      ),
+    };
+  }
+
+  const tokens = extractTokens(data);
+  if (!tokens.access) {
+    return { error: new Error("Login succeeded but no access token was returned") };
+  }
+
+  await persistSession(tokens.access, tokens.refresh);
+  updateLastSignInTime();
+  const user = (await fetchSession()) || normalizeUser(data);
+  return { user };
+}
+
+export async function signUpWithPassword(input: {
+  email: string;
+  password: string;
+  name: string;
+}): Promise<{ error?: Error; requiresVerification?: boolean; user?: VoiceLabUser | null }> {
+  const identity = input.email.trim();
+  const { response, data } = await apiFetch(
+    "/api/auth/register/",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        username_or_email: identity,
+        email: identity,
+        full_name: input.name,
+        name: input.name,
+        password: input.password,
+      }),
+    },
+    ""
+  );
+
+  if (!response.ok) {
+    return {
+      error: new Error(
+        String(data.error || data.detail || data.message || "Failed to create account")
+      ),
+    };
+  }
+
+  const tokens = extractTokens(data);
+  const requiresVerification = Boolean(data.requiresVerification || data.requires_verification);
+
+  if (tokens.access) {
+    await persistSession(tokens.access, tokens.refresh);
+    updateLastSignInTime();
+    const user = await fetchSession();
+    return { user, requiresVerification };
+  }
+
+  return { requiresVerification: requiresVerification || true };
+}
+
+/** Compatibility flag — VoiceLab auth is always “configured” via API_URL defaults. */
+export const authClient = { configured: true as const };
+
+export async function deleteAccount(): Promise<{ error?: Error }> {
+  try {
+    const { response, data } = await apiFetch("/api/auth/delete-account/", { method: "DELETE" });
+    if (!response.ok) {
+      throw new Error(String(data.error || "Failed to delete account"));
+    }
+    await signOut();
     return {};
   } catch (error) {
     return { error: error instanceof Error ? error : new Error("Failed to delete account") };
@@ -131,14 +312,19 @@ export async function deleteAccount(): Promise<{ error?: Error }> {
 
 export async function signOut(): Promise<void> {
   try {
-    await authClient.signOut();
-    if (window.electronAPI?.authClearSession) {
-      await window.electronAPI.authClearSession();
-    }
-    markSignedOutState();
+    await apiFetch("/api/auth/logout/", { method: "POST" }).catch(() => null);
+    await fetch(`${AUTH_URL.replace(/\/+$/, "")}/api/auth/logout`, { method: "POST" }).catch(
+      () => null
+    );
   } catch {
-    markSignedOutState();
+    // ignore
   }
+  try {
+    await window.electronAPI?.authClearSession?.();
+  } catch {
+    // ignore
+  }
+  markSignedOutState();
 }
 
 export async function withSessionRefresh<T>(operation: () => Promise<T>): Promise<T> {
@@ -154,8 +340,15 @@ export async function withSessionRefresh<T>(operation: () => Promise<T>): Promis
         error?.message?.toLowerCase().includes("session expired") ||
         error?.message?.toLowerCase().includes("auth expired");
 
-      if (!isAuthExpired) {
-        throw error;
+      if (!isAuthExpired) throw error;
+
+      const refreshed = await refreshAccessToken();
+      if (refreshed) {
+        try {
+          return await operation();
+        } catch (retryError) {
+          error = retryError;
+        }
       }
 
       if (startedInGracePeriod && graceRetriesUsed < GRACE_RETRY_COUNT) {
@@ -170,64 +363,68 @@ export async function withSessionRefresh<T>(operation: () => Promise<T>): Promis
   }
 }
 
-const DESKTOP_OAUTH_CALLBACK_URL = "https://openwhispr.com/auth/desktop-callback";
-
 export async function signInWithSocial(provider: SocialProvider): Promise<{ error?: Error }> {
   try {
-    const isElectron = Boolean((window as any).electronAPI);
-
-    if (isElectron) {
-      // OAuth must be initiated from the user's browser, not the renderer:
-      // the state cookie Better Auth sets has to land in the same cookie jar
-      // that handles the /api/auth/callback/* round-trip. The shim endpoint
-      // does the POST server-side and 302s with the cookies attached.
-      const protocol = (await window.electronAPI?.getOAuthProtocol?.()) || "openwhispr";
-      const url = new URL(`${AUTH_URL}/api/desktop-signin/${provider}`);
-      url.searchParams.set("callbackURL", `${DESKTOP_OAUTH_CALLBACK_URL}?protocol=${protocol}`);
-      openExternalLink(url.toString());
-      return {};
+    if (provider !== "google") {
+      return {
+        error: new Error(
+          "Only Google social sign-in is supported in VoiceLab Desktop for now. Use email/password or Google."
+        ),
+      };
     }
 
-    const callbackURL = `${window.location.href.split("?")[0].split("#")[0]}?panel=true`;
-    await authClient.signIn.social({ provider, callbackURL, newUserCallbackURL: callbackURL });
+    const protocol = (await window.electronAPI?.getOAuthProtocol?.()) || "voicelab";
+    const next = `${DESKTOP_OAUTH_CALLBACK_PATH}?protocol=${encodeURIComponent(protocol)}`;
+    const url = new URL(`${AUTH_URL.replace(/\/+$/, "")}/api/auth/social/google`);
+    url.searchParams.set("next", next);
+    openExternalLink(url.toString());
     return {};
   } catch (error) {
     return { error: error instanceof Error ? error : new Error("Social sign-in failed") };
   }
 }
 
-export async function signInWithSSO(email: string): Promise<{ error?: Error }> {
-  try {
-    const isElectron = Boolean((window as any).electronAPI);
-
-    if (isElectron) {
-      // Same browser-handoff rationale as signInWithSocial: the SSO state cookie
-      // must land in the browser's cookie jar. The /sso shim routes by work-email
-      // domain and 302s to the workspace's IdP with the cookies attached.
-      const protocol = (await window.electronAPI?.getOAuthProtocol?.()) || "openwhispr";
-      const url = new URL(`${AUTH_URL}/api/desktop-signin/sso`);
-      url.searchParams.set("email", email);
-      url.searchParams.set("callbackURL", `${DESKTOP_OAUTH_CALLBACK_URL}?protocol=${protocol}`);
-      openExternalLink(url.toString());
-      return {};
-    }
-
-    const callbackURL = `${window.location.href.split("?")[0].split("#")[0]}?panel=true`;
-    await authClient.signIn.sso({ email, callbackURL });
-    return {};
-  } catch (error) {
-    return { error: error instanceof Error ? error : new Error("Single sign-on failed") };
-  }
+export async function signInWithSSO(_email: string): Promise<{ error?: Error }> {
+  return {
+    error: new Error("SSO is not available in VoiceLab Desktop yet. Use Google or email/password."),
+  };
 }
 
 export async function requestPasswordReset(email: string): Promise<{ error?: Error }> {
   try {
-    await authClient.requestPasswordReset({
-      email: email.trim(),
-      redirectTo: "https://openwhispr.com/reset-password",
+    const response = await fetch(`${AUTH_URL.replace(/\/+$/, "")}/api/auth/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim() }),
     });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || "Failed to send reset email");
+    }
     return {};
   } catch (error) {
     return { error: error instanceof Error ? error : new Error("Failed to send reset email") };
+  }
+}
+
+export async function resendVerificationEmail(email: string): Promise<{ error?: Error }> {
+  try {
+    const response = await fetch(
+      `${AUTH_URL.replace(/\/+$/, "")}/api/auth/resend-verification-code`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      }
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || "Failed to resend verification");
+    }
+    return {};
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error : new Error("Failed to resend verification"),
+    };
   }
 }

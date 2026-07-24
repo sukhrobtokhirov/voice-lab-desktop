@@ -38,43 +38,18 @@ export interface FileTranscriptionConfig {
 // so BYOK providers receive identical options in both.
 export async function transcribeFile(
   filePath: string,
-  cfg: FileTranscriptionConfig,
-  diarize: boolean
+  _cfg: FileTranscriptionConfig,
+  _diarize: boolean
 ): Promise<FileTranscriptionResult> {
-  if (cfg.isOpenWhisprCloud) {
-    return withSessionRefresh(async () => {
-      const r = await window.electronAPI.transcribeAudioFileCloud!(filePath);
-      if (!r.success && r.code) {
-        throw Object.assign(new Error(r.error || "Cloud transcription failed"), {
-          code: r.code,
-        });
-      }
-      return r;
-    });
-  }
-
-  if (cfg.useLocalWhisper) {
-    return window.electronAPI.transcribeAudioFile(filePath, {
-      provider: cfg.localTranscriptionProvider as "whisper" | "nvidia",
-      model: cfg.localTranscriptionProvider === "nvidia" ? cfg.parakeetModel : cfg.whisperModel,
-    });
-  }
-
-  // Self-hosted fields make the handler route to the configured server
-  // (fail-closed on misconfiguration) instead of stale BYOK settings.
-  return window.electronAPI.transcribeAudioFileByok!({
-    filePath,
-    apiKey: cfg.getApiKey(),
-    baseUrl: cfg.cloudTranscriptionBaseUrl || "",
-    model: cfg.cloudTranscriptionModel,
-    diarize: diarize || undefined,
-    provider: cfg.cloudTranscriptionProvider,
-    language: cfg.language,
-    environment: cfg.cortiEnvironment,
-    tenant: cfg.cortiTenant,
-    transcriptionMode: cfg.transcriptionMode,
-    remoteTranscriptionUrl: cfg.remoteTranscriptionUrl,
-    remoteTranscriptionModel: cfg.remoteTranscriptionModel,
+  // Aisha-only — always VoiceLab Cloud file transcription.
+  return withSessionRefresh(async () => {
+    const r = await window.electronAPI.transcribeAudioFileCloud!(filePath);
+    if (!r.success && r.code) {
+      throw Object.assign(new Error(r.error || "Cloud transcription failed"), {
+        code: r.code,
+      });
+    }
+    return r;
   });
 }
 
@@ -82,16 +57,11 @@ export async function transcribeFile(
 // Self-hosted mode routes to the user's own server, which doesn't — those users
 // get local diarization like everyone else.
 export function shouldUseByokDiarize(
-  cfg: FileTranscriptionConfig,
-  diarizationEnabled: boolean
+  _cfg: FileTranscriptionConfig,
+  _diarizationEnabled: boolean
 ): boolean {
-  return (
-    diarizationEnabled &&
-    !cfg.useLocalWhisper &&
-    !cfg.isOpenWhisprCloud &&
-    cfg.transcriptionMode !== "self-hosted" &&
-    (cfg.cloudTranscriptionProvider === "openai" || cfg.cloudTranscriptionProvider === "mistral")
-  );
+  // Aisha-only — no BYOK-native diarization path.
+  return false;
 }
 
 // Transcribe and diarize in parallel, then merge speaker labels into the text.

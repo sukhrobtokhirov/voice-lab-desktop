@@ -3,46 +3,57 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* OpenWhispr Theme — registers color tokens with Tailwind v4.
-     These are the light-mode defaults; .dark overrides them below. */
-  --color-primary: #2563eb;
+  /* VoiceLab Theme — registers color tokens with Tailwind v4.
+     Monochrome foundation; coral/blue for active & focus accents.
+     Light-mode defaults; .dark overrides them below. */
+  --color-primary: #0a0a0a;
   --color-primary-foreground: #ffffff;
-  --color-secondary: #f5f5f5;
-  --color-secondary-foreground: #171717;
-  --color-muted: #f5f5f5;
-  --color-muted-foreground: #525252;
-  --color-accent: oklch(0.55 0.22 285);
+  --color-secondary: #ecece7;
+  --color-secondary-foreground: #0a0a0a;
+  --color-muted: #ecece7;
+  --color-muted-foreground: #565952;
+  --color-accent: #f25435;
   --color-accent-foreground: #ffffff;
   --color-destructive: #dc2626;
   --color-destructive-foreground: #ffffff;
-  --color-border: #e5e5e5;
-  --color-input: #f9f6f1;
-  --color-ring: #2563eb;
-  --color-background: #ffffff;
-  --color-foreground: #171717;
+  --color-border: #d8d9d2;
+  --color-input: #ffffff;
+  --color-ring: #4b6fff;
+  --color-background: #f7f7f4;
+  --color-foreground: #0a0a0a;
   --color-card: #ffffff;
-  --color-card-foreground: #171717;
+  --color-card-foreground: #0a0a0a;
   --color-popover: #ffffff;
-  --color-popover-foreground: #171717;
-  --color-link: #2563eb;
+  --color-popover-foreground: #0a0a0a;
+  --color-link: #4b6fff;
   --color-success: #16a34a;
   --color-success-foreground: #ffffff;
   --color-warning: #d97706;
   --color-warning-foreground: #ffffff;
-  --color-info: #2563eb;
+  --color-info: #4b6fff;
   --color-info-foreground: #ffffff;
 
-  /* Surface hierarchy — light mode equivalents */
-  --color-surface-0: #ffffff;
-  --color-surface-1: #fafafa;
-  --color-surface-2: #ffffff;
-  --color-surface-3: #f5f5f5;
-  --color-surface-raised: #f0f0f0;
+  /* VoiceLab primitives (available as Tailwind color utilities) */
+  --color-canvas: #f7f7f4;
+  --color-paper: #ffffff;
+  --color-ink: #0a0a0a;
+  --color-graphite: #565952;
+  --color-mist: #ecece7;
+  --color-line: #d8d9d2;
+  --color-coral: #f25435;
+  --color-blue: #4b6fff;
 
-  /* Border states — light mode equivalents */
-  --color-border-subtle: #e5e5e5;
-  --color-border-hover: #d4d4d4;
-  --color-border-active: #2563eb;
+  /* Surface hierarchy — canvas / paper / mist */
+  --color-surface-0: #f7f7f4;
+  --color-surface-1: #ecece7;
+  --color-surface-2: #ffffff;
+  --color-surface-3: #ecece7;
+  --color-surface-raised: #ffffff;
+
+  /* Border states */
+  --color-border-subtle: #d8d9d2;
+  --color-border-hover: #c4c5be;
+  --color-border-active: #f25435;
 }
 
 :root {
@@ -63,16 +74,16 @@
   --radius-lg: 0.5rem; /* 8px - cards, panels */
   --radius-xl: 0.625rem; /* 10px - large cards */
 
-  /* Custom Light Mode Brand Colors (Parchment Theme) */
-  --color-parchment-bg: #f9f6f1;
-  --color-parchment-border: #ddd4c7;
-  --color-parchment-text: #2b1f14;
-  --color-parchment-accent: #c0a77d;
-  --color-brand-primary: #2b1f14;
-  --color-brand-accent: #4b2e2b;
-  --color-brand-highlight: #c0a77d;
-  --color-brand-link: #2e3659;
-  --color-pattern: #e7e5e4;
+  /* Brand aliases — remapped from parchment → VoiceLab tokens */
+  --color-parchment-bg: #f7f7f4;
+  --color-parchment-border: #d8d9d2;
+  --color-parchment-text: #0a0a0a;
+  --color-parchment-accent: #f25435;
+  --color-brand-primary: #0a0a0a;
+  --color-brand-accent: #f25435;
+  --color-brand-highlight: #4b6fff;
+  --color-brand-link: #4b6fff;
+  --color-pattern: #ecece7;
 
   /* Model picker premium effects (light mode) */
   --shadow-metallic-light: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -80,58 +91,77 @@
 }
 
 .dark {
-  /* Dark mode — charcoal surfaces with clear elevation hierarchy
-     Base L=0.22 (charcoal) with 0.05 steps between layers.
-     Hue 260 (neutral blue) with minimal chroma for sophistication. */
-  --color-background: oklch(0.22 0.006 260);
-  --color-foreground: oklch(0.93 0 0);
-  --color-card: oklch(0.27 0.008 260);
-  --color-card-foreground: oklch(0.93 0 0);
-  --color-popover: oklch(0.29 0.009 260);
-  --color-popover-foreground: oklch(0.93 0 0);
-  --color-primary: oklch(0.65 0.2 260);
-  --color-primary-foreground: oklch(0.99 0 0);
-  --color-secondary: oklch(0.28 0.007 260);
-  --color-secondary-foreground: oklch(0.9 0 0);
-  --color-muted: oklch(0.24 0.006 260);
-  --color-muted-foreground: oklch(0.65 0 0);
-  --color-accent: oklch(0.68 0.18 285);
-  --color-accent-foreground: oklch(0.99 0 0);
-  --color-destructive: oklch(0.62 0.22 25);
-  --color-destructive-foreground: oklch(0.99 0 0);
-  --color-border: oklch(0.35 0.007 260);
-  --color-input: oklch(0.19 0.005 260);
-  --color-ring: oklch(0.65 0.2 260);
-  --color-success: oklch(0.7 0.18 145);
-  --color-success-foreground: oklch(0.99 0 0);
-  --color-warning: oklch(0.75 0.15 70);
-  --color-warning-foreground: oklch(0.15 0 0);
-  --color-info: oklch(0.68 0.18 240);
-  --color-info-foreground: oklch(0.99 0 0);
+  /* Dark mode — ink surfaces, light text; coral/blue accents */
+  --color-background: #0a0a0a;
+  --color-foreground: #f7f7f4;
+  --color-card: #141414;
+  --color-card-foreground: #f7f7f4;
+  --color-popover: #1a1a1a;
+  --color-popover-foreground: #f7f7f4;
+  --color-primary: #f7f7f4;
+  --color-primary-foreground: #0a0a0a;
+  --color-secondary: #1a1a1a;
+  --color-secondary-foreground: #f7f7f4;
+  --color-muted: #141414;
+  --color-muted-foreground: #a8aaa3;
+  --color-accent: #f25435;
+  --color-accent-foreground: #ffffff;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #2a2a28;
+  --color-input: #0f0f0f;
+  --color-ring: #4b6fff;
+  --color-success: #22c55e;
+  --color-success-foreground: #0a0a0a;
+  --color-warning: #f59e0b;
+  --color-warning-foreground: #0a0a0a;
+  --color-info: #4b6fff;
+  --color-info-foreground: #ffffff;
 
-  /* Surface hierarchy — charcoal depth system (0.22 → 0.33) */
-  --color-surface-0: oklch(0.22 0.006 260);
-  --color-surface-1: oklch(0.25 0.007 260);
-  --color-surface-2: oklch(0.27 0.008 260);
-  --color-surface-3: oklch(0.3 0.009 260);
-  --color-surface-raised: oklch(0.33 0.01 260);
+  /* VoiceLab primitives (dark) */
+  --color-canvas: #0a0a0a;
+  --color-paper: #141414;
+  --color-ink: #f7f7f4;
+  --color-graphite: #a8aaa3;
+  --color-mist: #1a1a1a;
+  --color-line: #2a2a28;
+  --color-coral: #f25435;
+  --color-blue: #4b6fff;
+
+  /* Surface hierarchy — ink → elevated panels */
+  --color-surface-0: #0a0a0a;
+  --color-surface-1: #141414;
+  --color-surface-2: #1a1a1a;
+  --color-surface-3: #222220;
+  --color-surface-raised: #2a2a28;
 
   /* Border states */
-  --color-border-subtle: oklch(0.33 0.006 260);
-  --color-border-hover: oklch(0.42 0.01 260);
-  --color-border-active: oklch(0.5 0.15 260);
-  --color-link: oklch(0.67 0.1 250);
+  --color-border-subtle: #222220;
+  --color-border-hover: #3a3a36;
+  --color-border-active: #f25435;
+  --color-link: #4b6fff;
 
-  /* Card depth shadows — softer for charcoal, with top highlight for premium depth */
-  --shadow-card: 0 1px 3px oklch(0 0 0 / 0.2), inset 0 1px 0 oklch(1 0 0 / 0.03);
-  --shadow-card-hover: 0 4px 12px oklch(0 0 0 / 0.25), inset 0 1px 0 oklch(1 0 0 / 0.04);
-  --shadow-elevated: 0 8px 24px oklch(0 0 0 / 0.3);
-  --shadow-modal: 0 24px 48px -12px oklch(0 0 0 / 0.4);
+  /* Brand aliases (dark) */
+  --color-parchment-bg: #0a0a0a;
+  --color-parchment-border: #2a2a28;
+  --color-parchment-text: #f7f7f4;
+  --color-parchment-accent: #f25435;
+  --color-brand-primary: #f7f7f4;
+  --color-brand-accent: #f25435;
+  --color-brand-highlight: #4b6fff;
+  --color-brand-link: #4b6fff;
+  --color-pattern: #1a1a1a;
 
-  /* Premium effects */
+  /* Card depth shadows — soft ink elevation */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 24px 48px -12px rgba(0, 0, 0, 0.55);
+
+  /* Premium effects — blue focus ring, no purple glow */
   --shadow-metallic-dark: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 8px rgba(0, 0, 0, 0.2);
   --shadow-selected-glow:
-    inset 0 0 0 1px oklch(0.65 0.2 260 / 0.2), 0 0 16px -4px oklch(0.65 0.2 260 / 0.2);
+    inset 0 0 0 1px rgb(75 111 255 / 0.25), 0 0 16px -4px rgb(75 111 255 / 0.2);
   --shadow-card-hover-subtle: 0 2px 8px -2px rgba(0, 0, 0, 0.12);
 }
 
@@ -283,7 +313,7 @@ textarea:not(.input-inline) {
   box-shadow: 0 0 0 2px oklch(from var(--color-ring) l c h / 0.15);
 }
 
-/* Card styling - elevated parchment */
+/* Card styling — elevated paper */
 .card {
   background-color: var(--color-card);
   border: 1px solid var(--color-border);
@@ -370,8 +400,8 @@ a:hover {
   height: 1px;
   background: linear-gradient(
     90deg,
-    oklch(0.65 0.2 260 / 0.5),
-    oklch(0.7 0.18 280 / 0.3),
+    rgb(242 84 53 / 0.5),
+    rgb(75 111 255 / 0.3),
     transparent 80%
   );
   pointer-events: none;
@@ -390,8 +420,8 @@ a:hover {
 
 /* Toast — opaque dark HUD surface, same in light & dark mode */
 .toast-surface {
-  background: oklch(0.15 0.006 260);
-  border: 1px solid oklch(0.25 0.006 260);
+  background: #141414;
+  border: 1px solid #2a2a28;
   box-shadow:
     inset 0 1px 0 oklch(1 0 0 / 0.04),
     0 8px 24px -4px oklch(0 0 0 / 0.5),
@@ -411,11 +441,11 @@ a:hover {
 @keyframes pulse-glow {
   0%,
   100% {
-    box-shadow: 0 0 6px oklch(0.65 0.2 260 / 0.4);
+    box-shadow: 0 0 6px rgb(242 84 53 / 0.4);
     opacity: 0.8;
   }
   50% {
-    box-shadow: 0 0 8px oklch(0.65 0.2 260 / 0.6);
+    box-shadow: 0 0 8px rgb(242 84 53 / 0.6);
     opacity: 1;
   }
 }
@@ -602,7 +632,7 @@ a:hover {
 .referral-mesh-bg::before {
   width: 300px;
   height: 300px;
-  background: oklch(0.65 0.2 260);
+  background: #4b6fff;
   opacity: 0.04;
   top: -80px;
   right: -60px;
@@ -611,7 +641,7 @@ a:hover {
 .referral-mesh-bg::after {
   width: 250px;
   height: 250px;
-  background: oklch(0.6 0.18 180);
+  background: #f25435;
   opacity: 0.04;
   bottom: -60px;
   left: -40px;
@@ -672,11 +702,11 @@ a:hover {
   border-radius: inherit;
   background: conic-gradient(
     from 180deg at 50% 50%,
-    oklch(0.65 0.2 260 / 0.2),
-    oklch(0.55 0.2 320 / 0.1),
-    oklch(0.6 0.18 180 / 0.15),
-    oklch(0.55 0.2 100 / 0.1),
-    oklch(0.65 0.2 260 / 0.2)
+    rgb(75 111 255 / 0.2),
+    rgb(242 84 53 / 0.12),
+    rgb(75 111 255 / 0.15),
+    rgb(242 84 53 / 0.1),
+    rgb(75 111 255 / 0.2)
   );
   z-index: -1;
   opacity: 0;
@@ -700,7 +730,7 @@ a:hover {
   left: 0;
   right: 0;
   height: 2px;
-  background: oklch(0.65 0.2 260 / 0.4);
+  background: rgb(242 84 53 / 0.4);
   transform: scaleX(0);
   transform-origin: left;
   transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.3s;
@@ -830,7 +860,7 @@ body:has(.agent-overlay-window) #root {
     background: linear-gradient(
       90deg,
       transparent 0%,
-      oklch(0.65 0.2 260 / 0.04) 50%,
+      rgb(75 111 255 / 0.06) 50%,
       transparent 100%
     );
     background-position: -100% 0;
@@ -877,10 +907,10 @@ body:has(.agent-overlay-window) #root {
 .thinking-shimmer-text {
   background: linear-gradient(
     90deg,
-    oklch(0.65 0.01 260) 0%,
-    oklch(0.85 0.02 240) 40%,
-    oklch(0.65 0.01 260) 60%,
-    oklch(0.78 0.015 250) 100%
+    #565952 0%,
+    #f7f7f4 40%,
+    #565952 60%,
+    #ecece7 100%
   );
   background-size: 200% 100%;
   animation: thinking-shimmer 2s ease-in-out infinite;
@@ -1008,7 +1038,7 @@ body:has(.agent-overlay-window) #root {
 }
 
 .rich-text-editor-content ::selection {
-  background: oklch(0.62 0.22 260 / 0.15);
+  background: rgb(75 111 255 / 0.15);
 }
 
 /* Task list (checkboxes) */

@@ -276,10 +276,26 @@ function verifyUnpackedBinaries(context) {
 // Main hook
 // ---------------------------------------------------------------------------
 
+/** Never ship a shared AISHA_API_KEY — users bring their own via onboarding. */
+function stripPackagedAishaApiKey(context) {
+  const envPath = path.join(resolveResourcesDir(context), ".env");
+  if (!fs.existsSync(envPath)) return;
+  try {
+    const next = fs
+      .readFileSync(envPath, "utf8")
+      .replace(/^AISHA_API_KEY\s*=\s*.*$/m, "AISHA_API_KEY=");
+    fs.writeFileSync(envPath, next, "utf8");
+    console.log("  afterPack: cleared AISHA_API_KEY from packaged Resources/.env");
+  } catch (err) {
+    console.warn("  afterPack: could not strip AISHA_API_KEY:", err?.message || err);
+  }
+}
+
 exports.default = async function (context) {
   stripOnnxruntimeBinaries(context);
   wrapLinuxBinary(context);
   verifyMeetingAecHelper(context);
   verifyUnpackedBinaries(context);
   registerMacResourceBinariesForSigning(context);
+  stripPackagedAishaApiKey(context);
 };

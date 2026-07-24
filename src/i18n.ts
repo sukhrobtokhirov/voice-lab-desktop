@@ -4,6 +4,7 @@ import { PROMPTS_BY_LOCALE } from "./locales/prompts";
 import { TRANSLATIONS_BY_LOCALE } from "./locales/translations";
 
 export const SUPPORTED_UI_LANGUAGES = [
+  "uz",
   "en",
   "es",
   "fr",
@@ -33,10 +34,14 @@ export function normalizeUiLanguage(language: string | null | undefined): UiLang
     return base;
   }
 
-  return "en";
+  return "uz";
 }
 
 const resources = {
+  uz: {
+    translation: TRANSLATIONS_BY_LOCALE.uz,
+    prompts: PROMPTS_BY_LOCALE.uz,
+  },
   en: {
     translation: TRANSLATIONS_BY_LOCALE.en,
     prompts: PROMPTS_BY_LOCALE.en,
@@ -85,7 +90,7 @@ const browserLanguage =
 const storageLanguage =
   typeof window !== "undefined" ? window.localStorage.getItem("uiLanguage") : undefined;
 
-const initialLanguage = normalizeUiLanguage(storageLanguage || browserLanguage || "en");
+const initialLanguage = normalizeUiLanguage(storageLanguage || browserLanguage || "uz");
 
 void i18n.use(initReactI18next).init({
   resources,

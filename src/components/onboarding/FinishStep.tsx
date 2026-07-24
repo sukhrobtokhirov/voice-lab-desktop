@@ -39,12 +39,9 @@ export default function FinishStep({
   const cortiEnvironment = useSettingsStore((s) => s.cortiEnvironment);
   const setCortiEnvironment = useSettingsStore((s) => s.setCortiEnvironment);
 
-  // The Corti pitch only renders once the Corti provider ships in the model
-  // registry (separate PR) — until then healthcare users see the default finish.
+  // Aisha-only STT — Corti BYOK onboarding pitch disabled.
   const cortiProvider = getTranscriptionProviders().find((p) => p.id === "corti");
-  const [showCorti, setShowCorti] = useState(
-    !!cortiProvider && useCases.includes(USE_CASE_IDS.healthcare)
-  );
+  const [showCorti, setShowCorti] = useState(false);
   const hasCortiCredentials =
     cortiClientId.trim().length > 0 && cortiClientSecret.trim().length > 0;
 

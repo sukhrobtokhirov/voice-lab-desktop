@@ -268,12 +268,12 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
   );
   const useCleanupModel = useSettingsStore((s) => s.useCleanupModel);
 
-  const isOpenWhisprCloud =
-    isSignedIn && cloudTranscriptionMode === "openwhispr" && !useLocalWhisper;
+  // Aisha-only — always VoiceLab Cloud for file uploads (no sign-in gate).
+  const isOpenWhisprCloud = true;
 
   // Mode detection
-  const isSelfHosted = transcriptionMode === "self-hosted" && !useLocalWhisper;
-  const isByok = !useLocalWhisper && !isOpenWhisprCloud;
+  const isSelfHosted = false;
+  const isByok = false;
 
   // Mode-aware file size validation
   // Local: no limits at all
@@ -287,21 +287,12 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
   let isLargeFile = false;
 
   if (file) {
-    if (useLocalWhisper) {
-      // Local transcription: no file size restrictions
-    } else if (isSelfHosted || cloudTranscriptionProvider === "custom") {
-      // Self-hosted / custom endpoints (e.g. local whisper.cpp): no file size restrictions
-    } else if (isByok) {
-      byokTooLarge = file.sizeBytes > BYOK_MAX_FILE_SIZE;
-      if (byokTooLarge && !isSignedIn) {
-        requiresAccount = true;
-      }
-    } else {
-      // Cloud (OpenWhispr) — user is always signed in here
-      fileTooLarge = file.sizeBytes > CLOUD_PRO_MAX_FILE_SIZE;
-      requiresUpgrade = !isProUser && file.sizeBytes > CLOUD_FREE_MAX_FILE_SIZE;
-      isLargeFile = file.sizeBytes > CLOUD_FREE_MAX_FILE_SIZE;
-    }
+    // Aisha cloud — soft large-file flag for chunked progress; no plan/sign-in gates.
+    fileTooLarge = file.sizeBytes > CLOUD_PRO_MAX_FILE_SIZE;
+    requiresUpgrade = false;
+    requiresAccount = false;
+    byokTooLarge = false;
+    isLargeFile = file.sizeBytes > CLOUD_FREE_MAX_FILE_SIZE;
   }
 
   useEffect(() => {

@@ -82,20 +82,57 @@ class TextEditMonitor extends EventEmitter {
     this._lastValue = null;
     this._stdoutBuffer = "";
     this.lastTargetPid = null;
+    this._pendingCapture = null;
+    this._ownPids = new Set([process.pid]);
+  }
+
+  /** Track helper PIDs so we never treat VoiceLab itself as the paste target. */
+  rememberOwnPid(pid) {
+    if (typeof pid === "number" && pid > 0) this._ownPids.add(pid);
+  }
+
+  _isOwnPid(pid) {
+    return typeof pid === "number" && this._ownPids.has(pid);
   }
 
   /**
    * macOS: capture the active app's PID via NSWorkspace before the overlay steals focus.
-   * Must be called at hotkey press time, BEFORE showDictationPanel()/mainWindow.show().
-   * NSWorkspace.frontmostApplication correctly identifies the key window owner,
-   * ignoring panel-type windows like the OpenWhispr overlay.
+   * Must be called at hotkey press time, BEFORE showDictationPanel()/mainWindow.show(),
+   * and also when the floating mic becomes interactive (hover/click).
+   * Returns a Promise that resolves to the kept target PID (may be a previous capture
+   * if frontmost is VoiceLab or unreadable).
    */
   captureTargetPid() {
-    if (process.platform !== "darwin") return;
-    this._readFrontmostPid().then((pid) => {
-      this.lastTargetPid = pid;
-      debugLogger.debug("[TextEditMonitor] Captured target PID", { pid });
+    if (process.platform !== "darwin") return Promise.resolve(null);
+    const promise = this._readFrontmostPid().then((pid) => {
+      const own = this._isOwnPid(pid);
+      if (pid && !own) {
+        this.lastTargetPid = pid;
+      }
+      debugLogger.debug("[TextEditMonitor] Captured target PID", {
+        pid,
+        own,
+        kept: this.lastTargetPid,
+      });
+      return this.lastTargetPid;
     });
+    this._pendingCapture = promise.finally(() => {
+      if (this._pendingCapture === promise) this._pendingCapture = null;
+    });
+    return promise;
+  }
+
+  /** Wait for any in-flight capture, then capture once more if still empty. */
+  async ensureTargetPid() {
+    if (this._pendingCapture) {
+      try {
+        await this._pendingCapture;
+      } catch {
+        /* ignore */
+      }
+    }
+    if (!this.lastTargetPid) await this.captureTargetPid();
+    return this.lastTargetPid;
   }
 
   /**
@@ -107,17 +144,29 @@ class TextEditMonitor extends EventEmitter {
         resolve(null);
         return;
       }
+      // Prefer System Events — more reliable than JXA NSWorkspace under Electron.
       const script =
-        'ObjC.import("AppKit"); $.NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier';
-      execFile(
-        "osascript",
-        ["-l", "JavaScript", "-e", script],
-        { timeout: 2000 },
-        (err, stdout) => {
-          const pid = err ? NaN : parseInt(stdout.trim(), 10);
-          resolve(isNaN(pid) ? null : pid);
+        'tell application "System Events" to get unix id of first process whose frontmost is true';
+      execFile("osascript", ["-e", script], { timeout: 2000 }, (err, stdout) => {
+        if (!err) {
+          const pid = parseInt(String(stdout).trim(), 10);
+          if (!isNaN(pid)) {
+            resolve(pid);
+            return;
+          }
         }
-      );
+        const jxa =
+          'ObjC.import("AppKit"); $.NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier';
+        execFile(
+          "osascript",
+          ["-l", "JavaScript", "-e", jxa],
+          { timeout: 2000 },
+          (err2, stdout2) => {
+            const pid = err2 ? NaN : parseInt(String(stdout2).trim(), 10);
+            resolve(isNaN(pid) ? null : pid);
+          }
+        );
+      });
     });
   }
 

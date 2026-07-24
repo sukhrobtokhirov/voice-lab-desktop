@@ -35,7 +35,9 @@ import {
   Wand2,
   Upload,
   Languages,
+  ExternalLink,
 } from "lucide-react";
+import ApiKeyInput from "./ui/ApiKeyInput";
 import { useAuth } from "../hooks/useAuth";
 import { AUTH_URL, signOut, deleteAccount } from "../lib/auth";
 import MicPermissionWarning from "./ui/MicPermissionWarning";
@@ -43,8 +45,6 @@ import MicrophoneSettings from "./ui/MicrophoneSettings";
 import PermissionCard from "./ui/PermissionCard";
 import PasteToolsInfo from "./ui/PasteToolsInfo";
 import NixOsPasteInfo from "./ui/NixOsPasteInfo";
-import TranscriptionModelPicker from "./TranscriptionModelPicker";
-import SelfHostedPanel from "./SelfHostedPanel";
 import {
   ConfirmDialog,
   AlertDialog,
@@ -91,8 +91,7 @@ import { useToast } from "./ui/useToast";
 import { useTheme } from "../hooks/useTheme";
 import type { GpuDevice, LocalTranscriptionProvider, InferenceMode } from "../types/electron";
 import logger from "../utils/logger";
-import { SettingsRow, InferenceModeSelector } from "./ui/SettingsSection";
-import type { InferenceModeOption } from "./ui/SettingsSection";
+import { SettingsRow } from "./ui/SettingsSection";
 import { useSettingsLayout } from "./ui/useSettingsLayout";
 import { useUsage } from "../hooks/useUsage";
 import { cn } from "./lib/utils";
@@ -127,6 +126,7 @@ interface SettingsPageProps {
 }
 
 const UI_LANGUAGE_OPTIONS: import("./ui/LanguageSelector").LanguageOption[] = [
+  { value: "uz", label: "Oʻzbekcha", flag: "🇺🇿" },
   { value: "en", label: "English", flag: "🇺🇸" },
   { value: "es", label: "Español", flag: "🇪🇸" },
   { value: "fr", label: "Français", flag: "🇫🇷" },
@@ -191,206 +191,49 @@ function SectionHeader({
   );
 }
 
-interface TranscriptionSectionProps {
-  isSignedIn: boolean;
-  startOnboarding: () => void;
-  cloudTranscriptionMode: string;
-  setCloudTranscriptionMode: (mode: string) => void;
-  useLocalWhisper: boolean;
-  setUseLocalWhisper: (value: boolean) => void;
-  updateTranscriptionSettings: (settings: { useLocalWhisper: boolean }) => void;
-  cloudTranscriptionProvider: string;
-  setCloudTranscriptionProvider: (provider: string) => void;
-  cloudTranscriptionModel: string;
-  setCloudTranscriptionModel: (model: string) => void;
-  localTranscriptionProvider: string;
-  setLocalTranscriptionProvider: (provider: LocalTranscriptionProvider) => void;
-  whisperModel: string;
-  setWhisperModel: (model: string) => void;
-  parakeetModel: string;
-  setParakeetModel: (model: string) => void;
-  cloudTranscriptionBaseUrl?: string;
-  setCloudTranscriptionBaseUrl: (url: string) => void;
-  transcriptionMode: InferenceMode;
-  setTranscriptionMode: (mode: InferenceMode) => void;
-  remoteTranscriptionUrl: string;
-  setRemoteTranscriptionUrl: (url: string) => void;
-  remoteTranscriptionModel: string;
-  setRemoteTranscriptionModel: (model: string) => void;
-  showTranscriptionPreview: boolean;
-  setShowTranscriptionPreview: (value: boolean) => void;
-  toast: (opts: {
-    title: string;
-    description: string;
-    variant?: "default" | "destructive" | "success";
-    duration?: number;
-  }) => void;
-}
-
 function TranscriptionSection({
-  isSignedIn,
-  startOnboarding,
-  cloudTranscriptionMode,
-  setCloudTranscriptionMode,
-  useLocalWhisper,
-  setUseLocalWhisper,
-  updateTranscriptionSettings,
-  cloudTranscriptionProvider,
-  setCloudTranscriptionProvider,
-  cloudTranscriptionModel,
-  setCloudTranscriptionModel,
-  localTranscriptionProvider,
-  setLocalTranscriptionProvider,
-  whisperModel,
-  setWhisperModel,
-  parakeetModel,
-  setParakeetModel,
-  cloudTranscriptionBaseUrl,
-  setCloudTranscriptionBaseUrl,
-  transcriptionMode,
-  setTranscriptionMode,
-  remoteTranscriptionUrl,
-  setRemoteTranscriptionUrl,
-  remoteTranscriptionModel,
-  setRemoteTranscriptionModel,
   showTranscriptionPreview,
   setShowTranscriptionPreview,
-  toast,
-}: TranscriptionSectionProps) {
+}: {
+  showTranscriptionPreview: boolean;
+  setShowTranscriptionPreview: (value: boolean) => void;
+}) {
   const { t } = useTranslation();
 
-  const transcriptionModes: InferenceModeOption[] = [
-    {
-      id: "openwhispr",
-      label: t("settingsPage.transcription.modes.openwhispr"),
-      description: t("settingsPage.transcription.modes.openwhisprDesc"),
-      icon: <Cloud className="w-4 h-4" />,
-      disabled: !isSignedIn,
-      badge: !isSignedIn ? t("common.freeAccountRequired") : undefined,
-    },
-    {
-      id: "providers",
-      label: t("settingsPage.transcription.modes.providers"),
-      description: t("settingsPage.transcription.modes.providersDesc"),
-      icon: <Key className="w-4 h-4" />,
-    },
-    {
-      id: "local",
-      label: t("settingsPage.transcription.modes.local"),
-      description: t("settingsPage.transcription.modes.localDesc"),
-      icon: <Cpu className="w-4 h-4" />,
-    },
-    {
-      id: "self-hosted",
-      label: t("settingsPage.transcription.modes.selfHosted"),
-      description: t("settingsPage.transcription.modes.selfHostedDesc"),
-      icon: <Network className="w-4 h-4" />,
-    },
-  ];
-
-  const handleTranscriptionModeSelect = (mode: InferenceMode) => {
-    if (mode === "openwhispr" && !isSignedIn) {
-      startOnboarding();
-      return;
-    }
-    if (mode === transcriptionMode) return;
-    setTranscriptionMode(mode);
-    setUseLocalWhisper(mode === "local");
-    updateTranscriptionSettings({ useLocalWhisper: mode === "local" });
-    setCloudTranscriptionMode(mode === "openwhispr" ? "openwhispr" : "byok");
-
-    const toastKey = {
-      openwhispr: "switchedCloud",
-      providers: "switchedProviders",
-      local: "switchedLocal",
-      "self-hosted": "switchedSelfHosted",
-    }[mode];
-    toast({
-      title: t(`settingsPage.transcription.toasts.${toastKey}.title`),
-      description: t(`settingsPage.transcription.toasts.${toastKey}.description`),
-      variant: "success",
-      duration: 3000,
-    });
-  };
-
-  const handleLocalModelSelect = useCallback(
-    (modelId: string) => {
-      if (localTranscriptionProvider === "nvidia") {
-        setParakeetModel(modelId);
-      } else {
-        setWhisperModel(modelId);
-      }
-    },
-    [localTranscriptionProvider, setParakeetModel, setWhisperModel]
-  );
-
-  const renderPreviewToggle = () => (
-    <SettingsPanel>
-      <SettingsPanelRow>
-        <SettingsRow
-          label={t("settingsPage.transcription.transcriptionPreview")}
-          description={t("settingsPage.transcription.transcriptionPreviewDescription")}
-        >
-          <Toggle checked={showTranscriptionPreview} onChange={setShowTranscriptionPreview} />
-        </SettingsRow>
-      </SettingsPanelRow>
-    </SettingsPanel>
-  );
-
-  const renderTranscriptionPicker = (mode?: "cloud" | "local") => (
-    <TranscriptionModelPicker
-      selectedCloudProvider={cloudTranscriptionProvider}
-      onCloudProviderSelect={setCloudTranscriptionProvider}
-      selectedCloudModel={cloudTranscriptionModel}
-      onCloudModelSelect={setCloudTranscriptionModel}
-      selectedLocalModel={localTranscriptionProvider === "nvidia" ? parakeetModel : whisperModel}
-      onLocalModelSelect={handleLocalModelSelect}
-      selectedLocalProvider={localTranscriptionProvider}
-      onLocalProviderSelect={setLocalTranscriptionProvider}
-      useLocalWhisper={mode === "local" || (!mode && useLocalWhisper)}
-      onModeChange={
-        mode
-          ? noop
-          : (isLocal) => {
-              setUseLocalWhisper(isLocal);
-              updateTranscriptionSettings({ useLocalWhisper: isLocal });
-              if (isLocal) setCloudTranscriptionMode("byok");
-            }
-      }
-      mode={mode}
-      cloudTranscriptionBaseUrl={cloudTranscriptionBaseUrl}
-      setCloudTranscriptionBaseUrl={setCloudTranscriptionBaseUrl}
-      variant="settings"
-    />
-  );
-
+  // Aisha-only STT — other modes/pickers removed from product surface.
   return (
     <div className="space-y-4">
-      <InferenceModeSelector
-        modes={transcriptionModes}
-        activeMode={transcriptionMode}
-        onSelect={handleTranscriptionModeSelect}
-      />
+      <SettingsPanel>
+        <SettingsPanelRow>
+          <div className="flex items-start gap-3 w-full">
+            <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+              <Cloud className="w-4 h-4 text-primary" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-foreground">
+                  {t("settingsPage.transcription.modes.openwhispr")}
+                </p>
+                <Badge variant="success">Aisha</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {t("settingsPage.transcription.modes.openwhisprDesc")}
+              </p>
+            </div>
+          </div>
+        </SettingsPanelRow>
+      </SettingsPanel>
 
-      {transcriptionMode === "providers" && renderTranscriptionPicker("cloud")}
-      {transcriptionMode === "local" && (
-        <>
-          {renderTranscriptionPicker("local")}
-          {renderPreviewToggle()}
-        </>
-      )}
-
-      {transcriptionMode === "self-hosted" && (
-        <SelfHostedPanel
-          service="transcription"
-          url={remoteTranscriptionUrl}
-          onUrlChange={setRemoteTranscriptionUrl}
-          model={remoteTranscriptionModel}
-          onModelChange={setRemoteTranscriptionModel}
-        />
-      )}
-
-      <GpuDeviceSelector purpose="transcription" />
+      <SettingsPanel>
+        <SettingsPanelRow>
+          <SettingsRow
+            label={t("settingsPage.transcription.transcriptionPreview")}
+            description={t("settingsPage.transcription.transcriptionPreviewDescription")}
+          >
+            <Toggle checked={showTranscriptionPreview} onChange={setShowTranscriptionPreview} />
+          </SettingsRow>
+        </SettingsPanelRow>
+      </SettingsPanel>
     </div>
   );
 }
@@ -864,6 +707,52 @@ export default function SettingsPage({
       })
       .catch(() => {});
   }, [activeSection]);
+
+  const [aishaApiKey, setAishaApiKey] = useState("");
+  const [aishaKeyStatus, setAishaKeyStatus] = useState<string | null>(null);
+  const [aishaKeyBusy, setAishaKeyBusy] = useState(false);
+
+  useEffect(() => {
+    if (activeSection !== "account") return;
+    let cancelled = false;
+    void window.electronAPI?.getAishaApiKey?.().then((key) => {
+      if (!cancelled) setAishaApiKey(typeof key === "string" ? key : "");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSection]);
+
+  const saveAishaApiKey = useCallback(
+    async (key: string) => {
+      const trimmed = key.trim();
+      setAishaApiKey(trimmed);
+      setAishaKeyBusy(true);
+      setAishaKeyStatus(null);
+      try {
+        await window.electronAPI?.saveAishaApiKey?.(trimmed);
+        if (!trimmed) {
+          setAishaKeyStatus(t("settingsPage.account.aishaKey.cleared"));
+          return;
+        }
+        const result = await window.electronAPI?.validateAishaApiKey?.(trimmed);
+        if (result?.ok) {
+          setAishaKeyStatus(t("settingsPage.account.aishaKey.valid"));
+          toast({ title: t("settingsPage.account.aishaKey.saved"), variant: "default" });
+        } else if (result?.keyAccepted) {
+          setAishaKeyStatus(result.message || t("settingsPage.account.aishaKey.billing"));
+          toast({ title: t("settingsPage.account.aishaKey.saved"), variant: "default" });
+        } else {
+          setAishaKeyStatus(result?.message || t("settingsPage.account.aishaKey.invalid"));
+        }
+      } catch {
+        setAishaKeyStatus(t("settingsPage.account.aishaKey.saveFailed"));
+      } finally {
+        setAishaKeyBusy(false);
+      }
+    },
+    [t, toast]
+  );
 
   // Lazy keep-alive: mount AI sections only after the user has visited them once,
   // then keep them mounted so model-download progress and IPC listeners survive
@@ -1586,6 +1475,54 @@ export default function SettingsPage({
   const renderSectionContent = () => {
     switch (activeSection) {
       case "account":
+        return (
+          <div className="space-y-5">
+            <SectionHeader
+              title={t("settingsPage.account.title")}
+              description={t("settingsPage.account.aishaKey.sectionDescription")}
+            />
+            <SettingsPanel>
+              <SettingsPanelRow>
+                <div className="w-full space-y-3">
+                  <SettingsRow
+                    label={t("settingsPage.account.aishaKey.label")}
+                    description={t("settingsPage.account.aishaKey.description")}
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        void window.electronAPI?.openExternal?.("https://space.aisha.group")
+                      }
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                      {t("settingsPage.account.aishaKey.openSpace")}
+                    </Button>
+                  </SettingsRow>
+                  <ApiKeyInput
+                    apiKey={aishaApiKey}
+                    setApiKey={(key) => void saveAishaApiKey(key)}
+                    label=""
+                    helpText={t("settingsPage.account.aishaKey.helpText")}
+                    placeholder={t("settingsPage.account.aishaKey.placeholder")}
+                  />
+                  {aishaKeyBusy && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      {t("settingsPage.account.aishaKey.validating")}
+                    </p>
+                  )}
+                  {aishaKeyStatus && !aishaKeyBusy && (
+                    <p className="text-xs text-muted-foreground">{aishaKeyStatus}</p>
+                  )}
+                </div>
+              </SettingsPanelRow>
+            </SettingsPanel>
+          </div>
+        );
+
+      case "account-legacy-disabled":
         return (
           <div className="space-y-5">
             {!AUTH_URL ? (
@@ -4023,46 +3960,14 @@ EOF`,
             renderDictation={() => (
               <div className="space-y-6">
                 <TranscriptionSection
-                  isSignedIn={isSignedIn ?? false}
-                  startOnboarding={startOnboarding}
-                  cloudTranscriptionMode={cloudTranscriptionMode}
-                  setCloudTranscriptionMode={setCloudTranscriptionMode}
-                  useLocalWhisper={useLocalWhisper}
-                  setUseLocalWhisper={setUseLocalWhisper}
-                  updateTranscriptionSettings={updateTranscriptionSettings}
-                  cloudTranscriptionProvider={cloudTranscriptionProvider}
-                  setCloudTranscriptionProvider={setCloudTranscriptionProvider}
-                  cloudTranscriptionModel={cloudTranscriptionModel}
-                  setCloudTranscriptionModel={setCloudTranscriptionModel}
-                  localTranscriptionProvider={localTranscriptionProvider}
-                  setLocalTranscriptionProvider={setLocalTranscriptionProvider}
-                  whisperModel={whisperModel}
-                  setWhisperModel={setWhisperModel}
-                  parakeetModel={parakeetModel}
-                  setParakeetModel={setParakeetModel}
-                  cloudTranscriptionBaseUrl={cloudTranscriptionBaseUrl}
-                  setCloudTranscriptionBaseUrl={setCloudTranscriptionBaseUrl}
-                  transcriptionMode={transcriptionMode}
-                  setTranscriptionMode={setTranscriptionMode}
-                  remoteTranscriptionUrl={remoteTranscriptionUrl}
-                  setRemoteTranscriptionUrl={setRemoteTranscriptionUrl}
-                  remoteTranscriptionModel={remoteTranscriptionModel}
-                  setRemoteTranscriptionModel={setRemoteTranscriptionModel}
                   showTranscriptionPreview={showTranscriptionPreview}
                   setShowTranscriptionPreview={setShowTranscriptionPreview}
-                  toast={toast}
                 />
-                {transcriptionMode === "local" &&
-                  localTranscriptionProvider !== "nvidia" &&
-                  renderWhisperVadSettings()}
               </div>
             )}
             renderNoteRecording={() => (
               <div className="space-y-6">
                 <MeetingTranscriptionPanel />
-                {transcriptionMode === "local" &&
-                  localTranscriptionProvider !== "nvidia" &&
-                  renderWhisperVadSettings()}
               </div>
             )}
             renderUpload={() => (
@@ -4075,33 +3980,22 @@ EOF`,
       )}
       {hasMountedLlms && (
         <TabPanel active={activeSection === "llms"}>
-          <LlmsTabs
-            initialTab={
-              activeSection === "llms" ? (initialSubTab as LlmTab | undefined) : undefined
-            }
-            renderChatIntelligence={() => <ChatAgentSettings />}
-            renderDictationCleanup={() => (
-              <div className="space-y-6">
-                <AiModelsSection
-                  useCleanupModel={useCleanupModel}
-                  setUseCleanupModel={(value) => {
-                    updateCleanupSettings({ useCleanupModel: value });
-                  }}
-                  toast={toast}
-                />
-                <div className="border-t border-border/40 pt-6">
-                  <SectionHeader
-                    title={t("settingsPage.prompts.title")}
-                    description={t("settingsPage.prompts.description")}
-                  />
-                  <PromptStudio />
-                </div>
-              </div>
-            )}
-            renderDictationAgent={() => <DictationAgentSettings />}
-            renderDictationTranslation={() => <DictationTranslationSettings />}
-            renderNoteFormatting={() => <NoteFormattingSettings />}
-          />
+          <div className="space-y-4">
+            <SectionHeader
+              title={t("settingsPage.llms.title")}
+              description={t("settingsPage.llms.description")}
+            />
+            <SettingsPanel>
+              <SettingsPanelRow>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {t("settingsPage.llms.temporarilyDisabled", {
+                    defaultValue:
+                      "LLM provider settings are temporarily disabled. Speech uses VoiceLab Cloud (Aisha) only.",
+                  })}
+                </p>
+              </SettingsPanelRow>
+            </SettingsPanel>
+          </div>
         </TabPanel>
       )}
       {renderSectionContent()}

@@ -6,44 +6,100 @@ const secretCrypto = require("./secretCrypto");
 
 const tokenFile = () => path.join(app.getPath("userData"), "auth-token.bin");
 
-let cached = null;
+let cachedRaw = null;
 
-function get() {
-  if (cached !== null) return cached || null;
+function readRaw() {
+  if (cachedRaw !== null) return cachedRaw || "";
   try {
     const file = tokenFile();
-    if (!fs.existsSync(file)) return (cached = "");
+    if (!fs.existsSync(file)) return (cachedRaw = "");
     const buf = fs.readFileSync(file);
     if (!secretCrypto.isAvailable()) {
-      cached = buf.toString("utf8");
-      return cached || null;
+      cachedRaw = buf.toString("utf8");
+      return cachedRaw || "";
     }
     const { value, needsReencrypt } = secretCrypto.decrypt(buf);
-    cached = value;
-    if (needsReencrypt) set(value);
-    return cached || null;
+    cachedRaw = value;
+    if (needsReencrypt) writeRaw(value);
+    return cachedRaw || "";
   } catch (err) {
     debugLogger.error("tokenStore.get failed", { error: err?.message });
-    cached = "";
-    return null;
+    cachedRaw = "";
+    return "";
   }
 }
 
-function set(token) {
+function writeRaw(value) {
   try {
     const file = tokenFile();
     const data = secretCrypto.isAvailable()
-      ? secretCrypto.encrypt(token)
-      : Buffer.from(token, "utf8");
+      ? secretCrypto.encrypt(value)
+      : Buffer.from(value, "utf8");
     fs.writeFileSync(file, data, { mode: 0o600 });
-    cached = token;
+    cachedRaw = value;
   } catch (err) {
     debugLogger.error("tokenStore.set failed", { error: err?.message });
   }
 }
 
+function parseStored(raw) {
+  if (!raw) return { access: null, refresh: null };
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      const access = parsed.access || parsed.access_token || null;
+      const refresh = parsed.refresh || parsed.refresh_token || null;
+      if (access) return { access, refresh };
+    }
+  } catch {
+    // legacy plain bearer string
+  }
+  return { access: raw, refresh: null };
+}
+
+/** Access token for Authorization headers (legacy callers). */
+function get() {
+  return parseStored(readRaw()).access;
+}
+
+function getRefresh() {
+  return parseStored(readRaw()).refresh;
+}
+
+/** Accept plain access token or JSON `{ access, refresh }`. */
+function set(token) {
+  if (!token) {
+    clear();
+    return;
+  }
+  try {
+    const parsed = JSON.parse(token);
+    if (parsed && typeof parsed === "object" && (parsed.access || parsed.access_token)) {
+      writeRaw(
+        JSON.stringify({
+          access: parsed.access || parsed.access_token,
+          refresh: parsed.refresh || parsed.refresh_token || "",
+        })
+      );
+      return;
+    }
+  } catch {
+    // plain token
+  }
+  const existing = parseStored(readRaw());
+  writeRaw(JSON.stringify({ access: token, refresh: existing.refresh || "" }));
+}
+
+function setSession(access, refresh) {
+  if (!access) {
+    clear();
+    return;
+  }
+  writeRaw(JSON.stringify({ access, refresh: refresh || "" }));
+}
+
 function clear() {
-  cached = "";
+  cachedRaw = "";
   try {
     fs.rmSync(tokenFile(), { force: true });
   } catch (err) {
@@ -51,4 +107,4 @@ function clear() {
   }
 }
 
-module.exports = { get, set, clear };
+module.exports = { get, getRefresh, set, setSession, clear };
