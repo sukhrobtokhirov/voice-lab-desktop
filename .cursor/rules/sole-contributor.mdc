@@ -1,0 +1,11 @@
+---
+description: Sole human contributor attribution; never credit Cursor/agents in git
+alwaysApply: true
+---
+
+# Sole contributor
+
+- The only human contributor for this repository is **Elzodxon Sharofaddinov** `<elzodxon@gmail.com>`.
+- When creating commits, set author to that name and email. Do not use other author identities for agent work.
+- **Never** add `Co-authored-by: Cursor`, `cursoragent@cursor.com`, or any other agent/tool co-author trailer to commit messages.
+- Do not credit Cursor, Cursor Agent, or similar tools in commit subjects, bodies, `Contributors`, README credits, or PR descriptions unless the user explicitly asks.
