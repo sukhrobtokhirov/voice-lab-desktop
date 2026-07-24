@@ -801,7 +801,7 @@
       "continueWithApple": "Continue with Apple",
       "continueWithGoogle": "Continue with Google",
       "continueWithMicrosoft": "Continue with Microsoft",
-      "protocolUnavailable": "Browser sign-in unavailable — re-register the openwhispr:// protocol in your system's Default Apps settings."
+      "protocolUnavailable": "Browser sign-in unavailable — re-register the voicelab:// protocol in your system's Default Apps settings."
     },
     "welcomeSubtitle": "Dictate anywhere using your voice",
     "welcomeTitle": "Welcome to VoiceLab",
@@ -1774,7 +1774,7 @@
           "manualTitle": "Add this to your configuration",
           "manualDesc": "Configure it yourself, then rebuild.",
           "flakeTitle": "Installing via our flake?",
-          "flakeDesc": "If you install VoiceLab from the flake, programs.openwhispr.enable turns on ydotool, the uinput module and the group memberships for you.",
+          "flakeDesc": "If you install VoiceLab from the flake, programs.voicelab.enable turns on ydotool, the uinput module and the group memberships for you.",
           "rebuildNote": "Run sudo nixos-rebuild switch, then log out and back in so the group change and the /dev/uinput rule take effect. Replace <you> with your username."
         }
       },

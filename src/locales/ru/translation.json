@@ -801,7 +801,7 @@
       "continueWithApple": "Продолжить с Apple",
       "continueWithGoogle": "Продолжить с Google",
       "continueWithMicrosoft": "Продолжить с Microsoft",
-      "protocolUnavailable": "Вход через браузер недоступен — повторно зарегистрируйте протокол openwhispr:// в системных настройках приложений по умолчанию."
+      "protocolUnavailable": "Вход через браузер недоступен — повторно зарегистрируйте протокол voicelab:// в системных настройках приложений по умолчанию."
     },
     "welcomeSubtitle": "Диктуйте где угодно голосом",
     "welcomeTitle": "Добро пожаловать в VoiceLab",
@@ -1601,7 +1601,7 @@
           "manualTitle": "Добавьте это в свою конфигурацию",
           "manualDesc": "Настройте вручную, затем выполните пересборку.",
           "flakeTitle": "Устанавливаете через наш flake?",
-          "flakeDesc": "Если вы устанавливаете VoiceLab из flake, programs.openwhispr.enable автоматически включает ydotool, модуль uinput и нужные группы пользователей.",
+          "flakeDesc": "Если вы устанавливаете VoiceLab из flake, programs.voicelab.enable автоматически включает ydotool, модуль uinput и нужные группы пользователей.",
           "rebuildNote": "Выполните sudo nixos-rebuild switch, затем выйдите из системы и войдите снова, чтобы изменение группы и правило /dev/uinput вступили в силу. Замените <you> на ваше имя пользователя."
         }
       },

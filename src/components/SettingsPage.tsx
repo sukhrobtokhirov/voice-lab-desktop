@@ -1987,7 +1987,7 @@ export default function SettingsPage({
                       size="sm"
                       className="mt-2 w-full h-6 text-[10px]"
                       onClick={() =>
-                        window.electronAPI?.openExternal?.("https://openwhispr.com/contact-sales")
+                        window.electronAPI?.openExternal?.("https://voicelab.uz")
                       }
                     >
                       <Mail size={10} />
@@ -2906,7 +2906,7 @@ export default function SettingsPage({
                           }),
                           desc: t("settingsPage.general.waylandPaste.guide.group.step2Desc", {
                             defaultValue:
-                              "Group changes only take effect after a new login session. Log out of your desktop and log back in, then reopen OpenWhispr.",
+                              "Group changes only take effect after a new login session. Log out of your desktop and log back in, then reopen VoiceLab.",
                           }),
                         },
                       ],

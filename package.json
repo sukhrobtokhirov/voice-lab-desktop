@@ -1,6 +1,6 @@
 {
   "name": "voicelab-desktop",
-  "version": "1.7.8",
+  "version": "1.7.9",
   "description": "VoiceLab Desktop \u2014 a desktop dictation application using whisper.cpp for speech-to-text transcription",
   "main": "main.js",
   "private": true,
