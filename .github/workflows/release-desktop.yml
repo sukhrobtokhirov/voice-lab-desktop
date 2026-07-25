@@ -1,7 +1,8 @@
 name: Release VoiceLab Desktop
 
-# Publishes installers for macOS (arm64 + x64), Windows (x64), and Linux (x64)
-# to github.com/voicelab-uz/desktop releases.
+# Publishes installers for macOS (arm64 + x64) and Linux (x64) to
+# github.com/voicelab-uz/desktop releases. Windows is currently disabled until
+# a Windows Authenticode certificate is configured.
 # electron-updater reads the platform metadata from those releases.
 on:
   push:
@@ -246,6 +247,8 @@ jobs:
           UPDATE_REPO: desktop
 
   build-windows:
+    # Re-enable by setting the repository variable ENABLE_WINDOWS_RELEASE=true
+    if: ${{ vars.ENABLE_WINDOWS_RELEASE == 'true' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

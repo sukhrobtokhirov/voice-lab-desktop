@@ -30,7 +30,7 @@
 | -------- | ---- |
 | macOS (Apple Silicon) | [`VoiceLab-*-arm64-mac.dmg`](https://github.com/voicelab-uz/desktop/releases/latest) |
 | macOS (Intel) | [`VoiceLab-*-x64-mac.dmg`](https://github.com/voicelab-uz/desktop/releases/latest) |
-| Windows (x64) | [`VoiceLab Setup *.exe`](https://github.com/voicelab-uz/desktop/releases/latest) |
+| Windows (x64) | Temporarily unavailable; Windows signing is not configured yet |
 | Linux (x64) | [`VoiceLab-*-linux-x64.AppImage`](https://github.com/voicelab-uz/desktop/releases/latest) |
 | Linux packages | `.deb`, `.rpm`, and `.tar.gz` files on the release page |
 
@@ -52,12 +52,9 @@ This repo is **public**. Send them:
 
 Each person needs their own Aisha API key. You can also share the appropriate installer file directly.
 
-### Install (Windows)
+### Install (Windows — coming soon)
 
-1. Download the Windows `.exe` installer from the latest release.
-2. Run it and follow the installation prompts.
-3. Grant microphone and accessibility permissions if Windows requests them.
-4. On first run, paste your **Aisha API key** from [space.aisha.group](https://space.aisha.group).
+Windows builds are temporarily disabled until a Windows Authenticode certificate is configured.
 
 ### Install (Linux)
 
@@ -102,7 +99,7 @@ See [ADAPTATION.md](ADAPTATION.md) for fork architecture and Aisha integration n
 
 ## Releases & auto-update
 
-Tagged versions (`v*.*.*`) publish macOS arm64/x64, Windows x64, and Linux x64 artifacts via GitHub Actions (**Release VoiceLab Desktop**). The app checks **this repo’s** releases for updates.
+Tagged versions (`v*.*.*`) publish macOS arm64/x64 and Linux x64 artifacts via GitHub Actions (**Release VoiceLab Desktop**). Windows publishing is temporarily disabled.
 
 Details: [docs/releasing.md](docs/releasing.md).
 

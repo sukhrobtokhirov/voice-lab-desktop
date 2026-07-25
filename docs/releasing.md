@@ -8,7 +8,7 @@ The app’s `electron-updater` feed points at that repo (`voicelab-uz` / `deskto
 1. Push this codebase to `voicelab-uz/desktop` (this repo).
 2. Enroll in the Apple Developer Program and create a **Developer ID Application** certificate for the team that owns VoiceLab. Export the certificate together with its matching private key as a password-protected `.p12` file; the `.cer` certificate alone cannot sign builds.
 3. Create an App Store Connect API key with permission to submit builds for notarization. Download its `.p8` private key and record its key ID, issuer ID, and Apple team ID.
-4. Obtain a Windows Authenticode code-signing certificate from a trusted certificate authority and export it as a password-protected `.pfx` file.
+4. Windows signing is currently disabled. Later, obtain a Windows Authenticode certificate, export it as a password-protected `.pfx` file, and add the Windows secrets below.
 5. In GitHub → Settings → Secrets and variables → Actions, add:
    - `APPLE_CERTIFICATE_BASE64` — base64 of the `.p12` file
    - `APPLE_CERTIFICATE_PASSWORD` — password used when exporting the `.p12`
@@ -20,7 +20,9 @@ The app’s `electron-updater` feed points at that repo (`voicelab-uz` / `deskto
    - `WINDOWS_CERTIFICATE_PASSWORD` — password used when exporting the `.pfx`
    - Optional `GH_TOKEN` if the default `GITHUB_TOKEN` is not enough for downloads
 
-The private `.p12`, `.p8`, and `.pfx` files must never be committed. The workflow imports them only on the relevant CI runner, signs the macOS and Windows installers, notarizes macOS, and deletes the temporary files. Linux packages do not require an Apple-style certificate. The workflow intentionally fails when macOS or Windows signing secrets are missing instead of publishing unsigned production installers.
+Windows secrets are not needed while Windows publishing is disabled. Enable it later by setting the repository variable `ENABLE_WINDOWS_RELEASE` to `true`.
+
+The private `.p12`, `.p8`, and `.pfx` files must never be committed. The workflow imports them only on the relevant CI runner, signs and notarizes macOS, and deletes temporary files. Linux packages do not require an Apple-style certificate. Windows remains skipped until enabled.
 
 To create the base64 secret values locally on macOS:
 
@@ -45,7 +47,6 @@ Paste each copied value into the matching GitHub secret.
    ```
 3. GitHub Action **Release VoiceLab Desktop** builds and uploads installers for all supported desktop platforms:
    - `VoiceLab-*-arm64-mac.zip` / `.dmg` (and x64 equivalents)
-   - Windows x64 NSIS installer and portable `.exe`
    - Linux x64 `.AppImage`, `.deb`, `.rpm`, and `.tar.gz`
    - `latest-arm64-mac.yml` / `latest-x64-mac.yml` (updater metadata; required — not `latest-mac.yml`)
 4. In a previous install: Settings → Check for Updates (or wait for startup check).
@@ -53,5 +54,5 @@ Paste each copied value into the matching GitHub secret.
 ## Notes
 
 - Packaged `.env` must **not** contain a shared `AISHA_API_KEY` (stripped in `afterPack`).
-- Local builds may be unsigned for QA; production macOS releases are signed and notarized, Windows releases are Authenticode-signed, and Linux releases are packaged by GitHub Actions.
+- Local builds may be unsigned for QA; production macOS releases are signed and notarized, and Linux releases are packaged by GitHub Actions. Windows publishing is currently disabled.
 - Do not publish secrets (Aisha keys, Apple passwords) in release assets or commit history.
