@@ -198,6 +198,14 @@ native/meeting-aec-helper/third_party/
 .AppleDouble
 .LSOverride
 
+# Signing material — keep certificates, private keys, and provisioning files out of git
+*.cer
+*.crt
+*.p12
+*.pfx
+*.p8
+*.mobileprovision
+
 # Icon must end with two \r
 Icon
 
@@ -297,6 +305,7 @@ $RECYCLE.BIN/
 .windsurf/
 .zencoder/
 skills/
+certs/
 
 # OS generated files
 .DS_Store
