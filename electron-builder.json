@@ -17,6 +17,7 @@
   "files": [
     "main.js",
     "preload.js",
+    "preloads/**/*",
     "package.json",
     "node_modules/**/*",
     "src/dist/**/*",

@@ -22,6 +22,13 @@ const {
   loadManifest,
   verifyOwnedSidecar,
 } = require("./lib/sidecar-manifest");
+const WINDOW_CONFIG_KEYS = [
+  "MAIN_WINDOW_CONFIG",
+  "CONTROL_PANEL_CONFIG",
+  "AGENT_OVERLAY_CONFIG",
+  "NOTIFICATION_WINDOW_CONFIG",
+  "TRANSCRIPTION_PREVIEW_CONFIG",
+];
 
 // ---------------------------------------------------------------------------
 // macOS resource binary signing
@@ -276,6 +283,61 @@ function verifyUnpackedBinaries(context) {
   console.log("  afterPack: verified unpacked bundled binaries");
 }
 
+function configuredPreloadPaths(projectDir) {
+  const windowConfigs = require(path.join(projectDir, "src", "helpers", "windowConfig.js"));
+  return WINDOW_CONFIG_KEYS.map((key) => {
+    const preloadPath = windowConfigs[key]?.webPreferences?.preload;
+    if (!preloadPath) {
+      throw new Error(`afterPack: ${key} does not declare a preload`);
+    }
+    const relativePath = path.relative(projectDir, preloadPath);
+    if (
+      relativePath.startsWith("..") ||
+      path.isAbsolute(relativePath) ||
+      !relativePath.split(path.sep).includes("preloads")
+    ) {
+      throw new Error(`afterPack: ${key} preload is outside the project preload directory`);
+    }
+    return relativePath.split(path.sep).join("/");
+  });
+}
+
+function assertPackagedPreloads(context) {
+  const expectedPreloads = configuredPreloadPaths(context.packager.projectDir);
+  const resourcesDir = resolveResourcesDir(context);
+  const unpackedAppDir = path.join(resourcesDir, "app");
+  const asarPath = path.join(resourcesDir, "app.asar");
+  let packagedFiles;
+
+  if (fs.existsSync(unpackedAppDir)) {
+    packagedFiles = new Set(
+      collectFiles(unpackedAppDir).map((filePath) =>
+        path.relative(unpackedAppDir, filePath).split(path.sep).join("/")
+      )
+    );
+  } else if (fs.existsSync(asarPath)) {
+    let asar;
+    try {
+      asar = require("@electron/asar");
+    } catch {
+      asar = require("asar");
+    }
+    packagedFiles = new Set(
+      asar.listPackage(asarPath).map((entry) => entry.replace(/^[/\\]+/, "").replace(/\\/g, "/"))
+    );
+  } else {
+    throw new Error(`afterPack: packaged application payload is missing under ${resourcesDir}`);
+  }
+
+  const missing = expectedPreloads.filter((preloadPath) => !packagedFiles.has(preloadPath));
+  if (missing.length > 0) {
+    throw new Error(
+      `afterPack: packaged application is missing configured preload(s): ${missing.join(", ")}`
+    );
+  }
+  console.log(`  afterPack: verified ${expectedPreloads.length} configured preloads`);
+}
+
 // ---------------------------------------------------------------------------
 // Main hook
 // ---------------------------------------------------------------------------
@@ -405,6 +467,7 @@ function verifyOwnedSidecars(context) {
 exports.default = async function (context) {
   assertSourceEnvironmentIsSecretFree(context);
   assertCompiledRendererIsSecretFree(context);
+  assertPackagedPreloads(context);
   stripOnnxruntimeBinaries(context);
   wrapLinuxBinary(context);
   verifyMeetingAecHelper(context);
@@ -413,3 +476,6 @@ exports.default = async function (context) {
   registerMacResourceBinariesForSigning(context);
   assertPackagedResourcesAreSecretFree(context);
 };
+
+exports.configuredPreloadPaths = configuredPreloadPaths;
+exports.assertPackagedPreloads = assertPackagedPreloads;
