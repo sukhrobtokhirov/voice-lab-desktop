@@ -239,7 +239,7 @@
       "title": "Ovozli agent sozlamalari",
       "description": "Bitta tugma bosishi bilan AI agentingiz bilan gaplashing",
       "hotkey": "Yorliq",
-      "howItWorks": "Tugmani bosing va nima kerakligini ayting — masalan, “qisqa minnatdorchilik xati yoz”",
+      "howItWorks": "Tugmani bosing va nima kerakligini ayting — masalan, “qisqa minnatdorchilik xati yoz”. {{agentName}} natijani kursor turgan joyga yozadi. Avval “Hey {{agentName}}” deyish shart emas.",
       "test": "Sinab ko‘rish",
       "testInstruction": "Pastdagi maydonni bosing, {{hotkey}} ni bosing va buyruq ayting",
       "testSetHotkey": "Sinash uchun yuqorida yorliq belgilang",
@@ -3059,5 +3059,149 @@
     },
     "start": "Take notes",
     "join": "Join & transcribe"
+  },
+  "desktop": {
+    "offline": "Internet yo‘q. Lokal diktant ishlashda davom etadi.",
+    "nav": {
+      "history": "Tarix",
+      "vocabulary": "Lug‘at",
+      "more": "Yana"
+    },
+    "wallet": {
+      "title": "AI Credit hamyoni",
+      "shared": "Barcha VoiceLab mahsulotlari uchun bitta balans",
+      "balance": "Balans",
+      "available": "Mavjud",
+      "reserved": "Band qilingan",
+      "unavailable": "Hamyon vaqtincha ochilmadi.",
+      "updated": "{{time}} da yangilandi",
+      "live": "Jonli balans",
+      "manage": "Billingni boshqarish"
+    },
+    "creditShortage": {
+      "title": "Ko‘proq AI Credit kerak",
+      "description": "Bu yozuv uchun mavjud credit yetmaydi. Credit qo‘shing yoki lokal rejimda davom eting.",
+      "required": "Kerak",
+      "useLocal": "0 credit bilan lokal rejimda ishlatish"
+    },
+    "dictation": {
+      "ready": "Tayyor"
+    },
+    "languages": {
+      "choose": "Tilni tanlang",
+      "search": "Tillarni qidirish",
+      "searchPlaceholder": "Til yoki kod",
+      "clearSearch": "Qidiruvni tozalash",
+      "empty": "Til topilmadi.",
+      "autoUnsupported": "Bu xizmatda avtomatik aniqlash mavjud emas.",
+      "languageUnsupported": "Bu til tanlangan xizmatda mavjud emas.",
+      "groups": {
+        "automatic": "Avtomatik",
+        "centralAsia": "Markaziy Osiyo",
+        "other": "Rus va ingliz"
+      }
+    },
+    "onboarding": {
+      "progress": {
+        "welcome": "Boshlash",
+        "mode": "Hisob",
+        "language-permissions": "Til",
+        "hotkey": "Tugma",
+        "ready": "Tayyor"
+      },
+      "welcome": {
+        "title": "VoiceLab Dictate",
+        "description": "Tabiiy gapiring. Matn kerakli joyda paydo bo‘ladi."
+      },
+      "advanced": {
+        "title": "Qo‘shimcha sozlash",
+        "description": "VoiceLab Cloud hisobisiz lokal model yoki o‘z provideringizdan foydalaning.",
+        "localTitle": "Lokal model",
+        "localDescription": "Audio qurilmada qoladi va AI Credit sarflanmaydi.",
+        "providerTitle": "O‘z providerim",
+        "providerDescription": "API kalitni keyin qo‘shimcha sozlamalarda ulang.",
+        "useCloud": "VoiceLab Cloud bilan davom etish"
+      },
+      "mode": {
+        "localTitle": "Lokal rejim",
+        "localDescription": "Whisper tillari va avtomatik aniqlash mavjud.",
+        "providerTitle": "Provider rejimi",
+        "providerDescription": "Sozlash tugagach provider va API kalitni ulang."
+      },
+      "language": {
+        "title": "Til va ruxsatlar",
+        "description": "Odatda qaysi tilda gapirishingizni tanlang.",
+        "loadingCapabilities": "Hisobingiz uchun mavjud tillar tekshirilmoqda…",
+        "capabilitiesUnavailable": "Cloud imkoniyatlarini tekshirib bo‘lmadi. Tilni baribir tanlashingiz mumkin.",
+        "unsupported": "Bu til tanlangan rejimda ishlamaydi. Boshqa tilni tanlang.",
+        "microphoneRequired": "Davom etish uchun mikrofon ruxsati kerak."
+      },
+      "hotkey": {
+        "title": "Tugma va tezkor sinov",
+        "description": "Tugmani belgilang, gapiring va natijani tekshiring.",
+        "placeholder": "Natija shu yerda ko‘rinadi…"
+      },
+      "ready": {
+        "title": "Tayyor",
+        "account": "VoiceLab hisobingiz va AI Credit hamyoningiz ulandi.",
+        "local": "Lokal transkripsiya tanlandi.",
+        "provider": "Providerni ulash uchun qo‘shimcha sozlamalarni oching.",
+        "start": "Diktantni boshlash"
+      }
+    },
+    "dictionary": {
+      "actionFailed": "O‘zgarishni yakunlab bo‘lmadi",
+      "tryAgain": "Qayta urinib ko‘ring. Lokal saqlangan so‘z qurilmada qoladi.",
+      "duplicateTitle": "Lug‘atda mavjud",
+      "duplicateDescription": "Bu so‘z avval saqlangan.",
+      "saved": "Lug‘at yangilandi",
+      "duplicatesSkipped": "{{count}} ta takroriy so‘z o‘tkazib yuborildi",
+      "duplicatesSkipped_other": "{{count}} ta takroriy so‘z o‘tkazib yuborildi",
+      "status": {
+        "synced": "Sinxronlangan",
+        "conflict": "Tekshirish kerak",
+        "syncError": "Lokal saqlandi, sinxronlashda xato",
+        "syncing": "Sinxronlanmoqda",
+        "savedLocal": "Qurilmada saqlandi"
+      }
+    },
+    "privacy": {
+      "notesSync": "Qaydlarni sinxronlash",
+      "notesSyncDescription": "Qaydlarni kirilgan qurilmalar o‘rtasida sinxronlang.",
+      "accountSync": "Lug‘at va sozlamalar",
+      "accountSyncDescription": "Hisob sozlamalari va lug‘at kirilganda avtomatik sinxronlanadi.",
+      "alwaysOn": "Yoqilgan",
+      "transcriptBackup": "Transkript nusxasi",
+      "transcriptBackupDescription": "Desktopning bu versiyasi transkript matnini cloudga yuklamaydi.",
+      "audioBackup": "Audio nusxasi",
+      "audioBackupDescription": "Yozuvlar shu qurilmada qoladi va cloudga yuklanmaydi.",
+      "notEnabled": "O‘chiq",
+      "notAvailable": "Mavjud emas",
+      "localAudio": "Lokal audio",
+      "localAudioDescription": "Yozuvlar ushbu qurilmada qancha saqlanishini tanlang."
+    },
+    "settings": {
+      "account": "Hisob va creditlar",
+      "accountDescription": "Profil, sessiya va AI Credit hamyoni",
+      "dictation": "Diktant",
+      "dictationDescription": "Til, mikrofon va matn joylash",
+      "shortcuts": "Tugmalar",
+      "shortcutsDescription": "Diktant va Aisha tugmalari",
+      "privacy": "Ma’lumot va maxfiylik",
+      "privacyDescription": "Cloud backup, lokal audio va saqlash muddati",
+      "advanced": "Advanced",
+      "advancedDescription": "Lokal modellar, BYOK va developer vositalari",
+      "advancedSetup": "Advanced transkripsiya",
+      "advancedSetupDescription": "VoiceLab Cloud standart rejim. Lokal model va BYOK faqat shu qurilmada saqlanadi."
+    },
+    "session": {
+      "active": "Kirilgan",
+      "device": "Qurilma",
+      "thisDevice": "Ushbu VoiceLab Dictate qurilmasi",
+      "status": "Sessiya",
+      "protected": "Faol va himoyalangan",
+      "signedOut": "Hisobga kirilmagan",
+      "signedOutDescription": "VoiceLab Cloud va AI Credit hamyonidan foydalanish uchun kiring."
+    }
   }
 }

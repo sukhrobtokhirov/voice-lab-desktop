@@ -1,284 +1,283 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import { useTranslation } from "react-i18next";
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, Search, X, Check } from "lucide-react";
-import registry from "../../config/languageRegistry.json";
-import { LIST_SEARCH_THRESHOLD } from "../../config/constants";
+import { useTranslation } from "react-i18next";
+import { Check, ChevronDown, Search, X } from "lucide-react";
+import { useSettingsStore } from "../../stores/settingsStore";
+import {
+  DESKTOP_LANGUAGE_CATALOG,
+  languageUnsupportedReason,
+  providerSupportsLanguage,
+  type DesktopLanguageCapabilities,
+  type DesktopLanguageProvider,
+} from "../../config/desktopLanguages";
 
 export interface LanguageOption {
   value: string;
   label: string;
   flag: string;
+  localizedName?: string;
+  group?: "automatic" | "central-asia" | "other";
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
-const REGISTRY_OPTIONS: LanguageOption[] = registry.languages.map(({ code, label, flag }) => ({
-  value: code,
-  label,
-  flag,
-}));
+export function getDesktopLanguageOptions(
+  provider: DesktopLanguageProvider,
+  capabilities?: DesktopLanguageCapabilities
+): LanguageOption[] {
+  return DESKTOP_LANGUAGE_CATALOG.map((language) => ({
+    value: language.code,
+    label: language.label,
+    localizedName: language.localizedName,
+    flag: language.flag,
+    group: language.group,
+    disabled: !providerSupportsLanguage(provider, language.code, capabilities),
+    disabledReason: languageUnsupportedReason(provider, language.code, capabilities),
+  }));
+}
 
 interface LanguageSelectorProps {
   value: string;
   onChange: (value: string) => void;
   options?: LanguageOption[];
+  provider?: DesktopLanguageProvider;
   className?: string;
   placeholder?: string;
 }
+
+const GROUP_LABEL_KEYS: Record<string, string> = {
+  automatic: "desktop.languages.groups.automatic",
+  "central-asia": "desktop.languages.groups.centralAsia",
+  other: "desktop.languages.groups.other",
+};
 
 export default function LanguageSelector({
   value,
   onChange,
   options,
+  provider,
   className = "",
-  placeholder,
+  placeholder = "Choose language",
 }: LanguageSelectorProps) {
   const { t } = useTranslation();
-  const items = options ?? REGISTRY_OPTIONS;
-  const showSearch = items.length > LIST_SEARCH_THRESHOLD;
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [highlightedIndex, setHighlightedIndex] = useState(0);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(
-    typeof document === "undefined" ? null : document.body
-  );
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  const filteredLanguages = showSearch
-    ? items.filter(
-        (lang) =>
-          lang.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          lang.value.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : items;
-
-  const handleSearchQueryChange = useCallback((value: string) => {
-    setSearchQuery(value);
-    setHighlightedIndex(0);
-  }, []);
-
-  // Determine the portal container: use the closest dialog if inside one (to stay
-  // within Radix's focus trap), otherwise fall back to document.body.
-  const setContainerNode = useCallback((node: HTMLDivElement | null) => {
-    containerRef.current = node;
-    if (!node) return;
-    const dialog = node.closest('[role="dialog"]');
-    setPortalTarget((dialog as HTMLElement) ?? document.body);
-  }, []);
-
-  useEffect(() => {
-    if (isOpen && triggerRef.current && portalTarget) {
-      const triggerRect = triggerRef.current.getBoundingClientRect();
-      const target = portalTarget;
-      // When portaled into a transformed ancestor (e.g. Radix Dialog),
-      // fixed positioning is relative to that ancestor, not the viewport.
-      const offsetX = target === document.body ? 0 : target.getBoundingClientRect().left;
-      const offsetY = target === document.body ? 0 : target.getBoundingClientRect().top;
-      const menuWidth = Math.max(triggerRect.width, 240);
-      const containerRight =
-        (target === document.body ? window.innerWidth : target.getBoundingClientRect().right) -
-        offsetX;
-      let left = triggerRect.left - offsetX;
-      if (left + menuWidth > containerRight - 8) {
-        left = Math.max(8, triggerRect.right - offsetX - menuWidth);
-      }
-      setDropdownPosition({
-        top: triggerRect.bottom + 4 - offsetY,
-        left,
-        width: menuWidth,
-      });
-      requestAnimationFrame(() => {
-        searchInputRef.current?.focus();
-      });
+  const configuredProvider = useSettingsStore((state) => {
+    if (state.useLocalWhisper) return "whisper" as const;
+    if (state.cloudTranscriptionMode === "openwhispr") return "aisha" as const;
+    if (["openai", "groq", "mistral", "tinfoil"].includes(state.cloudTranscriptionProvider)) {
+      return "whisper" as const;
     }
-  }, [isOpen, portalTarget]);
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(target) &&
-        (!dropdownRef.current || !dropdownRef.current.contains(target))
-      ) {
-        setIsOpen(false);
-        setSearchQuery("");
-      }
-    };
+    return "unknown" as const;
+  });
+  const items = useMemo(
+    () => options ?? getDesktopLanguageOptions(provider ?? configuredProvider),
+    [configuredProvider, options, provider]
+  );
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [highlighted, setHighlighted] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listboxId = useId();
+  const selected = items.find((item) => item.value === value);
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+  const filtered = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase();
+    if (!normalized) return items;
+    return items.filter((item) =>
+      [item.label, item.localizedName, item.value]
+        .filter(Boolean)
+        .some((part) => String(part).toLocaleLowerCase().includes(normalized))
+    );
+  }, [items, query]);
+
+  const selectableIndexes = useMemo(
+    () => filtered.map((item, index) => (!item.disabled ? index : -1)).filter((index) => index >= 0),
+    [filtered]
+  );
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setQuery("");
+    triggerRef.current?.focus();
   }, []);
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!isOpen) {
-      if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
-        e.preventDefault();
-        setIsOpen(true);
-      }
+
+  const select = useCallback(
+    (item: LanguageOption | undefined) => {
+      if (!item || item.disabled) return;
+      onChange(item.value);
+      close();
+    },
+    [close, onChange]
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    const first = selectableIndexes[0] ?? 0;
+    setHighlighted(first);
+    requestAnimationFrame(() => searchRef.current?.focus());
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!containerRef.current?.contains(target) && !menuRef.current?.contains(target)) close();
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [close, open, selectableIndexes]);
+
+  const move = (direction: 1 | -1) => {
+    if (!selectableIndexes.length) return;
+    const current = selectableIndexes.indexOf(highlighted);
+    const next = (current + direction + selectableIndexes.length) % selectableIndexes.length;
+    setHighlighted(selectableIndexes[next]);
+  };
+
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (!open && ["Enter", " ", "ArrowDown"].includes(event.key)) {
+      event.preventDefault();
+      setOpen(true);
       return;
     }
-
-    switch (e.key) {
-      case "ArrowDown":
-        e.preventDefault();
-        setHighlightedIndex((prev) => (prev < filteredLanguages.length - 1 ? prev + 1 : 0));
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : filteredLanguages.length - 1));
-        break;
-      case "Enter":
-        e.preventDefault();
-        if (filteredLanguages[highlightedIndex]) {
-          handleSelect(filteredLanguages[highlightedIndex].value);
-        }
-        break;
-      case "Escape":
-        e.preventDefault();
-        setIsOpen(false);
-        handleSearchQueryChange("");
-        break;
+    if (!open) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      move(event.key === "ArrowDown" ? 1 : -1);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      select(filtered[highlighted]);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      close();
     }
   };
 
-  const handleSelect = (languageValue: string) => {
-    onChange(languageValue);
-    setIsOpen(false);
-    handleSearchQueryChange("");
-  };
-
-  const clearSearch = () => {
-    handleSearchQueryChange("");
-    if (searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
-  };
-
-  const selected = items.find((l) => l.value === value);
+  let lastGroup = "";
+  const menu = open ? (
+    <div
+      ref={menuRef}
+      className="fixed z-[10000] w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-popover shadow-2xl"
+      style={(() => {
+        const rect = triggerRef.current?.getBoundingClientRect();
+        return { top: (rect?.bottom ?? 0) + 6, left: Math.min(rect?.left ?? 16, window.innerWidth - 368) };
+      })()}
+      onKeyDown={onKeyDown}
+    >
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <Search className="h-4 w-4 text-muted-foreground" />
+        <input
+          ref={searchRef}
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setHighlighted(0);
+          }}
+          role="combobox"
+          aria-controls={listboxId}
+          aria-expanded="true"
+          aria-activedescendant={`${listboxId}-${highlighted}`}
+          aria-label={t("desktop.languages.search")}
+          placeholder={t("desktop.languages.searchPlaceholder")}
+          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+        />
+        {query && (
+          <button
+            type="button"
+            aria-label={t("desktop.languages.clearSearch")}
+            onClick={() => setQuery("")}
+          >
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
+        )}
+      </div>
+      <div id={listboxId} role="listbox" className="max-h-72 overflow-y-auto p-1.5">
+        {filtered.map((item, index) => {
+          const group = item.group ?? "other";
+          const showGroup = group !== lastGroup;
+          lastGroup = group;
+          return (
+            <React.Fragment key={item.value}>
+              {showGroup && (
+                <div className="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {GROUP_LABEL_KEYS[group] ? t(GROUP_LABEL_KEYS[group]) : group}
+                </div>
+              )}
+              <button
+                id={`${listboxId}-${index}`}
+                type="button"
+                role="option"
+                aria-selected={item.value === value}
+                aria-disabled={item.disabled || undefined}
+                disabled={item.disabled}
+                title={
+                  item.disabled
+                    ? t(
+                        item.value === "auto"
+                          ? "desktop.languages.autoUnsupported"
+                          : "desktop.languages.languageUnsupported"
+                      )
+                    : undefined
+                }
+                onMouseEnter={() => !item.disabled && setHighlighted(index)}
+                onClick={() => select(item)}
+                className={`flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors ${
+                  item.disabled
+                    ? "cursor-not-allowed opacity-45"
+                    : highlighted === index
+                      ? "bg-accent"
+                      : "hover:bg-accent/70"
+                }`}
+              >
+                <span className="text-base" aria-hidden="true">{item.flag}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline gap-2 text-sm font-medium">
+                    {item.localizedName || item.label}
+                    <span className="font-mono text-xs uppercase text-muted-foreground">{item.value}</span>
+                  </span>
+                  {item.disabled && (
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {t(
+                        item.value === "auto"
+                          ? "desktop.languages.autoUnsupported"
+                          : "desktop.languages.languageUnsupported"
+                      )}
+                    </span>
+                  )}
+                </span>
+                {item.value === value && <Check className="h-4 w-4 text-primary" />}
+              </button>
+            </React.Fragment>
+          );
+        })}
+        {!filtered.length && (
+          <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+            {t("desktop.languages.empty")}
+          </p>
+        )}
+      </div>
+    </div>
+  ) : null;
 
   return (
-    <div className={`relative ${className}`} ref={setContainerNode}>
-      {/* Trigger button - premium, tight, tactile macOS-style */}
+    <div ref={containerRef} className={className} onKeyDown={onKeyDown}>
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        onKeyDown={handleKeyDown}
-        className={`
-          group relative w-full flex items-center justify-between gap-2
-          h-7 px-2.5 text-left
-          rounded text-xs font-medium
-          border shadow-sm backdrop-blur-sm
-          transition-[background-color,border-color,transform] duration-200 ease-out
-          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-1
-          ${
-            isOpen
-              ? "border-border-active bg-surface-2/90 shadow ring-1 ring-primary/20"
-              : "border-border/70 bg-surface-1/80 hover:border-border-hover hover:bg-surface-2/70 hover:shadow active:scale-[0.985]"
-          }
-        `}
         aria-haspopup="listbox"
-        aria-expanded={isOpen}
+        aria-expanded={open}
+        aria-controls={listboxId}
+        onClick={() => setOpen((value) => !value)}
+        className="flex h-10 w-full items-center gap-2 rounded-lg border border-border bg-background px-3 text-left text-sm outline-none transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <span className={`truncate ${selected ? "text-foreground" : "text-muted-foreground"}`}>
-          <span className="mr-1.5">{selected?.flag ?? "\uD83C\uDF10"}</span>
-          {selected?.label ?? (value || placeholder || "")}
+        <span aria-hidden="true">{selected?.flag ?? "🌐"}</span>
+        <span className="min-w-0 flex-1 truncate">
+          {selected?.localizedName ||
+            selected?.label ||
+            (placeholder === "Choose language" ? t("desktop.languages.choose") : placeholder)}
         </span>
-        <ChevronDown
-          className={`w-3.5 h-3.5 shrink-0 text-muted-foreground transition-[color,transform] duration-200 ${
-            isOpen ? "rotate-180 text-primary" : "group-hover:text-foreground"
-          }`}
-        />
+        {selected && <span className="font-mono text-xs uppercase text-muted-foreground">{selected.value}</span>}
+        <ChevronDown className="h-4 w-4 text-muted-foreground" />
       </button>
-
-      {/* Dropdown - ultra-premium glassmorphic panel (rendered via portal) */}
-      {isOpen &&
-        portalTarget &&
-        createPortal(
-          <div
-            ref={dropdownRef}
-            style={{
-              position: "fixed",
-              top: `${dropdownPosition.top}px`,
-              left: `${dropdownPosition.left}px`,
-              width: `${dropdownPosition.width}px`,
-            }}
-            className="z-9999 bg-popover/95 backdrop-blur-xl border border-border/70 rounded shadow-xl overflow-hidden"
-          >
-            {showSearch && (
-              <div className="px-2 pt-2 pb-1.5 border-b border-border/50">
-                <div className="relative">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => handleSearchQueryChange(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={t("languageSelector.searchPlaceholder")}
-                    className="w-full h-7 pl-7 pr-6 text-xs bg-transparent text-foreground border-0 focus:outline-none placeholder:text-muted-foreground/50"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={clearSearch}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors rounded p-0.5 hover:bg-muted/50"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Language list - tight, premium with smart scrollbar */}
-            <div className="max-h-48 overflow-y-auto px-1 pb-1 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border">
-              {filteredLanguages.length === 0 ? (
-                <div className="px-2.5 py-2 text-xs text-muted-foreground">
-                  {t("languageSelector.noLanguagesFound")}
-                </div>
-              ) : (
-                <div role="listbox" className="space-y-0.5 pt-1">
-                  {filteredLanguages.map((language, index) => {
-                    const isSelected = language.value === value;
-                    const isHighlighted = index === highlightedIndex;
-
-                    return (
-                      <button
-                        key={language.value}
-                        type="button"
-                        onClick={() => handleSelect(language.value)}
-                        className={`
-                          group w-full flex items-center justify-between gap-2
-                          h-7 px-2.5 text-left text-xs font-medium
-                          rounded transition-[background-color,color,transform] duration-150 ease-out
-                          ${
-                            isSelected
-                              ? "bg-primary/15 text-primary shadow-sm"
-                              : isHighlighted
-                                ? "bg-muted/70 text-foreground"
-                                : "text-foreground hover:bg-muted/50 active:scale-[0.98]"
-                          }
-                        `}
-                        role="option"
-                        aria-selected={isSelected}
-                      >
-                        <span className="truncate">
-                          <span className="mr-1.5">{language.flag}</span>
-                          {language.label}
-                        </span>
-                        {isSelected && <Check className="w-3 h-3 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>,
-          portalTarget
-        )}
+      {menu && createPortal(menu, document.body)}
     </div>
   );
 }

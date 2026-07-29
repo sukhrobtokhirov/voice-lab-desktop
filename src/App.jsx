@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import "./index.css";
-import { X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { useToast } from "./components/ui/useToast";
 import { LoadingDots } from "./components/ui/LoadingDots";
 import { useHotkey } from "./hooks/useHotkey";
@@ -211,6 +211,7 @@ export default function App() {
     isRecording,
     isProcessing,
     micCaptureStatus,
+    wasPlaced,
     toggleListening,
     cancelRecording,
     cancelProcessing,
@@ -311,6 +312,7 @@ export default function App() {
       return "unavailable";
     if (isRecording) return "recording";
     if (isProcessing) return "processing";
+    if (wasPlaced) return "placed";
     if (isHovered && !isRecording && !isProcessing) return "hover";
     return "idle";
   };
@@ -326,7 +328,7 @@ export default function App() {
       case "hover":
         return {
           className: `${baseClasses} bg-black/50 cursor-pointer`,
-          tooltip: formatHotkeyListLabel(hotkey),
+          tooltip: `${t("app.mic.clickToSpeak")} · ${formatHotkeyListLabel(hotkey)}`,
         };
       case "recording":
         return {
@@ -342,6 +344,11 @@ export default function App() {
         return {
           className: `${baseClasses} bg-accent cursor-not-allowed`,
           tooltip: t("app.mic.processing"),
+        };
+      case "placed":
+        return {
+          className: `${baseClasses} bg-primary cursor-pointer`,
+          tooltip: t("desktop.dictation.ready", { defaultValue: "Ready" }),
         };
       default:
         return {
@@ -409,6 +416,10 @@ export default function App() {
           >
             <button
               ref={buttonRef}
+              aria-label={micProps.tooltip}
+              aria-pressed={micState === "recording"}
+              aria-busy={micState === "processing"}
+              disabled={micState === "processing" || micState === "unavailable"}
               onMouseDown={(e) => {
                 setIsCommandMenuOpen(false);
                 setDragStartPos({ x: e.clientX, y: e.clientY });
@@ -432,7 +443,7 @@ export default function App() {
                 setDragStartPos(null);
               }}
               onClick={(e) => {
-                if (!hasDragged) {
+                if (!hasDragged && micState !== "processing" && micState !== "unavailable") {
                   setIsCommandMenuOpen(false);
                   void captureTargetThenToggle();
                 }
@@ -481,7 +492,10 @@ export default function App() {
                 <VoiceWaveIndicator isListening={true} />
               ) : micState === "unavailable" ? (
                 <span className="text-white text-lg font-bold">!</span>
+              ) : micState === "placed" ? (
+                <Check className="h-5 w-5 text-white" />
               ) : null}
+              <span className="sr-only">{micProps.tooltip}</span>
 
               {/* State indicator ring for recording */}
               {micState === "recording" && (

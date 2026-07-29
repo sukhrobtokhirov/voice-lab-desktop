@@ -1729,6 +1729,7 @@
     "llms": {
       "title": "Языковые модели",
       "description": "Настройка моделей для очистки, форматирования заметок и чата",
+      "temporarilyDisabled": "Настройки LLM-провайдеров временно отключены. Для работы с речью используется только VoiceLab Cloud (Aisha).",
       "tabs": {
         "dictationCleanup": "Очистка диктовки",
         "dictationAgent": "Voice Agent",
@@ -3060,5 +3061,149 @@
     },
     "start": "Вести заметки",
     "join": "Присоединиться и вести заметки"
+  },
+  "desktop": {
+    "offline": "Нет интернета. Локальная диктовка продолжает работать.",
+    "nav": {
+      "history": "История",
+      "vocabulary": "Словарь",
+      "more": "Ещё"
+    },
+    "wallet": {
+      "title": "Кошелёк AI Credits",
+      "shared": "Один баланс для всех продуктов VoiceLab",
+      "balance": "Баланс",
+      "available": "Доступно",
+      "reserved": "Зарезервировано",
+      "unavailable": "Кошелёк временно недоступен.",
+      "updated": "Обновлено в {{time}}",
+      "live": "Текущий баланс",
+      "manage": "Управление биллингом"
+    },
+    "creditShortage": {
+      "title": "Нужно больше AI Credits",
+      "description": "Для этой записи недостаточно кредитов. Пополните баланс или продолжите локально.",
+      "required": "Нужно",
+      "useLocal": "Использовать локально за 0 кредитов"
+    },
+    "dictation": {
+      "ready": "Готово"
+    },
+    "languages": {
+      "choose": "Выберите язык",
+      "search": "Поиск языков",
+      "searchPlaceholder": "Язык или код",
+      "clearSearch": "Очистить поиск",
+      "empty": "Языки не найдены.",
+      "autoUnsupported": "Автоопределение недоступно для этого сервиса.",
+      "languageUnsupported": "Этот язык недоступен для выбранного сервиса.",
+      "groups": {
+        "automatic": "Автоматически",
+        "centralAsia": "Центральная Азия",
+        "other": "Русский и английский"
+      }
+    },
+    "onboarding": {
+      "progress": {
+        "welcome": "Начало",
+        "mode": "Аккаунт",
+        "language-permissions": "Язык",
+        "hotkey": "Клавиша",
+        "ready": "Готово"
+      },
+      "welcome": {
+        "title": "VoiceLab Dictate",
+        "description": "Говорите естественно. Текст появится там, где он нужен."
+      },
+      "advanced": {
+        "title": "Расширенная настройка",
+        "description": "Используйте локальную модель или своего провайдера без VoiceLab Cloud.",
+        "localTitle": "Локальная модель",
+        "localDescription": "Аудио остаётся на устройстве и не расходует AI Credits.",
+        "providerTitle": "Мой провайдер",
+        "providerDescription": "API-ключ можно подключить позже в расширенных настройках.",
+        "useCloud": "Продолжить с VoiceLab Cloud"
+      },
+      "mode": {
+        "localTitle": "Локальный режим",
+        "localDescription": "Доступны языки Whisper и автоопределение.",
+        "providerTitle": "Режим провайдера",
+        "providerDescription": "Подключите провайдера и API-ключ после настройки."
+      },
+      "language": {
+        "title": "Язык и разрешения",
+        "description": "Выберите язык, на котором вы обычно диктуете.",
+        "loadingCapabilities": "Проверяем языки, доступные вашему аккаунту…",
+        "capabilitiesUnavailable": "Не удалось проверить облачные возможности. Язык всё равно можно выбрать.",
+        "unsupported": "Этот язык не поддерживается в выбранном режиме. Выберите другой.",
+        "microphoneRequired": "Для продолжения нужен доступ к микрофону."
+      },
+      "hotkey": {
+        "title": "Клавиша и быстрая проверка",
+        "description": "Назначьте клавишу, продиктуйте текст и проверьте результат.",
+        "placeholder": "Результат появится здесь…"
+      },
+      "ready": {
+        "title": "Готово",
+        "account": "Аккаунт VoiceLab и кошелёк AI Credits подключены.",
+        "local": "Выбрана локальная транскрипция.",
+        "provider": "Откройте расширенные настройки и подключите провайдера.",
+        "start": "Начать диктовку"
+      }
+    },
+    "dictionary": {
+      "actionFailed": "Не удалось завершить изменение",
+      "tryAgain": "Повторите попытку. Локально сохранённое слово останется на устройстве.",
+      "duplicateTitle": "Уже есть в словаре",
+      "duplicateDescription": "Это слово уже сохранено.",
+      "saved": "Словарь обновлён",
+      "duplicatesSkipped": "Пропущено дубликатов: {{count}}",
+      "duplicatesSkipped_other": "Пропущено дубликатов: {{count}}",
+      "status": {
+        "synced": "Синхронизировано",
+        "conflict": "Нужна проверка",
+        "syncError": "Сохранено локально, ошибка синхронизации",
+        "syncing": "Синхронизация",
+        "savedLocal": "Сохранено на устройстве"
+      }
+    },
+    "privacy": {
+      "notesSync": "Синхронизация заметок",
+      "notesSyncDescription": "Синхронизировать заметки между вашими устройствами.",
+      "accountSync": "Словарь и настройки",
+      "accountSyncDescription": "Настройки аккаунта и словарь синхронизируются после входа.",
+      "alwaysOn": "Вкл.",
+      "transcriptBackup": "Резервная копия текста",
+      "transcriptBackupDescription": "Эта версия приложения не загружает тексты транскрипций.",
+      "audioBackup": "Резервная копия аудио",
+      "audioBackupDescription": "Записи остаются на устройстве и не загружаются.",
+      "notEnabled": "Выкл.",
+      "notAvailable": "Недоступно",
+      "localAudio": "Локальное аудио",
+      "localAudioDescription": "Выберите срок хранения записей на этом устройстве."
+    },
+    "settings": {
+      "account": "Аккаунт и кредиты",
+      "accountDescription": "Профиль, сессия и кошелёк AI Credits",
+      "dictation": "Диктовка",
+      "dictationDescription": "Язык, микрофон и вставка текста",
+      "shortcuts": "Горячие клавиши",
+      "shortcutsDescription": "Клавиши диктовки и Aisha",
+      "privacy": "Данные и конфиденциальность",
+      "privacyDescription": "Облачная копия, локальное аудио и хранение",
+      "advanced": "Дополнительно",
+      "advancedDescription": "Локальные модели, BYOK и инструменты разработчика",
+      "advancedSetup": "Расширенная транскрипция",
+      "advancedSetupDescription": "VoiceLab Cloud используется по умолчанию. Локальные модели и BYOK остаются на устройстве."
+    },
+    "session": {
+      "active": "Выполнен вход",
+      "device": "Устройство",
+      "thisDevice": "Это устройство VoiceLab Dictate",
+      "status": "Сессия",
+      "protected": "Активна и защищена",
+      "signedOut": "Вход не выполнен",
+      "signedOutDescription": "Войдите, чтобы использовать VoiceLab Cloud и кошелёк AI Credits."
+    }
   }
 }

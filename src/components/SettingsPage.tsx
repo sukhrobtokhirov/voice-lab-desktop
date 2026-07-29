@@ -93,7 +93,7 @@ import type { GpuDevice, LocalTranscriptionProvider, InferenceMode } from "../ty
 import logger from "../utils/logger";
 import { SettingsRow } from "./ui/SettingsSection";
 import { useSettingsLayout } from "./ui/useSettingsLayout";
-import { useUsage } from "../hooks/useUsage";
+import UsageDisplay from "./UsageDisplay";
 import { cn } from "./lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { startMigration, useMigration } from "../stores/noteStore.js";
@@ -659,7 +659,7 @@ export default function SettingsPage({
   const translationKey = useSettingsStore((s) => s.translationKey);
   const setTranslationKey = useSettingsStore((s) => s.setTranslationKey);
 
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   const [currentVersion, setCurrentVersion] = useState<string>("");
@@ -713,7 +713,7 @@ export default function SettingsPage({
   const [aishaKeyBusy, setAishaKeyBusy] = useState(false);
 
   useEffect(() => {
-    if (activeSection !== "account") return;
+    if (activeSection !== "system") return;
     let cancelled = false;
     void window.electronAPI?.getAishaApiKey?.().then((key) => {
       if (!cancelled) setAishaApiKey(typeof key === "string" ? key : "");
@@ -811,21 +811,6 @@ export default function SettingsPage({
   }, [refreshYdotoolStatus]);
 
   const { theme, setTheme } = useTheme();
-  const usage = useUsage();
-  const hasShownApproachingToast = useRef(false);
-  useEffect(() => {
-    if (usage?.isApproachingLimit && !hasShownApproachingToast.current) {
-      hasShownApproachingToast.current = true;
-      toast({
-        title: t("settingsPage.account.toasts.approachingLimit.title"),
-        description: t("settingsPage.account.toasts.approachingLimit.description", {
-          used: usage.wordsUsed.toLocaleString(i18n.language),
-          limit: usage.limit.toLocaleString(i18n.language),
-        }),
-        duration: 6000,
-      });
-    }
-  }, [usage?.isApproachingLimit, usage?.wordsUsed, usage?.limit, toast, t, i18n.language]);
 
   const installTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1194,101 +1179,12 @@ export default function SettingsPage({
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isOpeningBilling, setIsOpeningBilling] = useState(false);
-  const [billingState, setBillingState] = useState<Record<string, boolean>>({
-    pro: true,
-    business: true,
-  });
-  const [checkoutTier, setCheckoutTier] = useState<string | null>(null);
-  const [switchPreview, setSwitchPreview] = useState<{
-    plan: "monthly" | "annual";
-    tier: "pro" | "business";
-    immediateAmount: number;
-    currency: string;
-    newPriceAmount: number;
-    newInterval: string;
-    nextBillingDate: string | null;
-  } | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-
   const startOnboarding = useCallback(() => {
     localStorage.setItem("pendingCloudMigration", "true");
     localStorage.setItem("onboardingCurrentStep", "0");
     localStorage.removeItem("onboardingCompleted");
     window.location.reload();
   }, []);
-
-  const handleBillingPortal = useCallback(async () => {
-    const result = await usage.openBillingPortal();
-    if (!result.success) {
-      toast({
-        title: t("settingsPage.account.checkout.couldNotOpenTitle"),
-        description: t("settingsPage.account.checkout.couldNotOpenDescription"),
-      });
-    }
-  }, [usage, toast, t]);
-
-  const handleSwitchPlan = useCallback(
-    async (plan: "monthly" | "annual", tier: "pro" | "business") => {
-      setPreviewLoading(true);
-      try {
-        const preview = await usage.previewSwitchPlan({ plan, tier });
-        if (!preview.success) {
-          toast({
-            title: t("settingsPage.account.checkout.couldNotOpenTitle"),
-            description:
-              preview.error || t("settingsPage.account.checkout.couldNotOpenDescription"),
-          });
-          return;
-        }
-        if (preview.alreadyOnPlan) {
-          toast({ title: t("settingsPage.account.pricing.planSwitched") });
-          return;
-        }
-        setSwitchPreview({
-          plan,
-          tier,
-          immediateAmount: preview.immediateAmount ?? 0,
-          currency: preview.currency ?? "usd",
-          newPriceAmount: preview.newPriceAmount ?? 0,
-          newInterval: preview.newInterval ?? "month",
-          nextBillingDate: preview.nextBillingDate ?? null,
-        });
-      } finally {
-        setPreviewLoading(false);
-      }
-    },
-    [usage, toast, t]
-  );
-
-  const confirmSwitchPlan = useCallback(async () => {
-    if (!switchPreview) return;
-    const { plan, tier } = switchPreview;
-    setSwitchPreview(null);
-    const result = await usage.switchPlan({ plan, tier });
-    if (result.success) {
-      toast({ title: t("settingsPage.account.pricing.planSwitched") });
-    } else {
-      toast({
-        title: t("settingsPage.account.checkout.couldNotOpenTitle"),
-        description: result.error || t("settingsPage.account.checkout.couldNotOpenDescription"),
-      });
-    }
-  }, [switchPreview, usage, toast, t]);
-
-  const handleCheckout = useCallback(
-    async (plan: "monthly" | "annual", tier: "pro" | "business") => {
-      setCheckoutTier(tier);
-      const result = await usage.openCheckout({ plan, tier });
-      setCheckoutTier(null);
-      if (!result.success) {
-        toast({
-          title: t("settingsPage.account.checkout.couldNotOpenTitle"),
-          description: t("settingsPage.account.checkout.couldNotOpenDescription"),
-        });
-      }
-    },
-    [usage, toast, t]
-  );
 
   const handleSignOut = useCallback(async () => {
     setIsSigningOut(true);
@@ -1474,854 +1370,116 @@ export default function SettingsPage({
 
   const renderSectionContent = () => {
     switch (activeSection) {
-      case "account":
-        return (
-          <div className="space-y-5">
-            <SectionHeader
-              title={t("settingsPage.account.title")}
-              description={t("settingsPage.account.aishaKey.sectionDescription")}
-            />
-            <SettingsPanel>
-              <SettingsPanelRow>
-                <div className="w-full space-y-3">
-                  <SettingsRow
-                    label={t("settingsPage.account.aishaKey.label")}
-                    description={t("settingsPage.account.aishaKey.description")}
-                  >
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        void window.electronAPI?.openExternal?.("https://space.aisha.group")
-                      }
-                    >
-                      <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                      {t("settingsPage.account.aishaKey.openSpace")}
-                    </Button>
-                  </SettingsRow>
-                  <ApiKeyInput
-                    apiKey={aishaApiKey}
-                    setApiKey={(key) => void saveAishaApiKey(key)}
-                    label=""
-                    helpText={t("settingsPage.account.aishaKey.helpText")}
-                    placeholder={t("settingsPage.account.aishaKey.placeholder")}
-                  />
-                  {aishaKeyBusy && (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      {t("settingsPage.account.aishaKey.validating")}
-                    </p>
-                  )}
-                  {aishaKeyStatus && !aishaKeyBusy && (
-                    <p className="text-xs text-muted-foreground">{aishaKeyStatus}</p>
+case "account":
+case "plansBilling":
+  return (
+    <div className="space-y-5">
+      <SectionHeader
+        title={t("desktop.settings.account", { defaultValue: "Account & Credits" })}
+        description={t("desktop.settings.accountDescription", {
+          defaultValue: "Your VoiceLab profile, desktop session and shared AI Credit wallet.",
+        })}
+      />
+
+      {!isLoaded ? (
+        <SettingsPanel>
+          <SettingsPanelRow>
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-11 w-11 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-3 w-52" />
+              </div>
+            </div>
+          </SettingsPanelRow>
+        </SettingsPanel>
+      ) : isSignedIn && user ? (
+        <>
+          <SettingsPanel>
+            <SettingsPanelRow>
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#e55347]/10">
+                  {user.image ? (
+                    <img
+                      src={user.image}
+                      alt=""
+                      className="h-11 w-11 rounded-full object-cover"
+                    />
+                  ) : (
+                    <UserCircle className="h-6 w-6 text-[#e55347]" />
                   )}
                 </div>
-              </SettingsPanelRow>
-            </SettingsPanel>
-          </div>
-        );
-
-      case "account-legacy-disabled":
-        return (
-          <div className="space-y-5">
-            {!AUTH_URL ? (
-              <>
-                <SectionHeader
-                  title={t("settingsPage.account.title")}
-                  description={t("settingsPage.account.notConfigured")}
-                />
-                <SettingsPanel>
-                  <SettingsPanelRow>
-                    <SettingsRow
-                      label={t("settingsPage.account.featuresDisabled")}
-                      description={t("settingsPage.account.featuresDisabledDescription")}
-                    >
-                      <Badge variant="warning">{t("settingsPage.account.disabled")}</Badge>
-                    </SettingsRow>
-                  </SettingsPanelRow>
-                </SettingsPanel>
-              </>
-            ) : isLoaded && isSignedIn && user ? (
-              <>
-                <SectionHeader title={t("settingsPage.account.title")} />
-                <SettingsPanel>
-                  <SettingsPanelRow>
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 overflow-hidden bg-primary/10 dark:bg-primary/15">
-                        {user.image ? (
-                          <img
-                            src={user.image}
-                            alt={user.name || t("settingsPage.account.user")}
-                            className="w-10 h-10 rounded-full object-cover"
-                          />
-                        ) : (
-                          <UserCircle className="w-5 h-5 text-primary" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium text-foreground truncate">
-                          {user.name || t("settingsPage.account.user")}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-                      </div>
-                      <Badge variant="success">{t("settingsPage.account.signedIn")}</Badge>
-                    </div>
-                  </SettingsPanelRow>
-                </SettingsPanel>
-
-                <SettingsPanel>
-                  <SettingsPanelRow>
-                    <Button
-                      onClick={handleSignOut}
-                      variant="outline"
-                      disabled={isSigningOut}
-                      size="sm"
-                      className="w-full text-destructive border-destructive/30 hover:bg-destructive/10 hover:border-destructive/50"
-                    >
-                      <LogOut className="mr-1.5 h-3.5 w-3.5" />
-                      {isSigningOut
-                        ? t("settingsPage.account.signOut.signingOut")
-                        : t("settingsPage.account.signOut.signOut")}
-                    </Button>
-                  </SettingsPanelRow>
-                </SettingsPanel>
-
-                <SettingsPanel>
-                  <SettingsPanelRow>
-                    <SettingsRow
-                      label={t("settingsPage.account.deleteAccount.label")}
-                      description={t("settingsPage.account.deleteAccount.labelDescription")}
-                    >
-                      <Button
-                        onClick={handleDeleteAccount}
-                        variant="outline"
-                        disabled={isDeletingAccount}
-                        size="sm"
-                        className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:border-destructive"
-                      >
-                        <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                        {isDeletingAccount
-                          ? t("settingsPage.account.deleteAccount.deleting")
-                          : t("settingsPage.account.deleteAccount.button")}
-                      </Button>
-                    </SettingsRow>
-                  </SettingsPanelRow>
-                </SettingsPanel>
-              </>
-            ) : isLoaded ? (
-              <>
-                <SectionHeader title={t("settingsPage.account.title")} />
-                <SettingsPanel>
-                  <SettingsPanelRow>
-                    <SettingsRow
-                      label={t("settingsPage.account.notSignedIn")}
-                      description={t("settingsPage.account.notSignedInDescription")}
-                    >
-                      <Badge variant="outline">{t("settingsPage.account.offline")}</Badge>
-                    </SettingsRow>
-                  </SettingsPanelRow>
-                </SettingsPanel>
-
-                <div className="rounded-lg border border-primary/20 dark:border-primary/15 bg-primary/3 dark:bg-primary/6 p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-md bg-primary/10 dark:bg-primary/15 flex items-center justify-center shrink-0 mt-0.5">
-                      <Sparkles className="w-4 h-4 text-primary" />
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-2.5">
-                      <div>
-                        <p className="text-xs font-medium text-foreground">
-                          {t("settingsPage.account.trialCta.title")}
-                        </p>
-                        <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
-                          {t("settingsPage.account.trialCta.description")}
-                        </p>
-                      </div>
-                      <Button onClick={startOnboarding} size="sm" className="w-full">
-                        <UserCircle className="mr-1.5 h-3.5 w-3.5" />
-                        {t("settingsPage.account.trialCta.button")}
-                      </Button>
-                    </div>
-                  </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {user.name || t("settingsPage.account.user", { defaultValue: "VoiceLab user" })}
+                  </p>
+                  <p className="truncate text-sm text-muted-foreground">{user.email}</p>
                 </div>
-              </>
-            ) : (
-              <>
-                <SectionHeader title={t("settingsPage.account.title")} />
-                <SettingsPanel>
-                  <SettingsPanelRow>
-                    <div className="flex items-center justify-between">
-                      <Skeleton className="h-4 w-32" />
-                      <Skeleton className="h-5 w-16 rounded-full" />
-                    </div>
-                  </SettingsPanelRow>
-                </SettingsPanel>
-              </>
-            )}
-          </div>
-        );
-
-      case "plansBilling":
-        return (
-          <div className="space-y-5">
-            {!AUTH_URL ? (
-              <>
-                <SectionHeader
-                  title={t("settingsPage.account.pricing.title")}
-                  description={t("settingsPage.account.notConfigured")}
-                />
-                <SettingsPanel>
-                  <SettingsPanelRow>
-                    <SettingsRow
-                      label={t("settingsPage.account.featuresDisabled")}
-                      description={t("settingsPage.account.featuresDisabledDescription")}
-                    >
-                      <Badge variant="warning">{t("settingsPage.account.disabled")}</Badge>
-                    </SettingsRow>
-                  </SettingsPanelRow>
-                </SettingsPanel>
-              </>
-            ) : isLoaded ? (
-              <>
-                <SectionHeader title={t("settingsPage.account.pricing.title")} />
-                <div className={`grid gap-1.5 ${isCompact ? "grid-cols-2" : "grid-cols-4"}`}>
-                  {/* Free */}
-                  <div
-                    className={cn(
-                      "rounded-md p-2.5 flex flex-col",
-                      !usage?.isSubscribed && !usage?.isTrial
-                        ? "border-2 border-primary/30 bg-primary/3 dark:border-primary/20 dark:bg-primary/5"
-                        : "border border-border/50 dark:border-border-subtle/60 bg-card/30 dark:bg-surface-2/30"
-                    )}
-                  >
-                    <p className="text-xs font-semibold text-foreground">
-                      {t("settingsPage.account.pricing.free.name")}
-                    </p>
-                    <div className="flex items-baseline gap-0.5 mt-0.5">
-                      <span className="text-lg font-bold text-foreground">
-                        {t("settingsPage.account.pricing.free.price")}
-                      </span>
-                      <span className="text-[9px] text-muted-foreground">
-                        / {t("settingsPage.account.pricing.free.period")}
-                      </span>
-                    </div>
-                    <ul className="space-y-0.5 mt-2 flex-1">
-                      {(
-                        t("settingsPage.account.pricing.free.features", {
-                          returnObjects: true,
-                        }) as string[]
-                      ).map((feature, i) =>
-                        feature.startsWith("## ") ? (
-                          <li
-                            key={i}
-                            className={`text-[8px] font-semibold uppercase tracking-wide text-muted-foreground/60 ${i > 0 ? "pt-1.5" : ""}`}
-                          >
-                            {feature.slice(3)}
-                          </li>
-                        ) : (
-                          <li
-                            key={i}
-                            className="flex items-start gap-1 text-[10px] text-muted-foreground leading-tight"
-                          >
-                            <Check size={9} className="mt-[2px] text-primary/70 shrink-0" />
-                            {feature}
-                          </li>
-                        )
-                      )}
-                    </ul>
-                    {!isSignedIn ? (
-                      <Button
-                        onClick={startOnboarding}
-                        variant="outline"
-                        size="sm"
-                        className="mt-2 w-full h-6 text-[10px]"
-                      >
-                        {t("settingsPage.account.signedOutPlans.button")}
-                      </Button>
-                    ) : usage?.isSubscribed && !usage?.isTrial ? (
-                      <Button
-                        onClick={handleBillingPortal}
-                        variant="outline"
-                        size="sm"
-                        className="mt-2 w-full h-6 text-[10px]"
-                      >
-                        {t("settingsPage.account.pricing.downgrade")}
-                      </Button>
-                    ) : (
-                      <div className="mt-2 text-center">
-                        <span className="text-[9px] font-medium text-primary/70">
-                          {t("settingsPage.account.pricing.currentPlan")}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Pro */}
-                  <div
-                    className={cn(
-                      "rounded-md border-2 p-2.5 flex flex-col",
-                      usage?.isSubscribed && usage?.plan === "pro"
-                        ? "border-primary/40 bg-primary/5 dark:border-primary/30 dark:bg-primary/8"
-                        : "border-primary/20 bg-primary/2 dark:border-primary/15 dark:bg-primary/3"
-                    )}
-                  >
-                    <p className="text-xs font-semibold text-foreground">
-                      {t("settingsPage.account.pricing.pro.name")}
-                    </p>
-                    <button
-                      onClick={() => setBillingState((prev) => ({ ...prev, pro: !prev.pro }))}
-                      role="switch"
-                      aria-checked={billingState.pro}
-                      className="flex items-center gap-1.5 mt-1"
-                    >
-                      <div
-                        className={`relative w-7 h-4 rounded-full transition-colors ${billingState.pro ? "bg-primary" : "bg-muted"}`}
-                      >
-                        <div
-                          className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${billingState.pro ? "translate-x-3" : ""}`}
-                        />
-                      </div>
-                      <span className="text-[9px] text-muted-foreground">
-                        {t("settingsPage.account.pricing.billedYearly")}
-                      </span>
-                    </button>
-                    <div className="flex items-baseline gap-0.5 mt-1">
-                      <span className="text-lg font-bold text-foreground">
-                        {billingState.pro
-                          ? t("settingsPage.account.pricing.pro.annualEquivalent")
-                          : t("settingsPage.account.pricing.pro.monthlyPrice")}
-                      </span>
-                      <span className="text-[9px] text-muted-foreground">
-                        {t("settingsPage.account.pricing.pro.monthlyPeriod")}
-                      </span>
-                    </div>
-                    <p className="text-[9px] text-muted-foreground/70 mt-1.5">
-                      {t("settingsPage.account.pricing.pro.includesPrefix")}
-                    </p>
-                    <ul className="space-y-0.5 mt-1 flex-1">
-                      {(
-                        t("settingsPage.account.pricing.pro.features", {
-                          returnObjects: true,
-                        }) as string[]
-                      ).map((feature, i) => (
-                        <li
-                          key={i}
-                          className="flex items-start gap-1 text-[10px] text-muted-foreground leading-tight"
-                        >
-                          <Check size={9} className="mt-[2px] text-primary shrink-0" />
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
-                    {(usage?.isSubscribed && usage?.plan === "pro" && !usage?.isTrial) ||
-                    usage?.isTrial ? (
-                      <div className="mt-2 text-center">
-                        <span className="text-[9px] font-medium text-primary">
-                          {t("settingsPage.account.pricing.currentPlan")}
-                        </span>
-                      </div>
-                    ) : usage?.isSubscribed && usage?.plan === "business" ? (
-                      <Button
-                        onClick={() =>
-                          handleSwitchPlan(billingState.pro ? "annual" : "monthly", "pro")
-                        }
-                        disabled={previewLoading || usage.checkoutLoading}
-                        variant="outline"
-                        size="sm"
-                        className="mt-2 w-full h-6 text-[10px]"
-                      >
-                        {previewLoading ? (
-                          <Loader2 size={10} className="animate-spin" />
-                        ) : (
-                          t("settingsPage.account.pricing.downgrade")
-                        )}
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={() =>
-                          handleCheckout(billingState.pro ? "annual" : "monthly", "pro")
-                        }
-                        disabled={checkoutTier === "pro"}
-                        size="sm"
-                        className="mt-2 w-full h-6 text-[10px]"
-                      >
-                        {checkoutTier === "pro" ? (
-                          <Loader2 size={10} className="animate-spin" />
-                        ) : (
-                          t("settingsPage.account.pricing.pro.cta")
-                        )}
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* Business */}
-                  <div className="rounded-md border-2 border-primary/50 bg-primary/8 dark:border-primary/40 dark:bg-primary/10 p-2.5 flex flex-col relative">
-                    <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[8px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap shadow-sm">
-                      {t("settingsPage.account.pricing.business.badge")}
-                    </span>
-                    <p className="text-xs font-semibold text-foreground">
-                      {t("settingsPage.account.pricing.business.name")}
-                    </p>
-                    <button
-                      onClick={() =>
-                        setBillingState((prev) => ({ ...prev, business: !prev.business }))
-                      }
-                      role="switch"
-                      aria-checked={billingState.business}
-                      className="flex items-center gap-1.5 mt-1"
-                    >
-                      <div
-                        className={`relative w-7 h-4 rounded-full transition-colors ${billingState.business ? "bg-primary" : "bg-muted"}`}
-                      >
-                        <div
-                          className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${billingState.business ? "translate-x-3" : ""}`}
-                        />
-                      </div>
-                      <span className="text-[9px] text-muted-foreground">
-                        {t("settingsPage.account.pricing.billedYearly")}
-                      </span>
-                    </button>
-                    <div className="flex items-baseline gap-0.5 mt-1">
-                      <span className="text-lg font-bold text-foreground">
-                        {billingState.business
-                          ? t("settingsPage.account.pricing.business.annualEquivalent")
-                          : t("settingsPage.account.pricing.business.monthlyPrice")}
-                      </span>
-                      <span className="text-[9px] text-muted-foreground">
-                        {t("settingsPage.account.pricing.business.monthlyPeriod")}
-                      </span>
-                    </div>
-                    <p className="text-[9px] text-muted-foreground/70 mt-1.5">
-                      {t("settingsPage.account.pricing.business.includesPrefix")}
-                    </p>
-                    <ul className="space-y-0.5 mt-1 flex-1">
-                      {(
-                        t("settingsPage.account.pricing.business.features", {
-                          returnObjects: true,
-                        }) as string[]
-                      ).map((feature, i) => (
-                        <li
-                          key={i}
-                          className="flex items-start gap-1 text-[10px] text-muted-foreground leading-tight"
-                        >
-                          <Check size={9} className="mt-[2px] text-primary shrink-0" />
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
-                    {usage?.isSubscribed && usage?.plan === "business" && !usage?.isTrial ? (
-                      <div className="mt-2 text-center">
-                        <span className="text-[9px] font-medium text-primary">
-                          {t("settingsPage.account.pricing.currentPlan")}
-                        </span>
-                      </div>
-                    ) : usage?.isSubscribed && usage?.plan === "pro" && !usage?.isTrial ? (
-                      <Button
-                        onClick={() =>
-                          handleSwitchPlan(billingState.business ? "annual" : "monthly", "business")
-                        }
-                        disabled={previewLoading || usage.checkoutLoading}
-                        size="sm"
-                        className="mt-2 w-full h-6 text-[10px]"
-                      >
-                        {previewLoading ? (
-                          <Loader2 size={10} className="animate-spin" />
-                        ) : (
-                          t("settingsPage.account.pricing.upgrade")
-                        )}
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={() =>
-                          handleCheckout(billingState.business ? "annual" : "monthly", "business")
-                        }
-                        disabled={checkoutTier === "business"}
-                        size="sm"
-                        className="mt-2 w-full h-6 text-[10px]"
-                      >
-                        {checkoutTier === "business" ? (
-                          <Loader2 size={10} className="animate-spin" />
-                        ) : (
-                          t("settingsPage.account.pricing.business.cta")
-                        )}
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* Enterprise */}
-                  <div className="rounded-md border border-border/50 dark:border-border-subtle/60 bg-card/30 dark:bg-surface-2/30 p-2.5 flex flex-col">
-                    <p className="text-xs font-semibold text-foreground">
-                      {t("settingsPage.account.pricing.enterprise.name")}
-                    </p>
-                    <p className="text-[9px] text-muted-foreground mt-1">
-                      {t("settingsPage.account.pricing.enterprise.subtitle")}
-                    </p>
-                    <div className="flex items-baseline gap-0.5 mt-1">
-                      <span className="text-lg font-bold text-foreground">
-                        {t("settingsPage.account.pricing.enterprise.price")}
-                      </span>
-                    </div>
-                    <p className="text-[9px] text-muted-foreground/70 mt-1.5">
-                      {t("settingsPage.account.pricing.enterprise.includesPrefix")}
-                    </p>
-                    <ul className="space-y-0.5 mt-1 flex-1">
-                      {(
-                        t("settingsPage.account.pricing.enterprise.features", {
-                          returnObjects: true,
-                        }) as string[]
-                      ).map((feature, i) => (
-                        <li
-                          key={i}
-                          className="flex items-start gap-1 text-[10px] text-muted-foreground leading-tight"
-                        >
-                          <Check
-                            size={9}
-                            className="mt-[2px] text-purple-500 dark:text-purple-400 shrink-0"
-                          />
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-2 w-full h-6 text-[10px]"
-                      onClick={() =>
-                        window.electronAPI?.openExternal?.("https://voicelab.uz")
-                      }
-                    >
-                      <Mail size={10} />
-                      {t("settingsPage.account.pricing.enterprise.cta")}
-                    </Button>
-                  </div>
+                <Badge variant="success">
+                  {t("desktop.session.active", { defaultValue: "Signed in" })}
+                </Badge>
+              </div>
+            </SettingsPanelRow>
+            <SettingsPanelRow>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg bg-muted/45 p-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {t("desktop.session.device", { defaultValue: "Device" })}
+                  </p>
+                  <p className="mt-1 text-sm font-medium">
+                    {t("desktop.session.thisDevice", { defaultValue: "This VoiceLab Dictate desktop" })}
+                  </p>
                 </div>
+                <div className="rounded-lg bg-muted/45 p-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {t("desktop.session.status", { defaultValue: "Session" })}
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                    {t("desktop.session.protected", { defaultValue: "Active and protected" })}
+                  </p>
+                </div>
+              </div>
+            </SettingsPanelRow>
+          </SettingsPanel>
 
-                <Dialog
-                  open={!!switchPreview}
-                  onOpenChange={(open) => !open && setSwitchPreview(null)}
-                >
-                  <DialogContent className="sm:max-w-90">
-                    <DialogHeader>
-                      <DialogTitle>
-                        {t("settingsPage.account.pricing.confirmSwitch.title")}
-                      </DialogTitle>
-                      <DialogDescription>
-                        {switchPreview &&
-                          t("settingsPage.account.pricing.confirmSwitch.description", {
-                            plan: switchPreview.tier === "pro" ? "Pro" : "Business",
-                            interval:
-                              switchPreview.plan === "annual"
-                                ? t("settingsPage.account.pricing.confirmSwitch.yearly")
-                                : t("settingsPage.account.pricing.confirmSwitch.monthly"),
-                          })}
-                      </DialogDescription>
-                    </DialogHeader>
-                    {switchPreview && (
-                      <div className="rounded-lg border border-border/50 dark:border-border-subtle/60 overflow-hidden">
-                        <div className="flex justify-between items-center px-3 py-2.5 bg-muted/40 dark:bg-surface-2/50">
-                          <span className="text-xs text-muted-foreground">
-                            {switchPreview.immediateAmount < 0
-                              ? t("settingsPage.account.pricing.confirmSwitch.accountCredit")
-                              : t("settingsPage.account.pricing.confirmSwitch.chargeToday")}
-                          </span>
-                          <span
-                            className={cn(
-                              "text-sm font-semibold",
-                              switchPreview.immediateAmount < 0
-                                ? "text-emerald-600 dark:text-emerald-400"
-                                : "text-foreground"
-                            )}
-                          >
-                            {formatAmount(
-                              Math.abs(switchPreview.immediateAmount),
-                              switchPreview.currency
-                            )}
-                          </span>
-                        </div>
-                        <div className="divide-y divide-border/40">
-                          <div className="flex justify-between items-center px-3 py-2">
-                            <span className="text-xs text-muted-foreground">
-                              {t("settingsPage.account.pricing.confirmSwitch.newPrice")}
-                            </span>
-                            <span className="text-xs font-medium text-foreground">
-                              {formatAmount(switchPreview.newPriceAmount, switchPreview.currency)}/
-                              {switchPreview.newInterval === "year"
-                                ? t("settingsPage.account.pricing.confirmSwitch.yr")
-                                : t("settingsPage.account.pricing.confirmSwitch.mo")}
-                            </span>
-                          </div>
-                          {switchPreview.nextBillingDate && (
-                            <div className="flex justify-between items-center px-3 py-2">
-                              <span className="text-xs text-muted-foreground">
-                                {t("settingsPage.account.pricing.confirmSwitch.nextBilling")}
-                              </span>
-                              <span className="text-xs font-medium text-foreground">
-                                {new Date(switchPreview.nextBillingDate).toLocaleDateString()}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    <DialogFooter>
-                      <Button variant="outline" size="sm" onClick={() => setSwitchPreview(null)}>
-                        {t("settingsPage.account.pricing.confirmSwitch.cancel")}
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={confirmSwitchPlan}
-                        disabled={usage?.checkoutLoading}
-                      >
-                        {usage?.checkoutLoading ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          t("settingsPage.account.pricing.confirmSwitch.confirm")
-                        )}
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+          <UsageDisplay />
 
-                {isSignedIn ? (
-                  <>
-                    <SectionHeader title={t("settingsPage.account.planTitle")} />
-                    {!usage || !usage.hasLoaded ? (
-                      <SettingsPanel>
-                        <SettingsPanelRow>
-                          <div className="flex items-center justify-between">
-                            <Skeleton className="h-4 w-24" />
-                            <Skeleton className="h-5 w-16 rounded-full" />
-                          </div>
-                        </SettingsPanelRow>
-                        <SettingsPanelRow>
-                          <div className="space-y-2">
-                            <Skeleton className="h-3 w-48" />
-                            <Skeleton className="h-8 w-full rounded" />
-                          </div>
-                        </SettingsPanelRow>
-                      </SettingsPanel>
-                    ) : (
-                      <SettingsPanel>
-                        {usage.isPastDue && (
-                          <SettingsPanelRow>
-                            <Alert
-                              variant="warning"
-                              className="dark:bg-amber-950/50 dark:border-amber-800 dark:text-amber-200 dark:[&>svg]:text-amber-400"
-                            >
-                              <AlertTriangle className="h-4 w-4" />
-                              <AlertTitle>{t("settingsPage.account.pastDue.title")}</AlertTitle>
-                              <AlertDescription>
-                                {t("settingsPage.account.pastDue.description")}
-                              </AlertDescription>
-                            </Alert>
-                          </SettingsPanelRow>
-                        )}
-
-                        <SettingsPanelRow>
-                          <SettingsRow
-                            label={
-                              usage.isTrial
-                                ? t("settingsPage.account.planLabels.trial")
-                                : usage.isPastDue
-                                  ? t("settingsPage.account.planLabels.free")
-                                  : usage.isSubscribed
-                                    ? usage.plan === "business"
-                                      ? t("settingsPage.account.planLabels.business")
-                                      : t("settingsPage.account.planLabels.pro")
-                                    : t("settingsPage.account.planLabels.free")
-                            }
-                            description={
-                              usage.isTrial
-                                ? t("settingsPage.account.planDescriptions.trial", {
-                                    days: usage.trialDaysLeft,
-                                  })
-                                : usage.isPastDue
-                                  ? t("settingsPage.account.planDescriptions.pastDue", {
-                                      used: usage.wordsUsed.toLocaleString(i18n.language),
-                                      limit: usage.limit.toLocaleString(i18n.language),
-                                    })
-                                  : usage.isSubscribed
-                                    ? usage.currentPeriodEnd
-                                      ? t("settingsPage.account.planDescriptions.nextBilling", {
-                                          date: new Date(usage.currentPeriodEnd).toLocaleDateString(
-                                            i18n.language,
-                                            { month: "short", day: "numeric", year: "numeric" }
-                                          ),
-                                        })
-                                      : t("settingsPage.account.planDescriptions.unlimited")
-                                    : t("settingsPage.account.planDescriptions.freeUsage", {
-                                        used: usage.wordsUsed.toLocaleString(i18n.language),
-                                        limit: usage.limit.toLocaleString(i18n.language),
-                                      })
-                            }
-                          >
-                            {usage.isTrial ? (
-                              <Badge variant="info">{t("settingsPage.account.badges.trial")}</Badge>
-                            ) : usage.isPastDue ? (
-                              <Badge variant="destructive">
-                                {t("settingsPage.account.badges.pastDue")}
-                              </Badge>
-                            ) : usage.isSubscribed ? (
-                              <Badge variant="success">
-                                {usage.plan === "business"
-                                  ? t("settingsPage.account.badges.business")
-                                  : t("settingsPage.account.badges.pro")}
-                              </Badge>
-                            ) : usage.isOverLimit ? (
-                              <Badge variant="warning">
-                                {t("settingsPage.account.badges.limitReached")}
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline">
-                                {t("settingsPage.account.badges.free")}
-                              </Badge>
-                            )}
-                          </SettingsRow>
-                        </SettingsPanelRow>
-
-                        {!usage.isSubscribed && !usage.isTrial && (
-                          <SettingsPanelRow>
-                            <div className="space-y-1.5">
-                              <Progress
-                                value={
-                                  usage.limit > 0
-                                    ? Math.min(100, (usage.wordsUsed / usage.limit) * 100)
-                                    : 0
-                                }
-                                className={cn(
-                                  "h-1.5",
-                                  usage.isOverLimit
-                                    ? "[&>div]:bg-destructive"
-                                    : usage.isApproachingLimit
-                                      ? "[&>div]:bg-warning"
-                                      : "[&>div]:bg-primary"
-                                )}
-                              />
-                              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                <span className="tabular-nums">
-                                  {usage.wordsUsed.toLocaleString(i18n.language)} /{" "}
-                                  {usage.limit.toLocaleString(i18n.language)}
-                                </span>
-                                {usage.isApproachingLimit && (
-                                  <span className="text-warning">
-                                    {t("settingsPage.account.wordsRemaining", {
-                                      remaining: usage.wordsRemaining.toLocaleString(i18n.language),
-                                    })}
-                                  </span>
-                                )}
-                                {!usage.isApproachingLimit && !usage.isOverLimit && (
-                                  <span>{t("settingsPage.account.rollingWeeklyLimit")}</span>
-                                )}
-                              </div>
-                            </div>
-                          </SettingsPanelRow>
-                        )}
-
-                        <SettingsPanelRow>
-                          {usage.isPastDue ? (
-                            <Button
-                              onClick={async () => {
-                                setIsOpeningBilling(true);
-                                try {
-                                  const result = await usage.openBillingPortal();
-                                  if (!result.success) {
-                                    toast({
-                                      title: t("settingsPage.account.billing.couldNotOpenTitle"),
-                                      description: t(
-                                        "settingsPage.account.billing.couldNotOpenDescription"
-                                      ),
-                                      variant: "destructive",
-                                    });
-                                  }
-                                } finally {
-                                  setIsOpeningBilling(false);
-                                }
-                              }}
-                              disabled={isOpeningBilling}
-                              size="sm"
-                              className="w-full"
-                            >
-                              {isOpeningBilling ? (
-                                <>
-                                  <Loader2 size={14} className="animate-spin" />
-                                  {t("settingsPage.account.billing.opening")}
-                                </>
-                              ) : (
-                                t("settingsPage.account.billing.updatePaymentMethod")
-                              )}
-                            </Button>
-                          ) : usage.isSubscribed && !usage.isTrial ? (
-                            <Button
-                              onClick={async () => {
-                                const result = await usage.openBillingPortal();
-                                if (!result.success) {
-                                  toast({
-                                    title: t("settingsPage.account.billing.couldNotOpenTitle"),
-                                    description: t(
-                                      "settingsPage.account.billing.couldNotOpenDescription"
-                                    ),
-                                    variant: "destructive",
-                                  });
-                                }
-                              }}
-                              variant="outline"
-                              size="sm"
-                              className="w-full"
-                              disabled={usage.checkoutLoading}
-                            >
-                              {usage.checkoutLoading
-                                ? t("settingsPage.account.billing.opening")
-                                : t("settingsPage.account.billing.manageBilling")}
-                            </Button>
-                          ) : (
-                            <Button
-                              onClick={async () => {
-                                setCheckoutTier("plan-upgrade");
-                                const result = await usage.openCheckout({
-                                  plan: billingState.pro ? "annual" : "monthly",
-                                  tier: "pro",
-                                });
-                                setCheckoutTier(null);
-                                if (!result.success) {
-                                  toast({
-                                    title: t("settingsPage.account.checkout.couldNotOpenTitle"),
-                                    description: t(
-                                      "settingsPage.account.checkout.couldNotOpenDescription"
-                                    ),
-                                    variant: "destructive",
-                                  });
-                                }
-                              }}
-                              size="sm"
-                              className="w-full"
-                              disabled={checkoutTier === "plan-upgrade"}
-                            >
-                              {checkoutTier === "plan-upgrade"
-                                ? t("settingsPage.account.checkout.opening")
-                                : t("settingsPage.account.checkout.upgradeToPro")}
-                            </Button>
-                          )}
-                        </SettingsPanelRow>
-                      </SettingsPanel>
-                    )}
-                  </>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <SectionHeader title={t("settingsPage.account.pricing.title")} />
-                <SettingsPanel>
-                  <SettingsPanelRow>
-                    <div className="flex items-center justify-between">
-                      <Skeleton className="h-4 w-32" />
-                      <Skeleton className="h-5 w-16 rounded-full" />
-                    </div>
-                  </SettingsPanelRow>
-                </SettingsPanel>
-              </>
-            )}
-          </div>
-        );
+          <Button
+            onClick={handleSignOut}
+            variant="outline"
+            disabled={isSigningOut}
+            className="w-full"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            {isSigningOut
+              ? t("settingsPage.account.signOut.signingOut", { defaultValue: "Signing out…" })
+              : t("settingsPage.account.signOut.signOut", { defaultValue: "Sign out" })}
+          </Button>
+        </>
+      ) : (
+        <SettingsPanel>
+          <SettingsPanelRow>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-semibold">
+                  {t("desktop.session.signedOut", { defaultValue: "Not signed in" })}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t("desktop.session.signedOutDescription", {
+                    defaultValue: "Sign in to use VoiceLab Cloud and your AI Credit wallet.",
+                  })}
+                </p>
+              </div>
+              <Button onClick={startOnboarding} className="w-full">
+                <UserCircle className="mr-2 h-4 w-4" />
+                {t("auth.signIn", { defaultValue: "Sign in to VoiceLab" })}
+              </Button>
+            </div>
+          </SettingsPanelRow>
+        </SettingsPanel>
+      )}
+    </div>
+  );
 
       case "workspace":
         return WORKSPACES_ENABLED ? <WorkspaceSection initialSubTab={initialSubTab} /> : null;
@@ -3383,8 +2541,8 @@ EOF`,
                   <SettingsPanel className="mb-2">
                     <SettingsPanelRow>
                       <SettingsRow
-                        label={t("settingsPage.privacy.cloudBackup")}
-                        description={t("settingsPage.privacy.cloudBackupDescription")}
+                        label={t("desktop.privacy.notesSync")}
+                        description={t("desktop.privacy.notesSyncDescription")}
                       >
                         <Toggle
                           checked={cloudBackupEnabled}
@@ -3456,6 +2614,35 @@ EOF`,
                 </div>
               )}
 
+              {isSignedIn && (
+                <SettingsPanel className="mb-4">
+                  <SettingsPanelRow>
+                    <SettingsRow
+                      label={t("desktop.privacy.accountSync")}
+                      description={t("desktop.privacy.accountSyncDescription")}
+                    >
+                      <Badge variant="outline">{t("desktop.privacy.alwaysOn")}</Badge>
+                    </SettingsRow>
+                  </SettingsPanelRow>
+                  <SettingsPanelRow>
+                    <SettingsRow
+                      label={t("desktop.privacy.transcriptBackup")}
+                      description={t("desktop.privacy.transcriptBackupDescription")}
+                    >
+                      <Badge variant="outline">{t("desktop.privacy.notEnabled")}</Badge>
+                    </SettingsRow>
+                  </SettingsPanelRow>
+                  <SettingsPanelRow>
+                    <SettingsRow
+                      label={t("desktop.privacy.audioBackup")}
+                      description={t("desktop.privacy.audioBackupDescription")}
+                    >
+                      <Badge variant="outline">{t("desktop.privacy.notAvailable")}</Badge>
+                    </SettingsRow>
+                  </SettingsPanelRow>
+                </SettingsPanel>
+              )}
+
               <SettingsPanel>
                 <SettingsPanelRow>
                   <SettingsRow
@@ -3471,8 +2658,8 @@ EOF`,
             {/* Audio Retention */}
             <div className="border-t border-border/40 pt-6">
               <SectionHeader
-                title={t("settingsPage.privacy.audioRetention")}
-                description={t("settingsPage.privacy.audioRetentionDescription")}
+                title={t("desktop.privacy.localAudio")}
+                description={t("desktop.privacy.localAudioDescription")}
               />
 
               <SettingsPanel>
@@ -3649,9 +2836,102 @@ EOF`,
           </div>
         );
 
-      case "system":
-        return (
-          <div className="space-y-6">
+case "system":
+  return (
+    <div className="space-y-6">
+      <div>
+        <SectionHeader
+          title={t("desktop.settings.advancedSetup", { defaultValue: "Advanced transcription" })}
+          description={t("desktop.settings.advancedSetupDescription", {
+            defaultValue: "VoiceLab Cloud is the default. Local models and BYOK stay on this device.",
+          })}
+        />
+        <SettingsPanel>
+          <SettingsPanelRow>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setUseLocalWhisper(false);
+                  setCloudTranscriptionMode("openwhispr");
+                  setTranscriptionMode("openwhispr");
+                }}
+                className={cn(
+                  "rounded-xl border p-3 text-left transition-colors",
+                  !useLocalWhisper && cloudTranscriptionMode === "openwhispr"
+                    ? "border-[#e55347]/45 bg-[#e55347]/8"
+                    : "border-border hover:bg-muted/50"
+                )}
+              >
+                <Cloud className="mb-2 h-5 w-5 text-[#e55347]" />
+                <strong className="block text-sm">VoiceLab Cloud</strong>
+                <span className="mt-1 block text-xs text-muted-foreground">AI Credits</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUseLocalWhisper(true);
+                  setTranscriptionMode("local");
+                }}
+                className={cn(
+                  "rounded-xl border p-3 text-left transition-colors",
+                  useLocalWhisper
+                    ? "border-[#e55347]/45 bg-[#e55347]/8"
+                    : "border-border hover:bg-muted/50"
+                )}
+              >
+                <Cpu className="mb-2 h-5 w-5" />
+                <strong className="block text-sm">Local</strong>
+                <span className="mt-1 block text-xs text-muted-foreground">0 credits</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUseLocalWhisper(false);
+                  setCloudTranscriptionMode("byok");
+                  setTranscriptionMode("providers");
+                }}
+                className={cn(
+                  "rounded-xl border p-3 text-left transition-colors",
+                  !useLocalWhisper && cloudTranscriptionMode === "byok"
+                    ? "border-[#e55347]/45 bg-[#e55347]/8"
+                    : "border-border hover:bg-muted/50"
+                )}
+              >
+                <Key className="mb-2 h-5 w-5" />
+                <strong className="block text-sm">BYOK</strong>
+                <span className="mt-1 block text-xs text-muted-foreground">Your provider</span>
+              </button>
+            </div>
+          </SettingsPanelRow>
+          <SettingsPanelRow>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-medium">Personal provider key</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Stored only on this device. VoiceLab AI Credits are not used in BYOK mode.
+                </p>
+              </div>
+              <ApiKeyInput
+                apiKey={aishaApiKey}
+                setApiKey={(key) => void saveAishaApiKey(key)}
+                label=""
+                helpText="Use a key issued by your provider."
+                placeholder="Paste API key"
+              />
+              {aishaKeyBusy && (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Checking key…
+                </p>
+              )}
+              {aishaKeyStatus && !aishaKeyBusy && (
+                <p className="text-sm text-muted-foreground">{aishaKeyStatus}</p>
+              )}
+            </div>
+          </SettingsPanelRow>
+        </SettingsPanel>
+      </div>
             {/* Software Updates */}
             <div>
               <SectionHeader title={t("settingsPage.general.updates.title")} />

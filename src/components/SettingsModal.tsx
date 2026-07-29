@@ -1,19 +1,14 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Sliders,
   Mic,
-  Brain,
   UserCircle,
   Wrench,
   Keyboard,
-  CreditCard,
   Shield,
-  Users,
 } from "lucide-react";
 import SidebarModal, { type SidebarItem } from "./ui/SidebarModal";
 import SettingsPage, { SettingsSectionType } from "./SettingsPage";
-import { WORKSPACES_ENABLED } from "../lib/features";
 
 export type { SettingsSectionType };
 
@@ -33,7 +28,19 @@ const SECTION_ALIASES: Record<string, SettingsSectionType> = {
   privacy: "privacyData",
   permissions: "privacyData",
   developer: "system",
+  plansBilling: "account",
+  general: "speechToText",
+  llms: "system",
+  workspace: "account",
 };
+
+const CANONICAL_SECTIONS = new Set<SettingsSectionType>([
+  "account",
+  "speechToText",
+  "hotkeys",
+  "privacyData",
+  "system",
+]);
 
 const LEGACY_SUB_TAB: Record<string, string> = {
   transcription: "dictation",
@@ -58,64 +65,48 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
     () => [
       {
         id: "account",
-        label: t("settingsModal.sections.account.label"),
+        label: t("desktop.settings.account", { defaultValue: "Account & Credits" }),
         icon: UserCircle,
-        description: t("settingsModal.sections.account.description"),
-        group: t("settingsModal.groups.account"),
-      },
-      {
-        id: "plansBilling",
-        label: t("settingsModal.sections.plansBilling.label"),
-        icon: CreditCard,
-        description: t("settingsModal.sections.plansBilling.description"),
-        group: t("settingsModal.groups.account"),
-      },
-      ...(WORKSPACES_ENABLED
-        ? [
-            {
-              id: "workspace" as const,
-              label: t("settingsModal.sections.workspace.label"),
-              icon: Users,
-              description: t("settingsModal.sections.workspace.description"),
-              group: t("settingsModal.groups.account"),
-            },
-          ]
-        : []),
-      {
-        id: "general",
-        label: t("settingsModal.sections.general.label"),
-        icon: Sliders,
-        description: t("settingsModal.sections.general.description"),
-        group: t("settingsModal.groups.app"),
-      },
-      {
-        id: "hotkeys",
-        label: t("settingsModal.sections.hotkeys.label"),
-        icon: Keyboard,
-        description: t("settingsModal.sections.hotkeys.description"),
-        group: t("settingsModal.groups.app"),
+        description: t("desktop.settings.accountDescription", {
+          defaultValue: "Profile, session and AI Credit wallet",
+        }),
+        group: t("settingsModal.groups.account", { defaultValue: "VoiceLab" }),
       },
       {
         id: "speechToText",
-        label: t("settingsModal.sections.speechToText.label"),
+        label: t("desktop.settings.dictation", { defaultValue: "Dictation" }),
         icon: Mic,
-        description: t("settingsModal.sections.speechToText.description"),
-        group: t("settingsModal.groups.aiModels"),
+        description: t("desktop.settings.dictationDescription", {
+          defaultValue: "Language, microphone and paste behavior",
+        }),
+        group: t("settingsModal.groups.app", { defaultValue: "Dictate" }),
       },
-      // LLM BYOK hidden — VoiceLab Desktop is Aisha STT only for now.
+      {
+        id: "hotkeys",
+        label: t("desktop.settings.shortcuts", { defaultValue: "Shortcuts" }),
+        icon: Keyboard,
+        description: t("desktop.settings.shortcutsDescription", {
+          defaultValue: "Dictation and Aisha shortcuts",
+        }),
+        group: t("settingsModal.groups.app", { defaultValue: "Dictate" }),
+      },
       {
         id: "privacyData",
-        label: t("settingsModal.sections.privacyData.label"),
+        label: t("desktop.settings.privacy", { defaultValue: "Data & Privacy" }),
         icon: Shield,
-        description: t("settingsModal.sections.privacyData.description"),
-        group: t("settingsModal.groups.system"),
+        description: t("desktop.settings.privacyDescription", {
+          defaultValue: "Cloud backup, local audio and retention",
+        }),
+        group: t("settingsModal.groups.system", { defaultValue: "System" }),
       },
       {
         id: "system",
-        label: t("settingsModal.sections.system.label"),
+        label: t("desktop.settings.advanced", { defaultValue: "Advanced" }),
         icon: Wrench,
-        description: t("settingsModal.sections.system.description"),
-        group: t("settingsModal.groups.system"),
+        description: t("desktop.settings.advancedDescription", {
+          defaultValue: "Local models, BYOK and developer tools",
+        }),
+        group: t("settingsModal.groups.system", { defaultValue: "System" }),
       },
     ],
     [t]
@@ -124,10 +115,7 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
   const resolveSection = (section: string | undefined): SettingsSectionType => {
     if (!section) return "account";
     const resolved = (SECTION_ALIASES[section] ?? section) as SettingsSectionType;
-    if (resolved === "workspace" && !WORKSPACES_ENABLED) return "account";
-    // LLM section removed from sidebar — map deep links to speech
-    if (resolved === "llms") return "speechToText";
-    return resolved;
+    return CANONICAL_SECTIONS.has(resolved) ? resolved : "account";
   };
 
   const [activeSection, setActiveSection] = React.useState<SettingsSectionType>(() =>
@@ -136,16 +124,15 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
   const [initialSubTab, setInitialSubTab] = useState<string | undefined>(() =>
     initialSection ? LEGACY_SUB_TAB[initialSection] : undefined
   );
-  const [prevOpen, setPrevOpen] = useState(open);
-
-  if (open && !prevOpen && initialSection) {
-    setPrevOpen(open);
+  useEffect(() => {
+    if (!open) {
+      setInitialSubTab(undefined);
+      return;
+    }
+    if (!initialSection) return;
     setActiveSection(resolveSection(initialSection));
     setInitialSubTab(LEGACY_SUB_TAB[initialSection]);
-  } else if (open !== prevOpen) {
-    setPrevOpen(open);
-    if (!open) setInitialSubTab(undefined);
-  }
+  }, [initialSection, open]);
 
   const handleSectionChange = (section: SettingsSectionType) => {
     setActiveSection(section);

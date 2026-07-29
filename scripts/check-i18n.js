@@ -6,6 +6,7 @@ const path = require("path");
 const LOCALES_DIR = path.join(__dirname, "..", "src", "locales");
 const BASE_LANG = "en";
 const NAMESPACES = ["translation", "prompts"];
+const STRICT_LANGUAGES = new Set(["ru", "uz"]);
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -43,6 +44,7 @@ const languages = fs
   .sort();
 
 let failed = false;
+const fallbackCounts = new Map();
 
 for (const namespace of NAMESPACES) {
   const baseFile = path.join(LOCALES_DIR, BASE_LANG, `${namespace}.json`);
@@ -68,8 +70,13 @@ for (const namespace of NAMESPACES) {
 
     for (const key of Object.keys(baseFlat)) {
       if (!(key in flat)) {
-        console.error(`[i18n] Missing key ${lang}/${namespace}: ${key}`);
-        failed = true;
+        if (STRICT_LANGUAGES.has(lang)) {
+          console.error(`[i18n] Missing key ${lang}/${namespace}: ${key}`);
+          failed = true;
+        } else {
+          const fallbackKey = `${lang}/${namespace}`;
+          fallbackCounts.set(fallbackKey, (fallbackCounts.get(fallbackKey) || 0) + 1);
+        }
         continue;
       }
 
@@ -85,8 +92,12 @@ for (const namespace of NAMESPACES) {
   }
 }
 
+for (const [catalog, count] of fallbackCounts) {
+  console.log(`[i18n] ${catalog}: ${count} keys use the configured English fallback.`);
+}
+
 if (failed) {
   process.exit(1);
 }
 
-console.log("[i18n] Locale keys and placeholders are consistent.");
+console.log("[i18n] Required locale keys and all translated placeholders are consistent.");

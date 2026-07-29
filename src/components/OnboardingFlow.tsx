@@ -1,69 +1,31 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Card, CardContent } from "./ui/card";
+import { CheckCircle2, Command, HardDrive, KeyRound, Languages, LogIn, Sparkles } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
-import {
-  ChevronRight,
-  ChevronLeft,
-  Check,
-  Cloud,
-  Flag,
-  Settings,
-  Shield,
-  Command,
-  Sparkles,
-  UserCircle,
-  Users,
-  KeyRound,
-} from "lucide-react";
-import TitleBar from "./TitleBar";
 import WindowControls from "./WindowControls";
-import PermissionsSection from "./ui/PermissionsSection";
-import SupportDropdown from "./ui/SupportDropdown";
 import StepProgress from "./ui/StepProgress";
-import { AlertDialog, ConfirmDialog } from "./ui/dialog";
-import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
-import { useLocalStorage } from "../hooks/useLocalStorage";
-import { useDialogs } from "../hooks/useDialogs";
+import PermissionsSection from "./ui/PermissionsSection";
+import LanguageSelector, { getDesktopLanguageOptions } from "./ui/LanguageSelector";
+import AuthenticationStep from "./AuthenticationStep";
+import { HotkeyInput } from "./ui/HotkeyInput";
 import { usePermissions } from "../hooks/usePermissions";
-import { useClipboard } from "../hooks/useClipboard";
 import { useSystemAudioPermission } from "../hooks/useSystemAudioPermission";
-import { useSettings } from "../hooks/useSettings";
+import { useHotkeyRegistration } from "../hooks/useHotkeyRegistration";
 import { useSettingsStore } from "../stores/settingsStore";
-import LanguageSelector from "./ui/LanguageSelector";
-import { setAgentName as saveAgentName } from "../utils/agentName";
+import { useUsage } from "../hooks/useUsage";
+import type { DesktopLanguageCode, DesktopLanguageProvider } from "../config/desktopLanguages";
 import logoIcon from "../assets/icon.png";
 import {
-  formatHotkeyLabel,
-  formatHotkeyListLabel,
-  getDefaultHotkey,
-  isGlobeLikeHotkey,
-  parseHotkeyList,
-  serializeHotkeyList,
-} from "../utils/hotkeys";
-import { HotkeyInput } from "./ui/HotkeyInput";
-import { useHotkeyRegistration } from "../hooks/useHotkeyRegistration";
-import { useHotkeyModeInfo } from "../hooks/useHotkeyModeInfo";
-import { getValidationMessage } from "../utils/hotkeyValidator";
-import { validateHotkeyForSlot } from "../utils/hotkeyValidation";
-import { getCachedPlatform, getPlatform } from "../utils/platform";
-import logger from "../utils/logger";
-import { ActivationModeSelector } from "./ui/ActivationModeSelector";
-import { Badge } from "./ui/badge";
-import { ACCESSIBILITY_SKIPPED_KEY, areRequiredPermissionsMet } from "../utils/permissions";
-import UseCaseStep from "./onboarding/UseCaseStep";
-import MeetingSetupStep from "./onboarding/MeetingSetupStep";
-import FinishStep from "./onboarding/FinishStep";
-import AishaKeyStep from "./onboarding/AishaKeyStep";
-import { USE_CASE_IDS } from "./onboarding/useCases";
-import { cloudPost } from "../services/cloudApi";
+  ONBOARDING_STEP_KEY,
+  ONBOARDING_STEPS,
+  clearOnboardingProgress,
+  readOnboardingStep,
+  type OnboardingStep,
+} from "../constants/onboarding";
 
-// Highest possible step index across flow variants (skip-auth with aisha + meeting).
-const MAX_STEP_INDEX = 8;
-
-// Steps whose primary action is optional — the user can advance without it.
-const SKIPPABLE_STEPS = new Set(["usecase", "voiceAgent", "meeting"]);
+const MODE_KEY = "voicelab:onboarding-mode:v1";
+type SetupMode = "account" | "local" | "api-key";
 
 interface OnboardingFlowProps {
   onComplete: (options?: { openSettings?: boolean }) => void;
@@ -71,1042 +33,161 @@ interface OnboardingFlowProps {
 
 export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const { t } = useTranslation();
-  // Account auth removed for now — cloud STT uses AISHA_API_KEY.
-  const isSignedIn = false;
-  const skipAuth = true;
-
-  const [currentStep, setCurrentStep, removeCurrentStep] = useLocalStorage(
-    "onboardingCurrentStep",
-    0,
-    {
-      serialize: String,
-      deserialize: (value) => {
-        const parsed = parseInt(value, 10);
-        // Clamp to valid range to handle users upgrading from older versions
-        // with different step counts. The steps array is dynamic, so a second
-        // effect below clamps against the actual flow length.
-        if (isNaN(parsed) || parsed < 0) return 0;
-        return Math.min(parsed, MAX_STEP_INDEX);
-      },
-    }
-  );
-  const [accessibilitySkipped, setAccessibilitySkipped] = useLocalStorage(
-    ACCESSIBILITY_SKIPPED_KEY,
-    false,
-    {
-      serialize: String,
-      deserialize: (value) => value === "true",
-    }
-  );
-
-  const {
-    useLocalWhisper,
-    whisperModel,
-    localTranscriptionProvider,
-    parakeetModel,
-    cloudTranscriptionProvider,
-    cloudTranscriptionModel,
-    cloudTranscriptionMode,
-    cloudTranscriptionBaseUrl,
-    openaiApiKey,
-    groqApiKey,
-    xaiApiKey,
-    mistralApiKey,
-    tinfoilApiKey,
-    dictationKey,
-    meetingKey,
-    setMeetingKey,
-    voiceAgentKey,
-    setVoiceAgentKey,
-    activationMode,
-    setActivationMode,
-    setDictationKey,
-    setUseLocalWhisper,
-    updateTranscriptionSettings,
-    preferredLanguage,
-    onboardingUseCases,
-    setOnboardingUseCases,
-    onboardingUseCaseNote,
-    setOnboardingUseCaseNote,
-  } = useSettings();
-
-  const cortiClientId = useSettingsStore((s) => s.cortiClientId);
-  const cortiClientSecret = useSettingsStore((s) => s.cortiClientSecret);
-
-  // Onboarding edits only the primary dictation hotkey; extra bindings are
-  // preserved via withExtraDictationHotkeys.
-  const [hotkey, setHotkey] = useState(
-    () => parseHotkeyList(dictationKey)[0] || getDefaultHotkey()
-  );
-  const [agentName, setAgentName] = useState("VoiceLab");
-  const [isModelDownloaded, setIsModelDownloaded] = useState(false);
-  const { isUsingNativeShortcut, isUsingHyprland, hyprlandConfigStatus, supportsPushToTalk } =
-    useHotkeyModeInfo("onboarding");
-  const readableHotkey = formatHotkeyLabel(hotkey);
-  const readableVoiceAgentKey = formatHotkeyListLabel(voiceAgentKey);
-  const { alertDialog, confirmDialog, showAlertDialog, hideAlertDialog, hideConfirmDialog } =
-    useDialogs();
-  const [connectivityDialog, setConnectivityDialog] = useState<{
-    open: boolean;
-    cause: string;
-  }>({ open: false, cause: "" });
-
-  const autoRegisterInFlightRef = useRef(false);
-  const hotkeyStepInitializedRef = useRef(false);
-
-  // Replace the primary dictation hotkey while keeping additional bindings intact.
-  const withExtraDictationHotkeys = useCallback(
-    (primary: string) => serializeHotkeyList([primary, ...parseHotkeyList(dictationKey).slice(1)]),
-    [dictationKey]
-  );
-
-  const { registerHotkey, isRegistering: isHotkeyRegistering } = useHotkeyRegistration({
-    onSuccess: (registeredHotkey) => {
-      setHotkey(parseHotkeyList(registeredHotkey)[0] || registeredHotkey);
-      setDictationKey(registeredHotkey);
-    },
-    showSuccessToast: false,
-    showErrorToast: false,
+  const [step, setStep] = useState<OnboardingStep>(readOnboardingStep);
+  const [mode, setMode] = useState<SetupMode>(() => {
+    const saved = localStorage.getItem(MODE_KEY);
+    return saved === "account" || saved === "local" || saved === "api-key" ? saved : "account";
   });
-
-  const validateHotkeyForInput = useCallback(
-    (hotkey: string) => getValidationMessage(hotkey, getPlatform()),
-    []
-  );
-
-  const validateVoiceAgentHotkey = useCallback(
-    (newHotkey: string) =>
-      validateHotkeyForSlot(
-        newHotkey,
-        { "settingsPage.general.hotkey.title": withExtraDictationHotkeys(hotkey) },
-        t
-      ),
-    [hotkey, withExtraDictationHotkeys, t]
-  );
-
-  const permissionsHook = usePermissions(showAlertDialog);
-  useClipboard(showAlertDialog); // Initialize clipboard hook for permission checks
-
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const preferredLanguage = useSettingsStore((state) => state.preferredLanguage) as DesktopLanguageCode;
+  const [hotkey, setHotkey] = useState(() => localStorage.getItem("hotkey") || "CommandOrControl+Shift+Space");
+  const [testText, setTestText] = useState("");
+  const permissions = usePermissions();
   const systemAudio = useSystemAudioPermission();
+  const { registerHotkey, isRegistering } = useHotkeyRegistration();
+  const usage = useUsage();
 
-  useEffect(() => {
-    if (permissionsHook.accessibilityPermissionGranted && accessibilitySkipped) {
-      setAccessibilitySkipped(false);
-    }
-  }, [
-    permissionsHook.accessibilityPermissionGranted,
-    accessibilitySkipped,
-    setAccessibilitySkipped,
-  ]);
+  const stepIndex = ONBOARDING_STEPS.indexOf(step);
+  const provider: DesktopLanguageProvider = mode === "account" ? "aisha" : "whisper";
+  const cloudCapabilities =
+    usage?.hasLoaded && !usage.isLoading && !usage.error
+      ? {
+          supportedLanguages: usage.supportedLanguages,
+          autoDetectionSupported: usage.autoDetectionSupported,
+        }
+      : undefined;
+  const languageOptions = useMemo(
+    () => getDesktopLanguageOptions(provider, mode === "account" ? cloudCapabilities : undefined),
+    [cloudCapabilities, mode, provider]
+  );
+  const selectedSupported = languageOptions.some((item) => item.value === preferredLanguage && !item.disabled);
 
-  // Dynamic flow: signed-in users get permissions folded into "setup".
-  // The meeting step is temporarily hidden for all users while it gets more
-  // design polish — the step's render code and MeetingSetupStep stay in place.
-  // Restore by reinstating the relevance check:
-  //   systemAudio.granted || onboardingUseCases.includes(USE_CASE_IDS.meetings)
-  const showMeetingStep = false;
-
-  const [aishaApiKey, setAishaApiKey] = useState("");
-  const [aishaKeyError, setAishaKeyError] = useState<string | null>(null);
-  const [aishaKeyValidating, setAishaKeyValidating] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    void window.electronAPI?.getAishaApiKey?.().then((key) => {
-      if (!cancelled && typeof key === "string" && key.trim()) {
-        setAishaApiKey(key.trim());
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
+  const go = useCallback((next: OnboardingStep) => {
+    localStorage.setItem(ONBOARDING_STEP_KEY, next);
+    setStep(next);
   }, []);
 
-  const steps = useMemo(() => {
-    const list = [
-      { id: "welcome", title: t("onboarding.steps.welcome"), icon: UserCircle },
-      { id: "aishaKey", title: t("onboarding.steps.aishaKey"), icon: KeyRound },
-      { id: "usecase", title: t("onboarding.steps.useCase"), icon: Sparkles },
-      { id: "setup", title: t("onboarding.steps.setup"), icon: Settings },
-    ];
-    if (!(isSignedIn && !skipAuth)) {
-      list.push({ id: "permissions", title: t("onboarding.steps.permissions"), icon: Shield });
-    }
-    list.push({ id: "activation", title: t("onboarding.steps.activation"), icon: Command });
-    // Hidden for continue-without-account users: they have no LLM, so the agent can't run.
-    if (isSignedIn && !skipAuth) {
-      list.push({ id: "voiceAgent", title: t("onboarding.steps.voiceAgent"), icon: Sparkles });
-    }
-    if (showMeetingStep) {
-      list.push({ id: "meeting", title: t("onboarding.steps.meeting"), icon: Users });
-    }
-    list.push({ id: "finish", title: t("onboarding.steps.finish"), icon: Flag });
-    return list;
-  }, [isSignedIn, skipAuth, showMeetingStep, t]);
-
-  const currentStepId = steps[currentStep]?.id;
-
-  // The steps array can shrink (e.g. meeting step removed after deselecting
-  // meetings on the way back) — keep the index in range.
-  useEffect(() => {
-    if (currentStep > steps.length - 1) {
-      setCurrentStep(steps.length - 1);
-    }
-  }, [currentStep, steps.length, setCurrentStep]);
-
-  // Only show progress for signed-up users after account creation step
-  const showProgress = currentStep > 0;
-
-  useEffect(() => {
-    if (isUsingNativeShortcut && !supportsPushToTalk) {
-      setActivationMode("tap");
-    }
-  }, [isUsingNativeShortcut, supportsPushToTalk, setActivationMode]);
-
-  // Update wizard UI when backend falls back to a different hotkey.
-  // Only update local state — don't persist to localStorage so the app
-  // retries the preferred key on next launch.
-  useEffect(() => {
-    const unsubscribe = window.electronAPI?.onHotkeyFallbackUsed?.((data: { fallback: string }) => {
-      if (data?.fallback) {
-        setHotkey(data.fallback);
-      }
-    });
-    return () => unsubscribe?.();
-  }, []);
-
-  useEffect(() => {
-    const modelToCheck = localTranscriptionProvider === "nvidia" ? parakeetModel : whisperModel;
-    if (!useLocalWhisper || !modelToCheck) {
-      setIsModelDownloaded(false);
-      return;
-    }
-
-    const checkStatus = async () => {
-      try {
-        const result =
-          localTranscriptionProvider === "nvidia"
-            ? await window.electronAPI?.checkParakeetModelStatus(modelToCheck)
-            : await window.electronAPI?.checkModelStatus(modelToCheck);
-        setIsModelDownloaded(result?.downloaded ?? false);
-      } catch (error) {
-        logger.error("Failed to check model status", { error }, "onboarding");
-        setIsModelDownloaded(false);
-      }
-    };
-
-    checkStatus();
-  }, [useLocalWhisper, whisperModel, parakeetModel, localTranscriptionProvider]);
-
-  // Auto-register default hotkey when entering the activation step
-  const activationStepIndex = steps.findIndex((step) => step.id === "activation");
-
-  useEffect(() => {
-    if (currentStep !== activationStepIndex) {
-      // Reset initialization flag when leaving activation step
-      hotkeyStepInitializedRef.current = false;
-      return;
-    }
-
-    // Prevent double-invocation from React.StrictMode
-    if (autoRegisterInFlightRef.current || hotkeyStepInitializedRef.current) {
-      return;
-    }
-
-    const autoRegisterDefaultHotkey = async () => {
-      autoRegisterInFlightRef.current = true;
-      hotkeyStepInitializedRef.current = true;
-
-      try {
-        // Check if backend already registered a hotkey (e.g., KDE D-Bus fallback)
-        const backendKey = localStorage.getItem("dictationKey");
-        if (backendKey && backendKey.trim() !== "") {
-          setHotkey(parseHotkeyList(backendKey)[0] || backendKey);
-          setDictationKey(backendKey);
-          return;
-        }
-
-        // Get platform-appropriate default hotkey from backend (accounts for
-        // X11 modifier-only and GNOME gsettings limitations)
-        const defaultHotkey =
-          (await window.electronAPI?.getEffectiveDefaultHotkey?.()) || getDefaultHotkey();
-        const platform = window.electronAPI?.getPlatform?.() ?? "darwin";
-
-        // Only auto-register if no hotkey is currently set
-        const shouldAutoRegister =
-          !hotkey || hotkey.trim() === "" || (platform !== "darwin" && isGlobeLikeHotkey(hotkey));
-
-        if (shouldAutoRegister) {
-          // Try to register the default hotkey silently
-          const success = await registerHotkey(defaultHotkey);
-          if (success) {
-            setHotkey(defaultHotkey);
-          }
-        }
-      } catch (error) {
-        logger.error("Failed to auto-register default hotkey", { error }, "onboarding");
-      } finally {
-        autoRegisterInFlightRef.current = false;
-      }
-    };
-
-    void autoRegisterDefaultHotkey();
-  }, [currentStep, hotkey, registerHotkey, activationStepIndex, setDictationKey]);
-
-  const ensureHotkeyRegistered = useCallback(async () => {
-    if (!window.electronAPI?.updateHotkey) {
-      return true;
-    }
-
-    try {
-      const result = await window.electronAPI.updateHotkey(withExtraDictationHotkeys(hotkey));
-      if (result && !result.success) {
-        showAlertDialog({
-          title: t("onboarding.hotkey.couldNotRegisterTitle"),
-          description: result.message || t("onboarding.hotkey.couldNotRegisterDescription"),
-        });
-        return false;
-      }
-      return true;
-    } catch (error) {
-      logger.error("Failed to register onboarding hotkey", { error }, "onboarding");
-      showAlertDialog({
-        title: t("onboarding.hotkey.couldNotRegisterTitle"),
-        description: t("onboarding.hotkey.couldNotRegisterDescription"),
-      });
-      return false;
-    }
-  }, [hotkey, withExtraDictationHotkeys, showAlertDialog, t]);
-
-  const saveSettings = useCallback(async () => {
-    const hotkeyRegistered = await ensureHotkeyRegistered();
-    if (!hotkeyRegistered) {
-      return false;
-    }
-    setDictationKey(withExtraDictationHotkeys(hotkey));
-    saveAgentName(agentName);
-
-    const skippedAuth = skipAuth;
-    localStorage.setItem("authenticationSkipped", skippedAuth.toString());
-    localStorage.setItem("onboardingCompleted", "true");
-    localStorage.setItem("skipAuth", skippedAuth.toString());
-
-    // Fresh install: write the bundle-migration sentinel so the
-    // PostMigrationOnboarding modal doesn't fire on next launch.
-    // Migrating users skip onboarding entirely (their flag carries over
-    // via productName-keyed userData), so they never reach this code.
-    void window.electronAPI?.markBundleMigrated?.();
-
-    // Aisha-only STT — lock dictation/meeting/upload to VoiceLab Cloud.
-    useSettingsStore.getState().setCloudTranscriptionForAllScopes({
-      useLocalWhisper: false,
-      cloudTranscriptionMode: "openwhispr",
-    });
-
-    try {
-      await window.electronAPI?.saveAllKeysToEnv?.();
-    } catch (error) {
-      logger.error("Failed to persist API keys", { error }, "onboarding");
-    }
-
-    return true;
-  }, [
-    hotkey,
-    withExtraDictationHotkeys,
-    agentName,
-    setDictationKey,
-    ensureHotkeyRegistered,
-    isSignedIn,
-    skipAuth,
-  ]);
-
-  const [isFinishing, setIsFinishing] = useState(false);
-  const openSettingsOnCompleteRef = useRef(false);
-
-  const nextStep = useCallback(async () => {
-    if (currentStep >= steps.length - 1) {
-      return;
-    }
-
-    const currentStepId = steps[currentStep]?.id;
-
-    if (currentStepId === "aishaKey") {
-      const trimmed = aishaApiKey.trim();
-      if (!trimmed) {
-        setAishaKeyError(t("onboarding.aishaKey.errors.required"));
-        return;
-      }
-      setAishaKeyValidating(true);
-      setAishaKeyError(null);
-      try {
-        await window.electronAPI?.saveAishaApiKey?.(trimmed);
-        const result = await window.electronAPI?.validateAishaApiKey?.(trimmed);
-        if (!result?.ok && !result?.keyAccepted) {
-          setAishaKeyError(result?.message || t("onboarding.aishaKey.errors.invalid"));
-          return;
-        }
-        if (result?.code === "BILLING") {
-          // Key is valid but balance is low — allow continue with a soft notice.
-          setAishaKeyError(null);
-        }
-      } catch (error) {
-        logger.error("Failed to save/validate Aisha API key", { error }, "onboarding");
-        setAishaKeyError(t("onboarding.aishaKey.errors.saveFailed"));
-        return;
-      } finally {
-        setAishaKeyValidating(false);
-      }
-    }
-
-    const isPermissionsGate =
-      currentStepId === "permissions" || (currentStepId === "setup" && isSignedIn && !skipAuth);
-    if (
-      getPlatform() === "darwin" &&
-      isPermissionsGate &&
-      !permissionsHook.accessibilityPermissionGranted
-    ) {
-      setAccessibilitySkipped(true);
-    }
-
-    // Fire-and-forget intent sync — must never block onboarding.
-    if (currentStepId === "usecase" && isSignedIn && !skipAuth) {
-      cloudPost("/api/onboarding-intent", {
-        useCases: onboardingUseCases,
-        note: onboardingUseCaseNote || undefined,
-      }).catch((error) => {
-        logger.warn("Failed to sync onboarding intent", { error }, "onboarding");
-      });
-    }
-
-    const newStep = currentStep + 1;
-    setCurrentStep(newStep);
-
-    // Show dictation panel when entering activation step
-    if (newStep === activationStepIndex) {
-      if (window.electronAPI?.showDictationPanel) {
-        window.electronAPI.showDictationPanel();
-      }
-    }
-  }, [
-    currentStep,
-    setCurrentStep,
-    steps,
-    activationStepIndex,
-    isSignedIn,
-    skipAuth,
-    onboardingUseCases,
-    onboardingUseCaseNote,
-    permissionsHook.accessibilityPermissionGranted,
-    setAccessibilitySkipped,
-    aishaApiKey,
-    t,
-  ]);
-
-  const prevStep = useCallback(() => {
-    if (currentStep > 0) {
-      const newStep = currentStep - 1;
-      setCurrentStep(newStep);
-    }
-  }, [currentStep, setCurrentStep]);
-
-  const finishOnboarding = useCallback(
-    async (openSettings = false) => {
-      openSettingsOnCompleteRef.current = openSettings;
-      setIsFinishing(true);
-      try {
-        const saved = await saveSettings();
-        if (!saved) {
-          return;
-        }
-
-        const cloudHealthCheck = window.electronAPI?.cloudHealthCheck;
-        if (!cloudHealthCheck) {
-          removeCurrentStep();
-          onComplete({ openSettings });
-          return;
-        }
-
-        let result;
-        try {
-          result = await cloudHealthCheck();
-        } catch (error) {
-          logger.error("Cloud health check threw", { error }, "onboarding");
-          result = { ok: false } as Awaited<ReturnType<typeof cloudHealthCheck>>;
-        }
-
-        // Any HTTP response (even 4xx) proves the network reached the server.
-        // Only a transport-level failure with no status warrants the warning.
-        if (result.ok || result.status !== undefined) {
-          removeCurrentStep();
-          onComplete({ openSettings });
-          return;
-        }
-
-        setConnectivityDialog({
-          open: true,
-          cause: t(result.messageKey || "streaming.errors.cloudUnreachable.generic"),
-        });
-      } finally {
-        setIsFinishing(false);
-      }
-    },
-    [saveSettings, removeCurrentStep, onComplete, t]
-  );
-
-  const resolveConnectivity = useCallback(
-    (_useLocal: boolean) => {
-      // Aisha-only — continue without switching to local STT.
-      setConnectivityDialog({ open: false, cause: "" });
-      removeCurrentStep();
-      onComplete({ openSettings: openSettingsOnCompleteRef.current });
-    },
-    [removeCurrentStep, onComplete]
-  );
-
-  const renderStep = () => {
-    switch (currentStepId) {
-      case "welcome":
-        return (
-          <div className="space-y-6 text-center">
-            <img
-              src={logoIcon}
-              alt="VoiceLab"
-              className="w-16 h-16 mx-auto rounded-2xl shadow-sm"
-            />
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold text-foreground">
-                {t("auth.welcomeTitle", { defaultValue: "VoiceLab-ga xush kelibsiz" })}
-              </h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {t("onboarding.aishaKey.description")}
-              </p>
-            </div>
-            <Button className="w-full h-10" onClick={() => nextStep()}>
-              {t("common.continue", { defaultValue: "Davom etish" })}
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-        );
-
-      case "aishaKey":
-        return (
-          <AishaKeyStep
-            apiKey={aishaApiKey}
-            onApiKeyChange={(key) => {
-              setAishaApiKey(key);
-              setAishaKeyError(null);
-            }}
-            error={aishaKeyError}
-            validating={aishaKeyValidating}
-          />
-        );
-
-      case "usecase":
-        return (
-          <UseCaseStep
-            useCases={onboardingUseCases}
-            onUseCasesChange={setOnboardingUseCases}
-            note={onboardingUseCaseNote}
-            onNoteChange={setOnboardingUseCaseNote}
-          />
-        );
-
-      case "setup": // Choose Mode & Configure (merged with permissions for signed-in users)
-        if (isSignedIn && !skipAuth) {
-          return (
-            <div className="space-y-6">
-              <div className="text-center">
-                <div className="w-14 h-14 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Check className="w-7 h-7 text-green-500" />
-                </div>
-                <h2 className="text-2xl font-semibold text-foreground mb-2">
-                  {t("onboarding.setup.title")}
-                </h2>
-                <p className="text-muted-foreground">{t("onboarding.setup.description")}</p>
-              </div>
-
-              {/* Language Selector */}
-              <div className="space-y-2.5 p-3 bg-muted/50 border border-border/60 rounded">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-medium text-muted-foreground">
-                    {t("onboarding.setup.language")}
-                  </label>
-                  <LanguageSelector
-                    value={preferredLanguage}
-                    onChange={(value) => {
-                      updateTranscriptionSettings({ preferredLanguage: value });
-                    }}
-                    className="w-full"
-                  />
-                </div>
-              </div>
-
-              {/* Permissions */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-foreground">
-                  {t("onboarding.permissions.title")}
-                </h3>
-                <PermissionsSection
-                  permissions={permissionsHook}
-                  systemAudio={systemAudio}
-                  systemAudioRecommended={onboardingUseCases.includes(USE_CASE_IDS.meetings)}
-                />
-              </div>
-            </div>
-          );
-        }
-
-        // Not signed in — full setup (unchanged)
-        return (
-          <div className="space-y-3">
-            <div className="text-center space-y-0.5">
-              <h2 className="text-lg font-semibold text-foreground tracking-tight">
-                {t("onboarding.transcription.title")}
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                {t("onboarding.transcription.description")}
-              </p>
-            </div>
-
-            <div className="flex items-start gap-3 p-3 bg-muted/50 border border-border/60 rounded">
-              <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                <Cloud className="w-4 h-4 text-primary" />
-              </div>
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-foreground">
-                    {t("settingsPage.transcription.modes.openwhispr")}
-                  </p>
-                  <Badge variant="success">Aisha</Badge>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {t("settingsPage.transcription.modes.openwhisprDesc")}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2 p-3 bg-muted/50 border border-border/60 rounded">
-              <label className="block text-xs font-medium text-muted-foreground">
-                {t("onboarding.transcription.preferredLanguage")}
-              </label>
-              <LanguageSelector
-                value={preferredLanguage}
-                onChange={(value) => {
-                  updateTranscriptionSettings({ preferredLanguage: value });
-                  useSettingsStore.getState().setCloudTranscriptionForAllScopes({
-                    useLocalWhisper: false,
-                    cloudTranscriptionMode: "openwhispr",
-                  });
-                }}
-                className="w-full"
-              />
-            </div>
-          </div>
-        );
-
-      case "permissions": {
-        const platform = permissionsHook.pasteToolsInfo?.platform;
-        const isMacOS = platform === "darwin";
-
-        return (
-          <div className="space-y-4">
-            {/* Header - compact */}
-            <div className="text-center">
-              <h2 className="text-lg font-semibold text-foreground tracking-tight">
-                {t("onboarding.permissions.title")}
-              </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {isMacOS
-                  ? t("onboarding.permissions.requiredForApp")
-                  : t("onboarding.permissions.microphoneRequired")}
-              </p>
-            </div>
-
-            <PermissionsSection
-              permissions={permissionsHook}
-              systemAudio={systemAudio}
-              systemAudioRecommended={onboardingUseCases.includes(USE_CASE_IDS.meetings)}
-            />
-          </div>
-        );
-      }
-
-      case "activation":
-        return renderActivationStep();
-
-      case "voiceAgent":
-        return renderVoiceAgentStep();
-
-      case "meeting":
-        return (
-          <MeetingSetupStep
-            meetingKey={meetingKey}
-            setMeetingKey={setMeetingKey}
-            dictationKey={hotkey}
-          />
-        );
-
-      case "finish":
-        return (
-          <FinishStep
-            isCloudUser={isSignedIn && !skipAuth && !useLocalWhisper}
-            useCases={onboardingUseCases}
-            onFinish={(openSettings) => void finishOnboarding(openSettings)}
-            isFinishing={isFinishing}
-          />
-        );
-
-      default:
-        return null;
-    }
+  const chooseMode = (nextMode: SetupMode) => {
+    localStorage.setItem(MODE_KEY, nextMode);
+    setMode(nextMode);
   };
 
-  const renderActivationStep = () => (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="text-center space-y-0.5">
-        <h2 className="text-lg font-semibold text-foreground tracking-tight">
-          {t("onboarding.activation.title")}
-        </h2>
-        <p className="text-xs text-muted-foreground">{t("onboarding.activation.description")}</p>
-      </div>
-
-      {isUsingHyprland && hyprlandConfigStatus && !hyprlandConfigStatus.canWrite && (
-        <Alert>
-          <AlertTitle>
-            {t("settingsPage.general.hotkey.hyprlandConfigWriteWarningTitle")}
-          </AlertTitle>
-          <AlertDescription>
-            {t("settingsPage.general.hotkey.hyprlandConfigWriteWarningDescription", {
-              path: hyprlandConfigStatus.path,
-            })}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Unified control surface */}
-      <div className="rounded-lg border border-border-subtle bg-surface-1 overflow-hidden">
-        {/* Hotkey section */}
-        <div className="p-4 border-b border-border-subtle">
-          <div className="mb-3">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              {t("onboarding.activation.hotkey")}
-            </span>
-            {isUsingHyprland && (
-              <p className="text-xs text-muted-foreground/80 mt-0.5 leading-relaxed">
-                {t("settingsPage.general.hotkey.hyprlandUnbindDescription")}
-              </p>
-            )}
-          </div>
-          <HotkeyInput
-            value={hotkey}
-            onChange={async (newHotkey) => {
-              const success = await registerHotkey(withExtraDictationHotkeys(newHotkey));
-              if (success) {
-                setHotkey(newHotkey);
-              }
-            }}
-            disabled={isHotkeyRegistering}
-            variant="hero"
-            validate={validateHotkeyForInput}
-          />
-        </div>
-
-        {/* Mode section - inline with hotkey */}
-        {(!isUsingNativeShortcut || getCachedPlatform() === "linux") && (
-          <div className="p-4 flex items-center justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                {t("onboarding.activation.mode")}
-              </span>
-              <p className="text-xs text-muted-foreground/70 mt-0.5">
-                {activationMode === "tap"
-                  ? t("onboarding.activation.tapDescription")
-                  : t("onboarding.activation.holdDescription")}
-              </p>
-            </div>
-            <ActivationModeSelector value={activationMode} onChange={setActivationMode} />
-          </div>
-        )}
-      </div>
-
-      {/* Test area - minimal chrome */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            {t("onboarding.activation.test")}
-          </span>
-          <span className="text-xs text-muted-foreground/60">
-            {activationMode === "tap" || (isUsingNativeShortcut && getCachedPlatform() !== "linux")
-              ? t("onboarding.activation.hotkeyToStartStop", { hotkey: readableHotkey })
-              : t("onboarding.activation.holdHotkey", { hotkey: readableHotkey })}
-          </span>
-        </div>
-        <Textarea
-          rows={2}
-          placeholder={t("onboarding.activation.textareaPlaceholder")}
-          className="text-sm resize-none"
-        />
-      </div>
-    </div>
-  );
-
-  const renderVoiceAgentStep = () => (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="text-center space-y-0.5">
-        <h2 className="text-lg font-semibold text-foreground tracking-tight">
-          {t("onboarding.voiceAgent.title")}
-        </h2>
-        <p className="text-xs text-muted-foreground">{t("onboarding.voiceAgent.description")}</p>
-      </div>
-
-      {/* Hotkey section */}
-      <div className="rounded-lg border border-border-subtle bg-surface-1 overflow-hidden">
-        <div className="p-4 border-b border-border-subtle">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              {t("onboarding.voiceAgent.hotkey")}
-            </span>
-          </div>
-          <HotkeyInput
-            value={parseHotkeyList(voiceAgentKey)[0] ?? ""}
-            onChange={(newHotkey) =>
-              setVoiceAgentKey(
-                serializeHotkeyList([newHotkey, ...parseHotkeyList(voiceAgentKey).slice(1)])
-              )
-            }
-            onClear={() =>
-              setVoiceAgentKey(serializeHotkeyList(parseHotkeyList(voiceAgentKey).slice(1)))
-            }
-            variant="hero"
-            validate={validateVoiceAgentHotkey}
-          />
-        </div>
-
-        <div className="p-4">
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            {t("onboarding.voiceAgent.howItWorks", { agentName })}
-          </p>
-        </div>
-      </div>
-
-      {/* Test area - minimal chrome */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            {t("onboarding.voiceAgent.test")}
-          </span>
-          <span className="text-xs text-muted-foreground/60">
-            {voiceAgentKey
-              ? t("onboarding.voiceAgent.testInstruction", { hotkey: readableVoiceAgentKey })
-              : t("onboarding.voiceAgent.testSetHotkey")}
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {(t("onboarding.voiceAgent.examples", { returnObjects: true }) as string[]).map(
-            (example) => (
-              <span
-                key={example}
-                className="rounded-full border border-border-subtle bg-muted px-2.5 py-1 text-xs text-muted-foreground"
-              >
-                {example}
-              </span>
-            )
-          )}
-        </div>
-        <Textarea
-          rows={2}
-          placeholder={t("onboarding.voiceAgent.testPlaceholder")}
-          className="text-sm resize-none"
-        />
-      </div>
-
-      <p className="text-xs text-muted-foreground/60 text-center">
-        {t("onboarding.voiceAgent.optionalNote")}
-      </p>
-    </div>
-  );
-
-  const canProceed = () => {
-    switch (currentStepId) {
-      case "welcome":
-        return isSignedIn || skipAuth;
-      case "aishaKey":
-        return aishaApiKey.trim().length > 0 && !aishaKeyValidating;
-      case "usecase":
-        return true; // Selection is optional — Next doubles as skip
-      case "setup":
-        // For signed-in users: Setup step includes permissions
-        if (isSignedIn && !skipAuth) {
-          return areRequiredPermissionsMet(permissionsHook.micPermissionGranted);
-        }
-
-        // Aisha-only — language chosen here; API key collected in aishaKey step.
-        return true;
-      case "permissions":
-        return areRequiredPermissionsMet(permissionsHook.micPermissionGranted);
-      case "activation":
-        return hotkey.trim() !== "";
-      case "voiceAgent":
-        return true; // Voice agent hotkey is optional
-      case "meeting":
-        return true; // Meeting hotkey is optional
-      case "finish":
-        return true; // FinishStep renders its own actions
-      default:
-        return false;
-    }
+  const setLanguage = (language: string) => {
+    localStorage.setItem("preferredLanguage", language);
+    useSettingsStore.setState({ preferredLanguage: language });
   };
 
-  // Load Google Font only in the browser
-  React.useEffect(() => {
-    const link = document.createElement("link");
-    link.href =
-      "https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400;500;600;700&display=swap";
-    link.rel = "stylesheet";
-    document.head.appendChild(link);
-    return () => {
-      document.head.removeChild(link);
-    };
-  }, []);
+  const finish = () => {
+    const state = useSettingsStore.getState();
+    if (mode === "account") {
+      state.setCloudTranscriptionForAllScopes({ useLocalWhisper: false, cloudTranscriptionMode: "openwhispr" });
+      localStorage.setItem("transcriptionMode", "openwhispr");
+      useSettingsStore.setState({ transcriptionMode: "openwhispr" });
+    } else if (mode === "local") {
+      state.setCloudTranscriptionForAllScopes({ useLocalWhisper: true, cloudTranscriptionMode: "byok" });
+      localStorage.setItem("transcriptionMode", "local");
+      useSettingsStore.setState({ transcriptionMode: "local", useCleanupModel: false, useDictationAgent: false });
+    } else {
+      state.setCloudTranscriptionForAllScopes({ useLocalWhisper: false, cloudTranscriptionMode: "byok" });
+      localStorage.setItem("transcriptionMode", "providers");
+      useSettingsStore.setState({ transcriptionMode: "providers", useCleanupModel: false, useDictationAgent: false });
+    }
+    clearOnboardingProgress();
+    onComplete({ openSettings: mode === "api-key" });
+  };
 
-  const onboardingPlatform =
-    typeof window !== "undefined" && window.electronAPI?.getPlatform
-      ? window.electronAPI.getPlatform()
-      : "darwin";
+  const canContinue =
+    step === "welcome" ||
+    (step === "mode" && mode !== "account") ||
+    (step === "language-permissions" && selectedSupported && permissions.micPermissionGranted) ||
+    step === "hotkey";
+
+  const progress = ONBOARDING_STEPS.map((id) => ({
+    title: t(`desktop.onboarding.progress.${id}`),
+    icon: { welcome: Sparkles, mode: LogIn, "language-permissions": Languages, hotkey: Command, ready: CheckCircle2 }[id],
+  }));
 
   return (
-    <div
-      className="h-screen flex flex-col bg-background"
-      style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
-    >
-      <ConfirmDialog
-        open={confirmDialog.open}
-        onOpenChange={(open) => !open && hideConfirmDialog()}
-        title={confirmDialog.title}
-        description={confirmDialog.description}
-        confirmText={confirmDialog.confirmText}
-        cancelText={confirmDialog.cancelText}
-        onConfirm={confirmDialog.onConfirm}
-      />
-
-      <ConfirmDialog
-        open={connectivityDialog.open}
-        onOpenChange={(open) => !open && setConnectivityDialog({ open: false, cause: "" })}
-        title={t("onboarding.connectivity.title")}
-        description={t("onboarding.connectivity.body", { cause: connectivityDialog.cause })}
-        confirmText={t("onboarding.connectivity.continue")}
-        cancelText={t("common.cancel", { defaultValue: "Cancel" })}
-        onConfirm={() => resolveConnectivity(false)}
-        onCancel={() => setConnectivityDialog({ open: false, cause: "" })}
-      />
-
-      <AlertDialog
-        open={alertDialog.open}
-        onOpenChange={(open) => !open && hideAlertDialog()}
-        title={alertDialog.title}
-        description={alertDialog.description}
-        onOk={() => {}}
-      />
-
-      {/* Title Bar / drag region */}
-      {currentStep === 0 ? (
-        <div
-          className="flex items-center justify-end w-full h-10 shrink-0"
-          style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
-        >
-          {onboardingPlatform !== "darwin" && (
-            <div className="pr-1" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
-              <WindowControls />
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="shrink-0 z-10">
-          <TitleBar
-            showTitle={true}
-            className="bg-background backdrop-blur-xl border-b border-border shadow-sm"
-            actions={isSignedIn ? <SupportDropdown /> : undefined}
-            center={
-              onboardingPlatform === "darwin" ? (
-                <StepProgress steps={steps.slice(1)} currentStep={currentStep - 1} />
-              ) : undefined
-            }
-          ></TitleBar>
-        </div>
-      )}
-
-      {/* Progress bar — on macOS it lives centered in the title bar instead */}
-      {showProgress && onboardingPlatform !== "darwin" && (
-        <div className="shrink-0 bg-background/80 backdrop-blur-2xl border-b border-white/5 px-6 md:px-12 py-3 z-10">
-          <div className="max-w-3xl mx-auto">
-            <StepProgress steps={steps.slice(1)} currentStep={currentStep - 1} />
-          </div>
-        </div>
-      )}
-
-      {/* Content - This will grow to fill available space */}
-      <div
-        className={`flex-1 px-6 md:px-12 overflow-y-auto ${currentStep === 0 ? "flex items-center" : "py-6"}`}
-      >
-        <div className={`w-full ${currentStep === 0 ? "max-w-sm" : "max-w-3xl"} mx-auto`}>
-          <Card className="bg-card/90 backdrop-blur-2xl border border-border/50 dark:border-white/5 shadow-lg rounded-xl overflow-hidden">
-            <CardContent className={currentStep === 0 ? "p-6" : "p-6 md:p-8"}>
-              {renderStep()}
-            </CardContent>
-          </Card>
-        </div>
+    <div className="flex h-screen flex-col bg-background text-foreground">
+      <div className="flex h-10 items-center justify-end border-b border-border px-2 [app-region:drag]">
+        <div className="[app-region:no-drag]"><WindowControls /></div>
       </div>
-
-      {/* Footer Navigation - hidden on welcome/auth step */}
-      {showProgress && (
-        <div className="shrink-0 bg-background/80 backdrop-blur-2xl border-t border-white/5 px-6 md:px-12 py-3 z-10">
-          <div className="max-w-3xl mx-auto flex items-center justify-between">
-            {/* Hide back button on first step for signed-in users */}
-            {!(currentStep === 1 && isSignedIn && !skipAuth) && (
-              <Button
-                onClick={prevStep}
-                variant="outline"
-                disabled={currentStep === 0}
-                className="h-8 px-5 rounded-full text-xs"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-                {t("common.back")}
-              </Button>
-            )}
-
-            {/* Spacer to push next button to the right when back button is hidden */}
-            {currentStep === 1 && isSignedIn && !skipAuth && <div />}
-
-            <div className="flex items-center gap-2">
-              {currentStepId !== "finish" && (
-                <>
-                  {SKIPPABLE_STEPS.has(currentStepId ?? "") && (
-                    <Button
-                      onClick={nextStep}
-                      variant="ghost"
-                      className="h-8 px-4 rounded-full text-xs text-muted-foreground"
-                    >
-                      {t("common.skip")}
-                    </Button>
-                  )}
-                  <Button
-                    onClick={() => void nextStep()}
-                    disabled={!canProceed()}
-                    className="h-8 px-6 rounded-full text-xs"
-                  >
-                    {aishaKeyValidating
-                      ? t("onboarding.aishaKey.validating")
-                      : t("common.next")}
-                    {!aishaKeyValidating && <ChevronRight className="w-3.5 h-3.5" />}
-                  </Button>
-                </>
-              )}
-            </div>
+      <div className="border-b border-border px-5 py-3"><StepProgress steps={progress} currentStep={stepIndex} /></div>
+      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center overflow-y-auto px-6 py-7">
+        {step === "welcome" && (
+          <div className="space-y-5 text-center">
+            <img src={logoIcon} alt="VoiceLab" className="mx-auto h-16 w-16 rounded-2xl" />
+            <div><h1 className="text-2xl font-semibold">{t("desktop.onboarding.welcome.title")}</h1><p className="mt-2 text-sm text-muted-foreground">{t("desktop.onboarding.welcome.description")}</p></div>
           </div>
-        </div>
-      )}
+        )}
+
+        {step === "mode" && mode === "account" && !showAdvanced && (
+          <AuthenticationStep
+            onAuthComplete={() => go("language-permissions")}
+            onContinueWithoutAccount={() => setShowAdvanced(true)}
+          />
+        )}
+
+        {step === "mode" && mode === "account" && showAdvanced && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold">{t("desktop.onboarding.advanced.title")}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("desktop.onboarding.advanced.description")}
+              </p>
+            </div>
+            <button onClick={() => chooseMode("local")} className="flex w-full gap-3 rounded-xl border border-border p-3.5 text-left hover:border-[#f05a4f]/40 hover:bg-[#f05a4f]/5"><HardDrive className="h-5 w-5" /><span><strong className="block text-sm">{t("desktop.onboarding.advanced.localTitle")}</strong><span className="text-xs text-muted-foreground">{t("desktop.onboarding.advanced.localDescription")}</span></span></button>
+            <button onClick={() => chooseMode("api-key")} className="flex w-full gap-3 rounded-xl border border-border p-3.5 text-left hover:border-[#f05a4f]/40 hover:bg-[#f05a4f]/5"><KeyRound className="h-5 w-5" /><span><strong className="block text-sm">{t("desktop.onboarding.advanced.providerTitle")}</strong><span className="text-xs text-muted-foreground">{t("desktop.onboarding.advanced.providerDescription")}</span></span></button>
+            <Button variant="ghost" className="w-full" onClick={() => setShowAdvanced(false)}>
+              {t("desktop.onboarding.advanced.useCloud")}
+            </Button>
+          </div>
+        )}
+
+        {step === "mode" && mode && mode !== "account" && (
+          <div className="space-y-5 text-center"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-muted">{mode === "local" ? <HardDrive /> : <KeyRound />}</div><div><h2 className="text-xl font-semibold">{t(mode === "local" ? "desktop.onboarding.mode.localTitle" : "desktop.onboarding.mode.providerTitle")}</h2><p className="mt-1 text-sm text-muted-foreground">{t(mode === "local" ? "desktop.onboarding.mode.localDescription" : "desktop.onboarding.mode.providerDescription")}</p></div></div>
+        )}
+
+        {step === "language-permissions" && (
+          <div className="space-y-5">
+            <div><h2 className="text-xl font-semibold">{t("desktop.onboarding.language.title")}</h2><p className="mt-1 text-sm text-muted-foreground">{t("desktop.onboarding.language.description")}</p></div>
+            {mode === "account" && usage?.isLoading && (
+              <p role="status" className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+                {t("desktop.onboarding.language.loadingCapabilities")}
+              </p>
+            )}
+            {mode === "account" && usage?.error && (
+              <p role="status" className="rounded-lg bg-amber-500/8 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                {t("desktop.onboarding.language.capabilitiesUnavailable")}
+              </p>
+            )}
+            <LanguageSelector value={preferredLanguage} onChange={setLanguage} options={languageOptions} provider={provider} />
+            {!selectedSupported && (
+              <p role="alert" className="rounded-lg border border-amber-500/25 bg-amber-500/8 p-3 text-sm text-amber-700 dark:text-amber-300">
+                {t("desktop.onboarding.language.unsupported")}
+              </p>
+            )}
+            <PermissionsSection permissions={permissions} systemAudio={systemAudio} />
+            {!permissions.micPermissionGranted && <p className="text-xs text-muted-foreground">{t("desktop.onboarding.language.microphoneRequired")}</p>}
+          </div>
+        )}
+
+        {step === "hotkey" && (
+          <div className="space-y-5">
+            <div><h2 className="text-xl font-semibold">{t("desktop.onboarding.hotkey.title")}</h2><p className="mt-1 text-sm text-muted-foreground">{t("desktop.onboarding.hotkey.description")}</p></div>
+            <HotkeyInput value={hotkey} disabled={isRegistering} variant="hero" onChange={async (value) => { if (await registerHotkey(value)) { setHotkey(value); localStorage.setItem("hotkey", value); } }} />
+            <Textarea value={testText} onChange={(event) => setTestText(event.target.value)} placeholder={t("desktop.onboarding.hotkey.placeholder")} className="min-h-24" autoFocus />
+          </div>
+        )}
+
+        {step === "ready" && (
+          <div className="space-y-5 text-center"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10"><CheckCircle2 className="h-7 w-7 text-emerald-500" /></div><div><h2 className="text-2xl font-semibold">{t("desktop.onboarding.ready.title")}</h2><p className="mt-2 text-sm text-muted-foreground">{t(mode === "account" ? "desktop.onboarding.ready.account" : mode === "local" ? "desktop.onboarding.ready.local" : "desktop.onboarding.ready.provider")}</p></div></div>
+        )}
+      </main>
+      <footer className="flex items-center justify-between border-t border-border px-6 py-4">
+        <Button variant="ghost" disabled={stepIndex === 0} onClick={() => go(ONBOARDING_STEPS[Math.max(0, stepIndex - 1)])}>{t("common.back")}</Button>
+        {step === "ready" ? <Button onClick={finish}>{t("desktop.onboarding.ready.start")}</Button> : step === "mode" && mode === "account" ? <span /> : <Button disabled={!canContinue} onClick={() => go(ONBOARDING_STEPS[Math.min(ONBOARDING_STEPS.length - 1, stepIndex + 1)])}>{t("common.continue")}</Button>}
+      </footer>
     </div>
   );
 }

@@ -104,8 +104,12 @@ export interface ChatAgentSettings {
 
 function useSettingsInternal() {
   const store = useSettingsStore();
-  const { setCustomDictionary, applyCustomDictionaryFromExternal, applySnippetsFromExternal } =
-    store;
+  const {
+    setCustomDictionary,
+    applyCustomDictionaryFromExternal,
+    applyDictionaryState,
+    applySnippetsFromExternal,
+  } = store;
 
   // One-time initialization: sync API keys, dictation key, activation mode,
   // UI language, and dictionary from the main process / SQLite.
@@ -127,13 +131,15 @@ function useSettingsInternal() {
   // broadcast. Writes that must sync go through setCustomDictionary instead.
   useEffect(() => {
     if (typeof window === "undefined" || !window.electronAPI?.onDictionaryUpdated) return;
-    const unsubscribe = window.electronAPI.onDictionaryUpdated((words: string[]) => {
-      if (Array.isArray(words)) {
-        applyCustomDictionaryFromExternal(words);
+    const unsubscribe = window.electronAPI.onDictionaryUpdated((payload) => {
+      if (Array.isArray(payload)) {
+        applyCustomDictionaryFromExternal(payload);
+      } else if (payload?.entries && payload?.vocabulary) {
+        applyDictionaryState(payload);
       }
     });
     return unsubscribe;
-  }, [applyCustomDictionaryFromExternal]);
+  }, [applyCustomDictionaryFromExternal, applyDictionaryState]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.electronAPI?.onSnippetsUpdated) return;
@@ -236,6 +242,14 @@ function useSettingsInternal() {
     cleanupMode: store.cleanupMode,
     cleanupRemoteUrl: store.cleanupRemoteUrl,
     customDictionary: store.customDictionary,
+    dictionaryEntries: store.dictionaryEntries,
+    dictionaryState: store.dictionaryState,
+    dictionarySaving: store.dictionarySaving,
+    createDictionaryWords: store.createDictionaryWords,
+    updateDictionaryWord: store.updateDictionaryWord,
+    deleteDictionaryWord: store.deleteDictionaryWord,
+    clearDictionaryWords: store.clearDictionaryWords,
+    decideLegacyDictionary: store.decideLegacyDictionary,
     snippets: store.snippets,
     setSnippets: store.setSnippets,
     assemblyAiStreaming: store.assemblyAiStreaming,

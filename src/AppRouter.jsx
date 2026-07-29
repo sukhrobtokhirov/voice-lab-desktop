@@ -9,6 +9,8 @@ import WindowControls from "./components/WindowControls.tsx";
 import { Card, CardContent } from "./components/ui/card.tsx";
 import { useAuth } from "./hooks/useAuth";
 import { useTheme } from "./hooks/useTheme";
+import ConnectionStatus from "./components/ConnectionStatus";
+import { hasOnboardingProgress } from "./constants/onboarding";
 
 const ControlPanel = React.lazy(() => import("./components/ControlPanel.tsx"));
 const OnboardingFlow = React.lazy(() => import("./components/OnboardingFlow.tsx"));
@@ -74,7 +76,7 @@ function MainApp() {
     const authSkipped =
       localStorage.getItem("authenticationSkipped") === "true" ||
       localStorage.getItem("skipAuth") === "true";
-    const onboardingInProgress = localStorage.getItem("onboardingCurrentStep") !== null;
+    const onboardingInProgress = hasOnboardingProgress();
     const isReturningUser =
       !onboardingCompleted && isSignedIn && !isGracePeriodOnly && !onboardingInProgress;
 
@@ -180,15 +182,16 @@ function LoadingFallback({ message }) {
   const fallbackMessage = message || t("common.loading");
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
+    <div className="min-h-screen bg-[#f6f1e9] dark:bg-[#171513] flex items-center justify-center">
+      <ConnectionStatus />
       <div className="flex flex-col items-center gap-4 animate-[scale-in_300ms_ease-out]">
         <svg
           viewBox="0 0 1024 1024"
           className="w-12 h-12 drop-shadow-[0_2px_8px_rgba(37,99,235,0.18)] dark:drop-shadow-[0_2px_12px_rgba(100,149,237,0.25)]"
-          aria-label="OpenWhispr"
+          aria-label="VoiceLab"
         >
-          <rect width="1024" height="1024" rx="241" fill="#2056DF" />
-          <circle cx="512" cy="512" r="314" fill="#2056DF" stroke="white" strokeWidth="74" />
+          <rect width="1024" height="1024" rx="241" fill="#E55347" />
+          <circle cx="512" cy="512" r="314" fill="#E55347" stroke="white" strokeWidth="74" />
           <path d="M512 383V641" stroke="white" strokeWidth="74" strokeLinecap="round" />
           <path d="M627 457V568" stroke="white" strokeWidth="74" strokeLinecap="round" />
           <path d="M397 457V568" stroke="white" strokeWidth="74" strokeLinecap="round" />

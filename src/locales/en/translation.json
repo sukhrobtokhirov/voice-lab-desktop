@@ -3057,5 +3057,149 @@
     },
     "start": "Take notes",
     "join": "Join & transcribe"
+  },
+  "desktop": {
+    "offline": "Offline. Local dictation still works.",
+    "nav": {
+      "history": "History",
+      "vocabulary": "Vocabulary",
+      "more": "More"
+    },
+    "wallet": {
+      "title": "AI Credit wallet",
+      "shared": "One balance across VoiceLab products",
+      "balance": "Balance",
+      "available": "Available",
+      "reserved": "Reserved",
+      "unavailable": "Wallet is temporarily unavailable.",
+      "updated": "Updated {{time}}",
+      "live": "Live balance",
+      "manage": "Manage billing"
+    },
+    "creditShortage": {
+      "title": "More AI Credits needed",
+      "description": "There are not enough available credits for this recording. Add credits or continue locally.",
+      "required": "Needed",
+      "useLocal": "Use local transcription for 0 credits"
+    },
+    "dictation": {
+      "ready": "Ready"
+    },
+    "languages": {
+      "choose": "Choose language",
+      "search": "Search languages",
+      "searchPlaceholder": "Search language or code",
+      "clearSearch": "Clear search",
+      "empty": "No languages found.",
+      "autoUnsupported": "Automatic detection is not available for this service.",
+      "languageUnsupported": "This language is not available for the selected service.",
+      "groups": {
+        "automatic": "Automatic",
+        "centralAsia": "Central Asia",
+        "other": "Russian and English"
+      }
+    },
+    "onboarding": {
+      "progress": {
+        "welcome": "Welcome",
+        "mode": "Account",
+        "language-permissions": "Language",
+        "hotkey": "Shortcut",
+        "ready": "Ready"
+      },
+      "welcome": {
+        "title": "VoiceLab Dictate",
+        "description": "Speak naturally. Your text appears where you need it."
+      },
+      "advanced": {
+        "title": "Advanced setup",
+        "description": "Use a local model or your own provider without a VoiceLab Cloud account.",
+        "localTitle": "Local model",
+        "localDescription": "Audio stays on this device and uses 0 AI Credits.",
+        "providerTitle": "My provider",
+        "providerDescription": "Connect your API key later in Advanced settings.",
+        "useCloud": "Continue with VoiceLab Cloud"
+      },
+      "mode": {
+        "localTitle": "Local mode",
+        "localDescription": "Whisper languages and automatic detection are available.",
+        "providerTitle": "Provider mode",
+        "providerDescription": "Connect your provider and API key after setup."
+      },
+      "language": {
+        "title": "Language and permissions",
+        "description": "Choose the language you usually dictate in.",
+        "loadingCapabilities": "Checking languages available for your account…",
+        "capabilitiesUnavailable": "Could not check cloud capabilities. You can still choose a language.",
+        "unsupported": "This language is not supported in the selected mode. Choose another language to continue.",
+        "microphoneRequired": "Microphone access is required to continue."
+      },
+      "hotkey": {
+        "title": "Shortcut and quick test",
+        "description": "Set a shortcut, speak, and check the result below.",
+        "placeholder": "Your result will appear here…"
+      },
+      "ready": {
+        "title": "Ready",
+        "account": "Your VoiceLab account and AI Credit wallet are connected.",
+        "local": "Local transcription is selected.",
+        "provider": "Open Advanced settings to connect your provider.",
+        "start": "Start dictating"
+      }
+    },
+    "dictionary": {
+      "actionFailed": "Couldn’t finish the change",
+      "tryAgain": "Try again. A locally saved word will remain on this device.",
+      "duplicateTitle": "Already in your vocabulary",
+      "duplicateDescription": "That word is already saved.",
+      "saved": "Vocabulary updated",
+      "duplicatesSkipped": "{{count}} duplicate skipped",
+      "duplicatesSkipped_other": "{{count}} duplicates skipped",
+      "status": {
+        "synced": "Synced",
+        "conflict": "Needs review",
+        "syncError": "Saved locally, sync failed",
+        "syncing": "Syncing",
+        "savedLocal": "Saved on this device"
+      }
+    },
+    "privacy": {
+      "notesSync": "Notes sync",
+      "notesSyncDescription": "Sync notes across your signed-in devices.",
+      "accountSync": "Vocabulary and preferences",
+      "accountSyncDescription": "Account settings and vocabulary sync automatically while signed in.",
+      "alwaysOn": "On",
+      "transcriptBackup": "Transcript backup",
+      "transcriptBackupDescription": "Transcript text is not uploaded by this desktop build.",
+      "audioBackup": "Audio backup",
+      "audioBackupDescription": "Recordings stay on this device and are not uploaded.",
+      "notEnabled": "Off",
+      "notAvailable": "Unavailable",
+      "localAudio": "Local audio",
+      "localAudioDescription": "Choose how long recordings remain on this device."
+    },
+    "settings": {
+      "account": "Account & Credits",
+      "accountDescription": "Profile, session and AI Credit wallet",
+      "dictation": "Dictation",
+      "dictationDescription": "Language, microphone and paste behavior",
+      "shortcuts": "Shortcuts",
+      "shortcutsDescription": "Dictation and Aisha shortcuts",
+      "privacy": "Data & Privacy",
+      "privacyDescription": "Cloud backup, local audio and retention",
+      "advanced": "Advanced",
+      "advancedDescription": "Local models, BYOK and developer tools",
+      "advancedSetup": "Advanced transcription",
+      "advancedSetupDescription": "VoiceLab Cloud is the default. Local models and BYOK stay on this device."
+    },
+    "session": {
+      "active": "Signed in",
+      "device": "Device",
+      "thisDevice": "This VoiceLab Dictate desktop",
+      "status": "Session",
+      "protected": "Active and protected",
+      "signedOut": "Not signed in",
+      "signedOutDescription": "Sign in to use VoiceLab Cloud and your AI Credit wallet."
+    }
   }
 }
