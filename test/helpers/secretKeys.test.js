@@ -63,18 +63,21 @@ test("openrouter is a first-class secret", () => {
   assert.equal(env.getOpenrouterKey(), "sk-or-abc");
 });
 
-test("preload BYOK_KEY_BRIDGES mirror the manifest exactly", () => {
-  // preload.js can't require the manifest under sandbox, so it inlines the
-  // {base, get, save} tuples. Assert they stay in lockstep with the manifest.
+test("preload exposes opaque credential operations instead of raw BYOK accessors", () => {
   const preloadSrc = fs.readFileSync(path.join(__dirname, "../../preload.js"), "utf8");
-  const block = preloadSrc.match(/BYOK_KEY_BRIDGES = \[([\s\S]*?)\];/);
-  assert.ok(block, "BYOK_KEY_BRIDGES declared in preload.js");
+  assert.doesNotMatch(preloadSrc, /BYOK_KEY_BRIDGES/, "legacy raw-key bridge is absent");
   for (const k of BYOK_API_KEYS) {
-    const entry = new RegExp(
-      `\\{\\s*base:\\s*"${k.base}",\\s*get:\\s*"${k.get}",\\s*save:\\s*"${k.save}"\\s*\\}`
+    assert.doesNotMatch(
+      preloadSrc,
+      new RegExp(`\\b${k.get}\\s*:`),
+      `${k.get} is not exposed to the renderer`
     );
-    assert.match(block[1], entry, `preload mirrors ${k.base}`);
+    assert.doesNotMatch(
+      preloadSrc,
+      new RegExp(`\\b${k.save}\\s*:`),
+      `${k.save} is not exposed to the renderer`
+    );
   }
-  const bridgeCount = (block[1].match(/base:/g) || []).length;
-  assert.equal(bridgeCount, BYOK_API_KEYS.length, "no extra/missing preload bridges");
+  assert.match(preloadSrc, /providerCredentialStatus:/);
+  assert.match(preloadSrc, /providerSaveCredential:/);
 });
