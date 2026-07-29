@@ -462,6 +462,37 @@ function verifyOwnedSidecars(context) {
     verifyOwnedSidecar(filePath, platform, arch, manifest);
   }
   console.log(`  afterPack: verified ${entries.length} owned sidecar hashes`);
+  return entries.length;
+}
+
+function writePackageVerification(context, sidecarCount) {
+  const projectDir = context.packager.projectDir;
+  const packageJson = JSON.parse(
+    fs.readFileSync(path.join(projectDir, "package.json"), "utf8")
+  );
+  const markerPath = path.join(
+    resolveResourcesDir(context),
+    ".voicelab-package-verification.json"
+  );
+  const marker = {
+    schema: 1,
+    product: "VoiceLab",
+    version: packageJson.version,
+    platform: context.electronPlatformName,
+    arch: Arch[context.arch],
+    checks: {
+      preloads: configuredPreloadPaths(projectDir),
+      sidecars: sidecarCount,
+      unpackedBinaries: true,
+      sourceEnvironmentSecretFree: true,
+      rendererSecretFree: true,
+      packagedResourcesSecretFree: true,
+    },
+  };
+  fs.writeFileSync(markerPath, `${JSON.stringify(marker, null, 2)}\n`, {
+    mode: 0o644,
+  });
+  console.log(`  afterPack: wrote package verification marker for ${marker.platform}-${marker.arch}`);
 }
 
 exports.default = async function (context) {
@@ -472,10 +503,12 @@ exports.default = async function (context) {
   wrapLinuxBinary(context);
   verifyMeetingAecHelper(context);
   verifyUnpackedBinaries(context);
-  verifyOwnedSidecars(context);
+  const sidecarCount = verifyOwnedSidecars(context);
   registerMacResourceBinariesForSigning(context);
   assertPackagedResourcesAreSecretFree(context);
+  writePackageVerification(context, sidecarCount);
 };
 
 exports.configuredPreloadPaths = configuredPreloadPaths;
 exports.assertPackagedPreloads = assertPackagedPreloads;
+exports.writePackageVerification = writePackageVerification;

@@ -1,20 +1,92 @@
 name: Release VoiceLab Desktop
 
-# Publishes installers for macOS (arm64 + x64) and Linux (x64) to
-# github.com/voicelab-uz/desktop releases. Windows is currently disabled until
-# a Windows Authenticode certificate is configured.
-# electron-updater reads the platform metadata from those releases.
 on:
   push:
     tags:
       - "v*.*.*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to promote (must match package.json)"
+        required: true
+        type: string
+
+concurrency:
+  group: desktop-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+  RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
+  validate-release:
+    name: Validate tag and provenance
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.contract.outputs.tag }}
+      version: ${{ steps.contract.outputs.version }}
+      source_sha: ${{ steps.contract.outputs.source_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.RELEASE_REF }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Validate immutable release provenance
+        id: contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag_sha="$(git rev-list -n 1 "$RELEASE_TAG")"
+          checkout_sha="$(git rev-parse HEAD)"
+          node scripts/release-contract.js provenance \
+            --tag "$RELEASE_TAG" \
+            --event "$GITHUB_EVENT_NAME" \
+            --event-sha "$GITHUB_SHA" \
+            --tag-sha "$tag_sha" \
+            --checkout-sha "$checkout_sha"
+
+  test-gate:
+    name: Tests, quality, and release contract
+    needs: validate-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-release.outputs.source_sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run release workflow contract tests
+        run: npm run test:release-contract
+
+      - name: Run full test and quality gate
+        run: |
+          npm test
+          npm run typecheck
+          npm run lint
+          npm run i18n:check
+          npm run build:renderer
+
   build-macos:
+    name: Build macOS ${{ matrix.arch }} privately
+    needs: [validate-release, test-gate]
     runs-on: macos-latest
     strategy:
       fail-fast: false
@@ -22,17 +94,18 @@ jobs:
         arch: [arm64, x64]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: "24"
-          cache: "npm"
+          ref: ${{ needs.validate-release.outputs.source_sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Set up Apple code signing and notarization
+      - name: Require and install Apple signing material
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -40,73 +113,39 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
         run: |
           set -euo pipefail
-
-          test -n "$APPLE_CERTIFICATE_BASE64" || {
-            echo "Missing GitHub secret: APPLE_CERTIFICATE_BASE64"
-            exit 1
-          }
-          test -n "$APPLE_CERTIFICATE_PASSWORD" || {
-            echo "Missing GitHub secret: APPLE_CERTIFICATE_PASSWORD"
-            exit 1
-          }
-          test -n "$APPLE_API_KEY_BASE64" || {
-            echo "Missing GitHub secret: APPLE_API_KEY_BASE64"
-            exit 1
-          }
-          test -n "$APPLE_API_KEY_ID" || {
-            echo "Missing GitHub secret: APPLE_API_KEY_ID"
-            exit 1
-          }
-          test -n "$APPLE_API_ISSUER" || {
-            echo "Missing GitHub secret: APPLE_API_ISSUER"
-            exit 1
-          }
-          test -n "$APPLE_TEAM_ID" || {
-            echo "Missing GitHub secret: APPLE_TEAM_ID"
-            exit 1
-          }
+          for name in APPLE_CERTIFICATE_BASE64 APPLE_CERTIFICATE_PASSWORD APPLE_API_KEY_BASE64 APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID; do
+            test -n "${!name:-}" || { echo "Missing required secret: $name"; exit 1; }
+          done
 
           certificate_path="$RUNNER_TEMP/voicelab-developer-id.p12"
           api_key_path="$RUNNER_TEMP/voicelab-notary-key.p8"
           keychain_path="$RUNNER_TEMP/voicelab-signing.keychain-db"
-          keychain_password="voicelab-ci-keychain"
+          keychain_password="$(openssl rand -hex 24)"
 
           printf '%s' "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
           printf '%s' "$APPLE_API_KEY_BASE64" | base64 --decode > "$api_key_path"
+          chmod 600 "$certificate_path" "$api_key_path"
 
           security create-keychain -p "$keychain_password" "$keychain_path"
           security set-keychain-settings -lut 21600 "$keychain_path"
           security unlock-keychain -p "$keychain_password" "$keychain_path"
-          security import "$certificate_path" \
-            -P "$APPLE_CERTIFICATE_PASSWORD" \
-            -A -t cert -f pkcs12 -k "$keychain_path"
-          security set-key-partition-list \
-            -S apple-tool:,apple: \
-            -s -k "$keychain_password" "$keychain_path"
+          security import "$certificate_path" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain_path"
           security list-keychain -d user -s "$keychain_path"
+          security find-identity -v -p codesigning "$keychain_path" | tee "$RUNNER_TEMP/signing-identities.txt"
+          grep -q "Developer ID Application" "$RUNNER_TEMP/signing-identities.txt"
 
           echo "APPLE_API_KEY=$api_key_path" >> "$GITHUB_ENV"
           echo "CSC_LINK=$certificate_path" >> "$GITHUB_ENV"
-          echo "Voicelab signing identities:"
-          security find-identity -v -p codesigning "$keychain_path" | tee "$RUNNER_TEMP/signing-identities.txt"
-          grep -q "Developer ID Application" "$RUNNER_TEMP/signing-identities.txt" || {
-            echo "The imported certificate is not a Developer ID Application certificate"
-            exit 1
-          }
 
-      - name: Install ffmpeg-static for target architecture
+      - name: Install target ffmpeg
         if: matrix.arch == 'x64'
         run: |
           rm -f node_modules/ffmpeg-static/ffmpeg
           npm_config_arch=x64 node node_modules/ffmpeg-static/install.js
-
-      - name: Cache native binaries
-        uses: actions/cache@v4
-        with:
-          path: resources/bin
-          key: macos-${{ matrix.arch }}-bin-${{ hashFiles('scripts/download-*.js', 'scripts/build-*.js') }}
 
       - name: Compile native helpers
         run: |
@@ -117,19 +156,19 @@ jobs:
           npm run compile:mic-listener
           npm run compile:text-monitor
 
-      - name: Download bundled binaries
+      - name: Download pinned bundled binaries
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           node scripts/download-whisper-cpp.js --current --platform darwin --arch ${{ matrix.arch }}
           node scripts/download-llama-server.js --current --platform darwin --arch ${{ matrix.arch }}
           node scripts/download-sherpa-onnx.js --current --platform darwin --arch ${{ matrix.arch }}
           node scripts/download-yt-dlp.js --current --platform darwin --arch ${{ matrix.arch }}
           node scripts/download-qdrant.js --current --platform darwin --arch ${{ matrix.arch }}
-          node scripts/download-meeting-aec-helper.js --current --platform darwin --arch ${{ matrix.arch }} || true
-          node scripts/download-whisper-vad-model.js || true
+          node scripts/download-meeting-aec-helper.js --current --platform darwin --arch ${{ matrix.arch }}
+          node scripts/download-whisper-vad-model.js
 
-      - name: Create release .env (no shared AISHA key)
+      - name: Create secret-free release environment
         run: |
           cat > .env <<'EOF'
           VITE_AUTH_URL=https://voicelab.uz
@@ -140,88 +179,99 @@ jobs:
           VITE_OPENWHISPR_PROTOCOL=voicelab
           UI_LANGUAGE=uz
           EOF
-          # Strip accidental leading spaces from indented heredoc lines
-          sed -i '' 's/^[[:space:]]*//' .env
 
-      - name: Build and publish macOS ${{ matrix.arch }}
-        run: |
-          npm run build:renderer
-          # Arch-specific channel → latest-arm64-mac.yml / latest-x64-mac.yml
-          # (matches src/updater.js; default "latest" races on latest-mac.yml)
-          npx cross-env CSC_IDENTITY_AUTO_DISCOVERY=true \
-            electron-builder --mac --${{ matrix.arch }} --publish always \
-            -c.publish.channel=latest-${{ matrix.arch }} \
-            -c.mac.forceCodeSigning=true
+      - name: Build signed and notarized package without publication
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-          UPDATE_OWNER: voicelab-uz
-          UPDATE_REPO: desktop
-
-          # electron-builder selects the imported Developer ID Application
-          # identity from the temporary keychain and notarizes with the API key.
-          CSC_IDENTITY_AUTO_DISCOVERY: true
+          CSC_IDENTITY_AUTO_DISCOVERY: "true"
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          npm run generate:preloads
+          npm run build:renderer
+          npx cross-env CSC_IDENTITY_AUTO_DISCOVERY=true \
+            electron-builder --mac --${{ matrix.arch }} --publish never \
+            -c.publish.channel=latest-${{ matrix.arch }} \
+            -c.mac.forceCodeSigning=true
 
-      - name: Verify signed and notarized app
+      - name: Verify architecture, signature, notarization, package, and updater metadata
+        env:
+          VOICELAB_SIGNATURE_VERIFIED: "1"
+          VOICELAB_NOTARIZATION_VERIFIED: "1"
+        shell: bash
         run: |
           set -euo pipefail
           app_path="$(find dist -type d -name 'VoiceLab.app' -print -quit)"
-          test -n "$app_path" || { echo "VoiceLab.app was not found in dist/"; exit 1; }
+          test -n "$app_path"
+          executable="$app_path/Contents/MacOS/VoiceLab"
+          lipo -archs "$executable" | tr ' ' '\n' | grep -Fx "${{ matrix.arch }}"
           codesign --verify --deep --strict --verbose=2 "$app_path"
           codesign --display --verbose=4 "$app_path" 2>&1 | grep -E 'Authority=Developer ID Application|TeamIdentifier='
           xcrun stapler validate "$app_path"
+          spctl --assess --type execute --verbose=4 "$app_path"
+          for dmg in dist/*.dmg; do spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"; done
+          node scripts/release-contract.js package \
+            --platform macos \
+            --arch "${{ matrix.arch }}" \
+            --tag "${{ needs.validate-release.outputs.tag }}" \
+            --source-sha "${{ needs.validate-release.outputs.source_sha }}" \
+            --dist dist \
+            --out release-output
 
-      - name: Clean up Apple signing material
+      - name: Upload verified private artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macos-${{ matrix.arch }}
+          path: release-output/
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Remove Apple signing material
         if: always()
         run: |
           security delete-keychain "$RUNNER_TEMP/voicelab-signing.keychain-db" || true
           rm -f "$RUNNER_TEMP/voicelab-developer-id.p12" "$RUNNER_TEMP/voicelab-notary-key.p8"
 
   build-linux:
+    name: Build Linux x64 privately
+    needs: [validate-release, test-gate]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: "24"
-          cache: "npm"
+          ref: ${{ needs.validate-release.outputs.source_sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Install platform-specific native packages
-        run: npm install @rollup/rollup-linux-x64-gnu lightningcss-linux-x64-gnu @tailwindcss/oxide-linux-x64-gnu --no-save
-
-      - name: Cache native binaries
-        uses: actions/cache@v4
-        with:
-          path: resources/bin
-          key: linux-x64-bin-${{ hashFiles('scripts/download-*.js', 'scripts/build-*.js') }}
-
-      - name: Download bundled binaries
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+      - name: Install Linux build dependencies
         run: |
+          npm install @rollup/rollup-linux-x64-gnu lightningcss-linux-x64-gnu @tailwindcss/oxide-linux-x64-gnu --no-save
+          sudo apt-get update
+          sudo apt-get install -y rpm libx11-dev libxtst-dev libatspi2.0-dev libglib2.0-dev libpipewire-0.3-dev pkg-config
+
+      - name: Compile and download pinned bundled binaries
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          npm run compile:native
           node scripts/download-whisper-cpp.js --current --platform linux --arch x64
           node scripts/download-llama-server.js --current --platform linux --arch x64
           node scripts/download-sherpa-onnx.js --current --platform linux --arch x64
           node scripts/download-yt-dlp.js --current --platform linux --arch x64
           node scripts/download-qdrant.js --current --platform linux --arch x64
-          node scripts/download-meeting-aec-helper.js --current --platform linux --arch x64 || true
-          node scripts/download-whisper-vad-model.js || true
-          node scripts/download-diarization-models.js --output-dir resources/bin/diarization-models || true
+          node scripts/download-meeting-aec-helper.js --current --platform linux --arch x64
+          node scripts/download-whisper-vad-model.js
+          node scripts/download-diarization-models.js --output-dir resources/bin/diarization-models
+          resources/bin/linux-system-audio-helper probe | grep '"supportsNativeCapture":true'
 
-      - name: Install Linux packaging dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y rpm libx11-dev libxtst-dev libatspi2.0-dev libglib2.0-dev libpipewire-0.3-dev pkg-config
-
-      - name: Create release environment
+      - name: Create secret-free release environment
         run: |
           cat > .env <<'EOF'
           VITE_AUTH_URL=https://voicelab.uz
@@ -232,83 +282,82 @@ jobs:
           VITE_OPENWHISPR_PROTOCOL=voicelab
           UI_LANGUAGE=uz
           EOF
-          sed -i 's/^[[:space:]]*//' .env
 
-      - name: Verify Linux system audio helper
+      - name: Build package without publication
         run: |
-          npm run compile:linux-system-audio
-          resources/bin/linux-system-audio-helper probe | grep '"supportsNativeCapture":true'
+          npm run generate:preloads
+          npm run build:linux -- --publish never
 
-      - name: Build and publish Linux
-        run: npm run build:linux -- --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-          UPDATE_OWNER: voicelab-uz
-          UPDATE_REPO: desktop
+      - name: Verify package, sidecars, preloads, secret scan, and updater metadata
+        run: |
+          node scripts/release-contract.js package \
+            --platform linux \
+            --arch x64 \
+            --tag "${{ needs.validate-release.outputs.tag }}" \
+            --source-sha "${{ needs.validate-release.outputs.source_sha }}" \
+            --dist dist \
+            --out release-output
+
+      - name: Upload verified private artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-x64
+          path: release-output/
+          if-no-files-found: error
+          retention-days: 3
 
   build-windows:
-    # Re-enable by setting the repository variable ENABLE_WINDOWS_RELEASE=true
-    if: ${{ vars.ENABLE_WINDOWS_RELEASE == 'true' }}
+    name: Build Windows x64 privately
+    needs: [validate-release, test-gate]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: "24"
-          cache: "npm"
+          ref: ${{ needs.validate-release.outputs.source_sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Set up Windows code signing
+      - name: Require Windows signing material
         shell: pwsh
         env:
           WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_BASE64)) {
-            throw "Missing GitHub secret: WINDOWS_CERTIFICATE_BASE64"
-          }
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) {
-            throw "Missing GitHub secret: WINDOWS_CERTIFICATE_PASSWORD"
-          }
-
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_BASE64)) { throw "Missing WINDOWS_CERTIFICATE_BASE64" }
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) { throw "Missing WINDOWS_CERTIFICATE_PASSWORD" }
           $certificatePath = Join-Path $env:RUNNER_TEMP "voicelab-code-signing.pfx"
-          $certificateBytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64)
-          [IO.File]::WriteAllBytes($certificatePath, $certificateBytes)
+          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64))
           "WIN_CSC_LINK=$certificatePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "WINDOWS_CERTIFICATE_PATH=$certificatePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Install platform-specific native packages
+      - name: Install Windows native dependencies
         run: npm install @rollup/rollup-win32-x64-msvc lightningcss-win32-x64-msvc @tailwindcss/oxide-win32-x64-msvc --no-save
 
-      - name: Cache native binaries
-        uses: actions/cache@v4
-        with:
-          path: resources/bin
-          key: windows-x64-bin-${{ hashFiles('scripts/download-*.js', 'resources/windows-system-audio-helper.c') }}
-
-      - name: Download bundled binaries
+      - name: Download pinned bundled binaries
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           node scripts/download-whisper-cpp.js --current --platform win32 --arch x64
           node scripts/download-llama-server.js --current --platform win32 --arch x64
           node scripts/download-sherpa-onnx.js --current --platform win32 --arch x64
           node scripts/download-yt-dlp.js --current --platform win32 --arch x64
           node scripts/download-qdrant.js --current --platform win32 --arch x64
-          node scripts/download-meeting-aec-helper.js --current --platform win32 --arch x64 || true
+          node scripts/download-meeting-aec-helper.js --current --platform win32 --arch x64
           node scripts/download-nircmd.js
           node scripts/download-windows-fast-paste.js
           node scripts/download-windows-key-listener.js
           node scripts/download-windows-mic-listener.js
           node scripts/download-windows-system-audio-helper.js
-          node scripts/download-whisper-vad-model.js || true
-          node scripts/download-diarization-models.js --output-dir resources/bin/diarization-models || true
+          node scripts/download-whisper-vad-model.js
+          node scripts/download-diarization-models.js --output-dir resources/bin/diarization-models
 
-      - name: Create release environment
+      - name: Create secret-free release environment
         shell: pwsh
         run: |
           @(
@@ -321,32 +370,115 @@ jobs:
             "UI_LANGUAGE=uz"
           ) | Set-Content -Path .env
 
-      - name: Build and publish Windows
-        run: npm run build:win -- --publish always -c.win.forceCodeSigning=true
+      - name: Build signed package without publication
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-          UPDATE_OWNER: voicelab-uz
-          UPDATE_REPO: desktop
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          npm run generate:preloads
+          npm run build:win -- --publish never -c.win.forceCodeSigning=true
 
-      - name: Verify signed Windows installer
+      - name: Verify every executable signature and release contract
         shell: pwsh
         run: |
-          $installer = Get-ChildItem -Path dist -Filter "*.exe" |
-            Where-Object { $_.Name -notmatch "uninstaller" } |
-            Select-Object -First 1
-          if ($null -eq $installer) {
-            throw "No Windows installer was found in dist/"
+          $installers = Get-ChildItem -Path dist -Filter "*.exe" | Where-Object { $_.Name -notmatch "uninstaller" }
+          if ($installers.Count -lt 2) { throw "Both signed NSIS and portable Windows artifacts are required" }
+          foreach ($installer in $installers) {
+            $signature = Get-AuthenticodeSignature -FilePath $installer.FullName
+            if ($signature.Status -ne "Valid") {
+              throw "Invalid signature for $($installer.Name): $($signature.StatusMessage)"
+            }
           }
-          $signature = Get-AuthenticodeSignature -FilePath $installer.FullName
-          if ($signature.Status -ne "Valid") {
-            throw "Windows installer signature is $($signature.Status): $($signature.StatusMessage)"
-          }
+          $env:VOICELAB_SIGNATURE_VERIFIED = "1"
+          node scripts/release-contract.js package `
+            --platform windows `
+            --arch x64 `
+            --tag "${{ needs.validate-release.outputs.tag }}" `
+            --source-sha "${{ needs.validate-release.outputs.source_sha }}" `
+            --dist dist `
+            --out release-output
 
-      - name: Clean up Windows signing material
+      - name: Upload verified private artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-x64
+          path: release-output/
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Remove Windows signing material
         if: always()
         shell: pwsh
         run: |
           if ($env:WINDOWS_CERTIFICATE_PATH) {
             Remove-Item -Force -ErrorAction SilentlyContinue $env:WINDOWS_CERTIFICATE_PATH
           }
+
+  promote-release:
+    name: Atomically promote verified release
+    needs: [validate-release, test-gate, build-macos, build-linux, build-windows]
+    if: ${{ success() }}
+    runs-on: ubuntu-latest
+    environment: desktop-release-production
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-release.outputs.source_sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Download all private verified artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: staged-release
+          merge-multiple: true
+
+      - name: Verify complete cross-architecture release set
+        run: |
+          node scripts/release-contract.js promote \
+            --tag "${{ needs.validate-release.outputs.tag }}" \
+            --source-sha "${{ needs.validate-release.outputs.source_sha }}" \
+            --dir staged-release
+
+      - name: Publish one complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.validate-release.outputs.tag }}
+          VERSION: ${{ needs.validate-release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_created=0
+          cleanup_draft() {
+            status=$?
+            if [ "$status" -ne 0 ] && [ "$release_created" -eq 1 ]; then
+              gh release delete "$TAG" --yes || true
+            fi
+            exit "$status"
+          }
+          trap cleanup_draft EXIT
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to mutate published assets"
+            exit 1
+          fi
+
+          mapfile -t assets < <(find staged-release -maxdepth 1 -type f -print | sort)
+          test "${#assets[@]}" -gt 0
+          gh release create "$TAG" "${assets[@]}" \
+            --draft \
+            --verify-tag \
+            --title "VoiceLab Desktop $VERSION" \
+            --notes "Verified macOS arm64/x64, Linux x64, and Windows x64 release."
+          release_created=1
+
+          expected_count="${#assets[@]}"
+          actual_count="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets | length')"
+          test "$actual_count" -eq "$expected_count"
+
+          gh release edit "$TAG" --draft=false
+          release_created=0
