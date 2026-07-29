@@ -1,7 +1,7 @@
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
-const { execSync } = require("child_process");
+const crypto = require("crypto");
 
 const REQUEST_TIMEOUT = 30000;
 const MAX_RETRIES = 3;
@@ -239,29 +239,95 @@ function downloadFile(url, dest, retryCount = 0) {
   });
 }
 
+function safeArchivePath(destDir, archivePath) {
+  const root = path.resolve(destDir);
+  const normalized = String(archivePath || "").replace(/\\/g, "/");
+  if (
+    !normalized
+    || normalized.startsWith("/")
+    || /^[A-Za-z]:\//.test(normalized)
+    || normalized.split("/").includes("..")
+  ) {
+    throw new Error(`Unsafe archive path: ${archivePath}`);
+  }
+  const target = path.resolve(root, normalized);
+  if (target !== root && !target.startsWith(`${root}${path.sep}`)) {
+    throw new Error(`Archive entry escapes destination: ${archivePath}`);
+  }
+  return target;
+}
+
+function zipEntryIsLink(entry) {
+  const unixMode = (Number(entry.externalFileAttributes) >>> 16) & 0xffff;
+  return (unixMode & 0xf000) === 0xa000;
+}
+
 async function extractZip(zipPath, destDir) {
-  if (process.platform === "win32") {
-    // Use unzipper package on Windows for better path handling
-    const unzipper = require("unzipper");
-    await fs
-      .createReadStream(zipPath)
-      .pipe(unzipper.Extract({ path: destDir }))
-      .promise();
-  } else {
-    execSync(`unzip -o "${zipPath}" -d "${destDir}"`, { stdio: "inherit" });
+  const unzipper = require("unzipper");
+  const archive = await unzipper.Open.file(zipPath);
+  fs.mkdirSync(destDir, { recursive: true, mode: 0o700 });
+  for (const entry of archive.files) {
+    if (zipEntryIsLink(entry)) {
+      throw new Error(`Archive links are not allowed: ${entry.path}`);
+    }
+    const target = safeArchivePath(destDir, entry.path);
+    if (entry.type === "Directory") {
+      fs.mkdirSync(target, { recursive: true, mode: 0o700 });
+      continue;
+    }
+    if (entry.type !== "File") {
+      throw new Error(`Unsupported archive entry type: ${entry.path}`);
+    }
+    fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+    await new Promise((resolve, reject) => {
+      const output = fs.createWriteStream(target, { mode: 0o600 });
+      entry.stream().on("error", reject).pipe(output).on("error", reject).on("finish", resolve);
+    });
   }
 }
 
-function extractTarGz(tarPath, destDir) {
-  execSync(`tar -xzf "${tarPath}" -C "${destDir}"`, { stdio: "inherit" });
+async function extractTarGz(tarPath, destDir) {
+  const tar = require("tar");
+  fs.mkdirSync(destDir, { recursive: true, mode: 0o700 });
+  await tar.x({
+    file: tarPath,
+    cwd: destDir,
+    strict: true,
+    preservePaths: false,
+    filter(entryPath, entry) {
+      safeArchivePath(destDir, entryPath);
+      if (["SymbolicLink", "Link"].includes(entry?.type)) {
+        throw new Error(`Archive links are not allowed: ${entryPath}`);
+      }
+      return true;
+    },
+  });
 }
 
 async function extractArchive(archivePath, destDir) {
   if (archivePath.endsWith(".tar.gz") || archivePath.endsWith(".tgz")) {
-    extractTarGz(archivePath, destDir);
+    await extractTarGz(archivePath, destDir);
   } else {
     await extractZip(archivePath, destDir);
   }
+}
+
+function sha256File(filePath) {
+  return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+}
+
+function verifySha256(filePath, expectedSha256) {
+  const expected = String(expectedSha256 || "").trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(expected)) {
+    throw new Error(`Missing or invalid owned sha256 for ${path.basename(filePath)}`);
+  }
+  const actual = sha256File(filePath);
+  if (actual !== expected) {
+    throw new Error(
+      `sha256 mismatch for ${path.basename(filePath)}: expected ${expected}, got ${actual}`
+    );
+  }
+  return actual;
 }
 
 function findBinaryInDir(dir, binaryName, maxDepth = 5, currentDepth = 0) {
@@ -341,6 +407,9 @@ module.exports = {
   fetchLatestRelease,
   findBinaryInDir,
   parseArgs,
+  safeArchivePath,
   setExecutable,
+  sha256File,
+  verifySha256,
   cleanupFiles,
 };

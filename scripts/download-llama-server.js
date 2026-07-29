@@ -10,6 +10,7 @@ const {
   setExecutable,
   cleanupFiles,
 } = require("./lib/download-utils");
+const { verifyOwnedSidecar } = require("./lib/sidecar-manifest");
 
 const LLAMA_CPP_REPO = "ggml-org/llama.cpp";
 
@@ -132,6 +133,7 @@ async function downloadBinary(key, config, release, isForce = false) {
     if (binaryPath && fs.existsSync(binaryPath)) {
       fs.copyFileSync(binaryPath, outputPath);
       setExecutable(outputPath);
+      verifyOwnedSidecar(outputPath, ...config.platformArch.split("-"));
       console.log(`  ${key}: Extracted to ${config.outputName}`);
 
       if (config.libPattern) {
@@ -143,6 +145,7 @@ async function downloadBinary(key, config, release, isForce = false) {
 
           fs.copyFileSync(libPath, destPath);
           setExecutable(destPath);
+          verifyOwnedSidecar(destPath, ...config.platformArch.split("-"));
           console.log(`  ${key}: Copied library ${libName}`);
         }
       }

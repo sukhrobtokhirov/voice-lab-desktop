@@ -18,6 +18,10 @@ const path = require("path");
 const { execFileSync } = require("child_process");
 const { Arch } = require("app-builder-lib");
 const { buildLinuxWrapperScript } = require("./lib/linux-launcher");
+const {
+  loadManifest,
+  verifyOwnedSidecar,
+} = require("./lib/sidecar-manifest");
 
 // ---------------------------------------------------------------------------
 // macOS resource binary signing
@@ -280,8 +284,22 @@ const SHARED_SECRET_KEYS = [
   "AISHA_API_KEY",
   "OPENAI_API_KEY",
   "ANTHROPIC_API_KEY",
+  "OPENROUTER_API_KEY",
+  "GROQ_API_KEY",
+  "MISTRAL_API_KEY",
+  "XAI_API_KEY",
+  "TINFOIL_API_KEY",
+  "CORTI_CLIENT_SECRET",
+  "DEEPGRAM_API_KEY",
+  "ASSEMBLYAI_API_KEY",
   "GEMINI_API_KEY",
   "GOOGLE_API_KEY",
+  "GOOGLE_CLIENT_SECRET",
+  "AWS_SECRET_ACCESS_KEY",
+  "AZURE_OPENAI_API_KEY",
+  "DATABASE_URL",
+  "DJANGO_SECRET_KEY",
+  "JWT_SECRET",
 ];
 
 function hasNonEmptySecretAssignment(contents) {
@@ -324,8 +342,8 @@ function assertPackagedResourcesAreSecretFree(context) {
 
     const extension = path.extname(basename);
     if (
-      ![".json", ".txt", ".yaml", ".yml", ".config", ".ini"].includes(extension) ||
-      fs.statSync(filePath).size > 2 * 1024 * 1024
+      ![".json", ".txt", ".yaml", ".yml", ".config", ".ini", ".js", ".cjs", ".mjs", ".html"].includes(extension) ||
+      fs.statSync(filePath).size > 10 * 1024 * 1024
     ) {
       continue;
     }
@@ -344,12 +362,54 @@ function assertPackagedResourcesAreSecretFree(context) {
   console.log("  afterPack: verified packaged resources contain no environment files or shared credentials");
 }
 
+function assertCompiledRendererIsSecretFree(context) {
+  const rendererDir = path.join(context.packager.projectDir, "src", "dist");
+  if (!fs.existsSync(rendererDir)) return;
+  for (const filePath of collectFiles(rendererDir)) {
+    if (![".js", ".html", ".json"].includes(path.extname(filePath).toLowerCase())) continue;
+    if (fs.statSync(filePath).size > 10 * 1024 * 1024) continue;
+    if (hasNonEmptySecretAssignment(fs.readFileSync(filePath, "utf8"))) {
+      throw new Error(
+        `afterPack: release blocked because compiled renderer assets contain a shared credential at ${path.relative(
+          rendererDir,
+          filePath
+        )}`
+      );
+    }
+  }
+}
+
+function verifyOwnedSidecars(context) {
+  const platform = context.electronPlatformName;
+  const arch = Arch[context.arch];
+  const manifest = loadManifest();
+  const entries = manifest.entries.filter(
+    (entry) => entry.platform === platform && entry.arch === arch
+  );
+  if (entries.length === 0) {
+    throw new Error(
+      `afterPack: no owned sidecar hashes are registered for ${platform}-${arch}`
+    );
+  }
+  const binDir = path.join(resolveResourcesDir(context), "bin");
+  for (const entry of entries) {
+    const filePath = path.join(binDir, path.basename(entry.path));
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`afterPack: required pinned sidecar is missing: ${entry.path}`);
+    }
+    verifyOwnedSidecar(filePath, platform, arch, manifest);
+  }
+  console.log(`  afterPack: verified ${entries.length} owned sidecar hashes`);
+}
+
 exports.default = async function (context) {
   assertSourceEnvironmentIsSecretFree(context);
+  assertCompiledRendererIsSecretFree(context);
   stripOnnxruntimeBinaries(context);
   wrapLinuxBinary(context);
   verifyMeetingAecHelper(context);
   verifyUnpackedBinaries(context);
+  verifyOwnedSidecars(context);
   registerMacResourceBinariesForSigning(context);
   assertPackagedResourcesAreSecretFree(context);
 };

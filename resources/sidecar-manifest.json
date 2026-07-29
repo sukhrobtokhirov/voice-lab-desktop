@@ -1,0 +1,228 @@
+{
+  "version": 1,
+  "source": "VoiceLab-owned release baseline",
+  "entries": [
+    {
+      "path": "bin/libggml-base.0.15.2.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "25cc48ba0429c4b844e9cb92b5cdcd9b6a8b6494a4540f2cd7cfb49ae5d2b764"
+    },
+    {
+      "path": "bin/libggml-base.0.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "25cc48ba0429c4b844e9cb92b5cdcd9b6a8b6494a4540f2cd7cfb49ae5d2b764"
+    },
+    {
+      "path": "bin/libggml-base.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "25cc48ba0429c4b844e9cb92b5cdcd9b6a8b6494a4540f2cd7cfb49ae5d2b764"
+    },
+    {
+      "path": "bin/libggml-blas.0.15.2.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "5169453b005f1a204cd1f15f0cfe8a3ba862f1ea28b9b143c0dee6a5cca8e97d"
+    },
+    {
+      "path": "bin/libggml-blas.0.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "5169453b005f1a204cd1f15f0cfe8a3ba862f1ea28b9b143c0dee6a5cca8e97d"
+    },
+    {
+      "path": "bin/libggml-blas.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "5169453b005f1a204cd1f15f0cfe8a3ba862f1ea28b9b143c0dee6a5cca8e97d"
+    },
+    {
+      "path": "bin/libggml-cpu.0.15.2.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "8e9194ce15fb2d8fb30412f31e816199e44cbe41fd625e34d57f485d548d53f5"
+    },
+    {
+      "path": "bin/libggml-cpu.0.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "8e9194ce15fb2d8fb30412f31e816199e44cbe41fd625e34d57f485d548d53f5"
+    },
+    {
+      "path": "bin/libggml-cpu.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "8e9194ce15fb2d8fb30412f31e816199e44cbe41fd625e34d57f485d548d53f5"
+    },
+    {
+      "path": "bin/libggml-metal.0.15.2.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "1537bdd4e81d8278c3dfa7150f44646ccf74614866f4e6380512c03d6ceb2a0e"
+    },
+    {
+      "path": "bin/libggml-metal.0.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "1537bdd4e81d8278c3dfa7150f44646ccf74614866f4e6380512c03d6ceb2a0e"
+    },
+    {
+      "path": "bin/libggml-metal.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "1537bdd4e81d8278c3dfa7150f44646ccf74614866f4e6380512c03d6ceb2a0e"
+    },
+    {
+      "path": "bin/libggml-rpc.0.15.2.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "dd55da13598a4fece656f1afa12f35493bb76fcb9afe59375e8a6d2f0372c467"
+    },
+    {
+      "path": "bin/libggml-rpc.0.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "dd55da13598a4fece656f1afa12f35493bb76fcb9afe59375e8a6d2f0372c467"
+    },
+    {
+      "path": "bin/libggml-rpc.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "dd55da13598a4fece656f1afa12f35493bb76fcb9afe59375e8a6d2f0372c467"
+    },
+    {
+      "path": "bin/libggml.0.15.2.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "1599fe447806f262edfe90b242eea0474ef8dc53000c2ec32cda8c180a036251"
+    },
+    {
+      "path": "bin/libggml.0.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "1599fe447806f262edfe90b242eea0474ef8dc53000c2ec32cda8c180a036251"
+    },
+    {
+      "path": "bin/libggml.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "1599fe447806f262edfe90b242eea0474ef8dc53000c2ec32cda8c180a036251"
+    },
+    {
+      "path": "bin/libllama-batched-bench-impl.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "fa346ee1126247fafd9149a4c649ecd8250a98b7f6b1267a6e6ad5eb2d733484"
+    },
+    {
+      "path": "bin/libllama-bench-impl.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "d53b9bf9b541117e06430d646a6402936a95ad04c71abc4775859edf2587abbd"
+    },
+    {
+      "path": "bin/libllama-cli-impl.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "d7ae831579bee5be1728d850daef275634c03f1696cb53158d88cbe5536296ce"
+    },
+    {
+      "path": "bin/libllama-common.0.0.9763.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "e839873aec911fec8dc2eb51fb03e8eab59bd81440565bb2ed7a3ab9b8243546"
+    },
+    {
+      "path": "bin/libllama-common.0.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "e839873aec911fec8dc2eb51fb03e8eab59bd81440565bb2ed7a3ab9b8243546"
+    },
+    {
+      "path": "bin/libllama-common.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "e839873aec911fec8dc2eb51fb03e8eab59bd81440565bb2ed7a3ab9b8243546"
+    },
+    {
+      "path": "bin/libllama-completion-impl.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "4c19f34b75dffd909af8a302e8cbe685e3c8537d13d74c85e523b92c333adf8a"
+    },
+    {
+      "path": "bin/libllama-fit-params-impl.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "46767f2e080e653e493e52ed50a94aa2920fbf19d9559dbaa6a8b7d0a52eb98a"
+    },
+    {
+      "path": "bin/libllama-perplexity-impl.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "5483ef9faa246dad741a146b4c5af88108ac4b77a1464d6043b58a5155d7022d"
+    },
+    {
+      "path": "bin/libllama-quantize-impl.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "e8c45402ae74f4585e9d9c944815cf724760e25e0911be5c31edf7ae95e62804"
+    },
+    {
+      "path": "bin/libllama-server-impl.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "e7ef3ae68e487d998dc221d7b3de66d5e93ba5c9483c562dda4c20fbe383fca6"
+    },
+    {
+      "path": "bin/libllama.0.0.9763.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "6a0c1087c898d34d4f427b561f1dc37ea4e73c56edf889a57430d877a9c7ac13"
+    },
+    {
+      "path": "bin/libllama.0.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "6a0c1087c898d34d4f427b561f1dc37ea4e73c56edf889a57430d877a9c7ac13"
+    },
+    {
+      "path": "bin/libllama.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "6a0c1087c898d34d4f427b561f1dc37ea4e73c56edf889a57430d877a9c7ac13"
+    },
+    {
+      "path": "bin/libmtmd.0.0.9763.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "9b55084a4105162bfc068dafdda8ba2c3e64457f624577e012c078ad80f16d0d"
+    },
+    {
+      "path": "bin/libmtmd.0.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "9b55084a4105162bfc068dafdda8ba2c3e64457f624577e012c078ad80f16d0d"
+    },
+    {
+      "path": "bin/libmtmd.dylib",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "9b55084a4105162bfc068dafdda8ba2c3e64457f624577e012c078ad80f16d0d"
+    },
+    {
+      "path": "bin/llama-server-darwin-arm64",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "0a5f892366618bd642d15b8726b9a74b6f9ed2c55eace345df3238c3ff2fe3e8"
+    },
+    {
+      "path": "bin/whisper-server-darwin-arm64",
+      "platform": "darwin",
+      "arch": "arm64",
+      "sha256": "52d8e775436055cd4d93258e6b0f0bd5bb54418b4f6be218f0047a3f921eb3f7"
+    }
+  ]
+}

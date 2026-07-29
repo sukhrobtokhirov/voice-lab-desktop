@@ -10,6 +10,7 @@ const {
   setExecutable,
   cleanupFiles,
 } = require("./lib/download-utils");
+const { verifyOwnedSidecar } = require("./lib/sidecar-manifest");
 
 const WHISPER_CPP_REPO = "OpenWhispr/whisper.cpp";
 
@@ -93,6 +94,7 @@ async function downloadBinary(platformArch, config, release, isForce = false) {
     if (binaryPath) {
       fs.copyFileSync(binaryPath, outputPath);
       setExecutable(outputPath);
+      verifyOwnedSidecar(outputPath, ...platformArch.split("-"));
       console.log(`  [server] ${platformArch}: Extracted to ${config.outputName}`);
     } else {
       console.error(

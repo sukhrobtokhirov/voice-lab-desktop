@@ -268,7 +268,7 @@ function resolveYtDlpPath() {
   return candidates.find((p) => fs.existsSync(p)) || null;
 }
 
-// Path to the writable (self-updating) yt-dlp copy. Same basename as the bundle.
+// Path to the writable verified yt-dlp cache. Same basename as the bundle.
 function getCacheYtDlpPath() {
   return path.join(YT_DLP_CACHE_DIR, ytDlpBinaryName());
 }
@@ -277,7 +277,7 @@ function sha256File(p) {
   return crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");
 }
 
-// Trust anchors: the signed app bundle (seed) and yt-dlp's SUMS-verified self-update.
+// The signed app bundle is the only trust anchor; runtime self-update is disabled.
 function recordCacheChecksum() {
   try {
     const cachePath = getCacheYtDlpPath();
@@ -387,9 +387,9 @@ async function runYtDlpTracked(binaryPath, args, abortSignal, timeoutMs, onOutpu
   }
 }
 
-// Throttled, single-flight, best-effort background self-update of the CACHE copy
-// only (never the bundled binary). Never throws/rejects to the caller.
-function maybeUpdateYtDlp({ force, abortSignal, timeoutMs } = {}) {
+// Runtime sidecar updates are disabled. The cache is always reseeded from the
+// signed application bundle and can only change with a VoiceLab release.
+function maybeUpdateYtDlp() {
   return new Promise((resolve) => {
     const stampPath = path.join(YT_DLP_CACHE_DIR, ".last-update");
     const touchStamp = () => {
@@ -400,94 +400,18 @@ function maybeUpdateYtDlp({ force, abortSignal, timeoutMs } = {}) {
     };
 
     try {
-      if (ytDlpUpdateInFlight) return resolve();
       if (ytDlpBusyCount > 0) return resolve();
-
-      if (!force) {
-        try {
-          const st = fs.statSync(stampPath);
-          if (Date.now() - st.mtimeMs < YT_DLP_UPDATE_THROTTLE_MS) return resolve();
-        } catch {}
-      }
-
       seedYtDlpFromBundle();
       const cacheBinary = getCacheYtDlpPath();
       if (!fs.existsSync(cacheBinary)) return resolve();
-      // Never execute (or later bless) a tampered copy: verify first; a failed
-      // check discards the copy, so reseed from the signed bundle and re-verify.
       if (!cacheChecksumValid(cacheBinary)) {
         seedYtDlpFromBundle();
         if (!fs.existsSync(cacheBinary) || !cacheChecksumValid(cacheBinary)) return resolve();
       }
-
-      ytDlpUpdateInFlight = true;
-      let child;
-      try {
-        // Nightly: upstream calls stable "prone to external breakage"; the updater
-        // self-verifies against the release's SHA2-256SUMS.
-        child = childProcess.spawn(cacheBinary, ["--update-to", "nightly"], { windowsHide: true });
-      } catch (e) {
-        ytDlpUpdateInFlight = false;
-        debugLogger.warn("yt-dlp self-update failed to start", { error: e.message });
-        touchStamp();
-        return resolve();
-      }
-      // Drain stdio so the child never blocks on a full pipe buffer.
-      if (child.stdout) child.stdout.on("data", () => {});
-      if (child.stderr) child.stderr.on("data", () => {});
-
-      // Bounded kill timer so a stalled -U network request can never hang.
-      const limit = typeof timeoutMs === "number" ? timeoutMs : UPDATE_TIMEOUT_MS;
-      let killTimer = null;
-      let onAbort = null;
-
-      let done = false;
-      // Always clears the timer/listener, resets the in-flight flag, stamps the
-      // throttle, and resolves — never rejects (best-effort contract).
-      const finish = (errMessage) => {
-        if (done) return;
-        done = true;
-        if (killTimer) clearTimeout(killTimer);
-        if (onAbort && abortSignal) abortSignal.removeEventListener("abort", onAbort);
-        ytDlpUpdateInFlight = false;
-        if (errMessage) debugLogger.warn("yt-dlp self-update error", { error: errMessage });
-        touchStamp();
-        resolve();
-      };
-
-      killTimer = setTimeout(() => {
-        try {
-          child.kill("SIGKILL");
-        } catch {}
-        finish("yt-dlp -U timed out");
-      }, limit);
-
-      if (abortSignal) {
-        if (abortSignal.aborted) {
-          try {
-            child.kill("SIGKILL");
-          } catch {}
-          return finish(null);
-        }
-        onAbort = () => {
-          try {
-            child.kill("SIGKILL");
-          } catch {}
-          finish(null);
-        };
-        abortSignal.addEventListener("abort", onAbort, { once: true });
-      }
-
-      child.on("error", (err) => finish(err.message));
-      child.on("close", (code) => {
-        // Only a successful update may move the trust anchor; a failed or killed
-        // run leaves the previously verified binary (and checksum) in place.
-        if (code === 0) recordCacheChecksum();
-        finish(null);
-      });
+      touchStamp();
+      resolve();
     } catch (e) {
-      ytDlpUpdateInFlight = false;
-      debugLogger.warn("yt-dlp self-update unexpected error", { error: e.message });
+      debugLogger.warn("yt-dlp signed-bundle verification failed", { error: e.message });
       resolve();
     }
   });

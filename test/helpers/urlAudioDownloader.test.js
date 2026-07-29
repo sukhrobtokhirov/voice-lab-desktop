@@ -435,25 +435,21 @@ function ensureCacheBinary() {
   };
 }
 
-test("maybeUpdateYtDlp resolves on -U timeout, kills the child, and clears the in-flight flag", async () => {
+test("maybeUpdateYtDlp never spawns the runtime self-updater", async () => {
   const cleanup = ensureCacheBinary();
   const origSpawn = childProcess.spawn;
   let spawnCount = 0;
-  let lastChild = null;
   childProcess.spawn = () => {
     spawnCount += 1;
-    lastChild = makeFakeChild();
-    return lastChild;
+    return makeFakeChild();
   };
   try {
     await resolvesWithin(maybeUpdateYtDlp({ force: true, timeoutMs: 20 }), 2000);
-    assert.ok(lastChild.killCalled, "timeout should have killed the stuck child");
     assert.equal(downloader._isYtDlpUpdateInFlight(), false, "in-flight flag must be cleared");
-    assert.equal(spawnCount, 1);
+    assert.equal(spawnCount, 0);
 
-    // A stuck flag would make this second call short-circuit without spawning.
     await resolvesWithin(maybeUpdateYtDlp({ force: true, timeoutMs: 20 }), 2000);
-    assert.equal(spawnCount, 2, "second call must spawn again, proving no stuck single-flight flag");
+    assert.equal(spawnCount, 0, "runtime updates must remain disabled on repeated calls");
     assert.equal(downloader._isYtDlpUpdateInFlight(), false);
   } finally {
     childProcess.spawn = origSpawn;
@@ -461,13 +457,13 @@ test("maybeUpdateYtDlp resolves on -U timeout, kills the child, and clears the i
   }
 });
 
-test("maybeUpdateYtDlp with an already-aborted signal resolves promptly and kills the child", async () => {
+test("maybeUpdateYtDlp with an already-aborted signal resolves without spawning", async () => {
   const cleanup = ensureCacheBinary();
   const origSpawn = childProcess.spawn;
-  let lastChild = null;
+  let spawnCount = 0;
   childProcess.spawn = () => {
-    lastChild = makeFakeChild();
-    return lastChild;
+    spawnCount += 1;
+    return makeFakeChild();
   };
   const ac = new AbortController();
   ac.abort();
@@ -476,7 +472,7 @@ test("maybeUpdateYtDlp with an already-aborted signal resolves promptly and kill
       maybeUpdateYtDlp({ force: true, abortSignal: ac.signal, timeoutMs: 60000 }),
       2000
     );
-    assert.ok(lastChild.killCalled, "abort should have killed the child");
+    assert.equal(spawnCount, 0);
     assert.equal(downloader._isYtDlpUpdateInFlight(), false, "in-flight flag must be cleared");
   } finally {
     childProcess.spawn = origSpawn;
@@ -1144,7 +1140,7 @@ test("maybeUpdateYtDlp never executes a tampered cache copy and a failed update 
   }
 });
 
-test("maybeUpdateYtDlp updates on the nightly channel and re-records the checksum", async () => {
+test("maybeUpdateYtDlp ignores nightly update requests and keeps a verified cache", async () => {
   const cleanup = ensureCacheBinary();
   const name = `yt-dlp-${process.platform}-${process.arch}${process.platform === "win32" ? ".exe" : ""}`;
   const cachePath = path.join(YT_DLP_TEST_CACHE_DIR, name);
@@ -1163,8 +1159,10 @@ test("maybeUpdateYtDlp updates on the nightly channel and re-records the checksu
   };
   try {
     await resolvesWithin(maybeUpdateYtDlp({ force: true }), 2000);
-    assert.deepEqual(spawnArgs, ["--update-to", "nightly"]);
-    assert.equal(downloader._resolveYtDlpBinary(), cachePath, "updated copy must pass verification");
+    assert.equal(spawnArgs, null);
+    if (fs.existsSync(cachePath)) {
+      assert.equal(downloader._resolveYtDlpBinary(), cachePath, "cache must remain verified");
+    }
   } finally {
     childProcess.spawn = origSpawn;
     cleanup();
