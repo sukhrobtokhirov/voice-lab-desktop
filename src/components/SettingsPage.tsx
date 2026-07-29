@@ -716,8 +716,8 @@ export default function SettingsPage({
   useEffect(() => {
     if (activeSection !== "system") return;
     let cancelled = false;
-    void window.electronAPI?.getAishaApiKey?.().then((key) => {
-      if (!cancelled) setAishaApiKey(typeof key === "string" ? key : "");
+    void window.electronAPI?.providerCredentialStatus?.().then((status) => {
+      if (!cancelled) setAishaApiKey(status?.credentials?.aishaApiKey ? "••••••••" : "");
     });
     return () => {
       cancelled = true;
@@ -731,7 +731,8 @@ export default function SettingsPage({
       setAishaKeyBusy(true);
       setAishaKeyStatus(null);
       try {
-        await window.electronAPI?.saveAishaApiKey?.(trimmed);
+        if (trimmed === "••••••••") return;
+        await window.electronAPI?.providerSaveCredential?.("aishaApiKey", trimmed);
         if (!trimmed) {
           setAishaKeyStatus(t("settingsPage.account.aishaKey.cleared"));
           return;

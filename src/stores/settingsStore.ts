@@ -29,7 +29,6 @@ import type {
 import type { Snippet } from "../utils/snippets";
 import type { DesktopDictionaryEntry, DesktopDictionaryState } from "../types/electron";
 
-let _ReasoningService: typeof import("../services/ReasoningService").default | null = null;
 
 const isBrowser = typeof window !== "undefined";
 
@@ -801,43 +800,29 @@ function createRegisteredHotkeySetter(
   };
 }
 
-let envPersistTimer: ReturnType<typeof setTimeout> | null = null;
-function debouncedPersistToEnv() {
-  if (!isBrowser) return;
-  if (envPersistTimer) clearTimeout(envPersistTimer);
-  envPersistTimer = setTimeout(() => {
-    window.electronAPI?.saveAllKeysToEnv?.().catch((err) => {
-      logger.warn(
-        "Failed to persist API keys to .env",
-        { error: (err as Error).message },
-        "settings"
-      );
-    });
-  }, 1000);
-}
-
-const SECRET_IPC_SAVERS = {
-  openai: "saveOpenAIKey",
-  anthropic: "saveAnthropicKey",
-  gemini: "saveGeminiKey",
-  groq: "saveGroqKey",
-  xai: "saveXaiKey",
-  mistral: "saveMistralKey",
-  openrouter: "saveOpenrouterKey",
-  cortiClientId: "saveCortiClientId",
-  cortiClientSecret: "saveCortiClientSecret",
-  cortiApiKey: "saveCortiKey",
-  tinfoil: "saveTinfoilKey",
-  customTranscription: "saveCustomTranscriptionKey",
-  cleanupCustom: "saveCleanupCustomKey",
-  bedrockAccessKeyId: "saveBedrockAccessKeyId",
-  bedrockSecretAccessKey: "saveBedrockSecretAccessKey",
-  bedrockSessionToken: "saveBedrockSessionToken",
-  azureApiKey: "saveAzureApiKey",
-  vertexApiKey: "saveVertexApiKey",
+const SECRET_CREDENTIAL_IDS = {
+  openai: "openai",
+  anthropic: "anthropic",
+  gemini: "gemini",
+  groq: "groq",
+  xai: "xai",
+  mistral: "mistral",
+  openrouter: "openrouter",
+  cortiClientId: "cortiClientId",
+  cortiClientSecret: "cortiClientSecret",
+  cortiApiKey: "cortiApiKey",
+  tinfoil: "tinfoil",
+  customTranscription: "customTranscription",
+  cleanupCustom: "cleanupCustom",
+  bedrockAccessKeyId: "bedrockAccessKeyId",
+  bedrockSecretAccessKey: "bedrockSecretAccessKey",
+  bedrockSessionToken: "bedrockSessionToken",
+  azureApiKey: "azureApiKey",
+  vertexApiKey: "vertexApiKey",
 } as const;
 
-type SecretProvider = keyof typeof SECRET_IPC_SAVERS;
+const STORED_SECRET_PLACEHOLDER = "••••••••";
+type SecretProvider = keyof typeof SECRET_CREDENTIAL_IDS;
 
 const secretSaveTimers: Partial<Record<SecretProvider, ReturnType<typeof setTimeout>>> = {};
 function debouncedSaveSecret(provider: SecretProvider, key: string) {
@@ -845,16 +830,15 @@ function debouncedSaveSecret(provider: SecretProvider, key: string) {
   const timer = secretSaveTimers[provider];
   if (timer) clearTimeout(timer);
   secretSaveTimers[provider] = setTimeout(() => {
-    const api = window.electronAPI;
-    const save = api?.[SECRET_IPC_SAVERS[provider]] as
-      ((k: string) => Promise<unknown>) | undefined;
-    save?.(key)?.catch((err) => {
+    window.electronAPI.providerSaveCredential?.(SECRET_CREDENTIAL_IDS[provider], key)?.catch(
+      (err) => {
       logger.warn(
         "Failed to persist secret",
         { provider, error: (err as Error).message },
         "settings"
       );
-    });
+      }
+    );
   }, 250);
 }
 
@@ -880,46 +864,18 @@ const STALE_SECRET_LOCALSTORAGE_KEYS = [
   "vertexApiKey",
 ] as const;
 
-function invalidateApiKeyCaches(
-  provider?:
-    | "openai"
-    | "anthropic"
-    | "gemini"
-    | "groq"
-    | "mistral"
-    | "tinfoil"
-    | "custom"
-    | "openrouter"
-    | "corti"
-) {
-  if (provider) {
-    if (_ReasoningService) {
-      _ReasoningService.clearApiKeyCache(provider);
-    } else {
-      import("../services/ReasoningService")
-        .then((mod) => {
-          _ReasoningService = mod.default;
-          _ReasoningService.clearApiKeyCache(provider);
-        })
-        .catch(() => {});
-    }
-  }
-  if (isBrowser) window.dispatchEvent(new Event("api-key-changed"));
-  debouncedPersistToEnv();
-}
-
 // Uniform BYOK key setter: persist to the secure store (debounced) and clear
 // the provider's cached key. cacheProvider is omitted where there is no scoped
 // cache to clear (xai), preserving prior behavior.
 function createSecretSetter(
   storeKey: string,
   saver: SecretProvider,
-  cacheProvider?: Parameters<typeof invalidateApiKeyCaches>[0]
+  _cacheProvider?: string
 ) {
   return (key: string) => {
+    if (key === STORED_SECRET_PLACEHOLDER) return;
     useSettingsStore.setState({ [storeKey]: key });
     debouncedSaveSecret(saver, key);
-    invalidateApiKeyCaches(cacheProvider);
   };
 }
 
@@ -1529,12 +1485,10 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setCortiClientId: (key: string) => {
     set({ cortiClientId: key });
     debouncedSaveSecret("cortiClientId", key);
-    invalidateApiKeyCaches("corti");
   },
   setCortiClientSecret: (key: string) => {
     set({ cortiClientSecret: key });
     debouncedSaveSecret("cortiClientSecret", key);
-    invalidateApiKeyCaches("corti");
   },
   setCortiApiKey: createSecretSetter("cortiApiKey", "cortiApiKey", "corti"),
   setCortiEnvironment: createStringSetter("cortiEnvironment"),
@@ -1543,12 +1497,10 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setCustomTranscriptionApiKey: (key: string) => {
     set({ customTranscriptionApiKey: key });
     debouncedSaveSecret("customTranscription", key);
-    invalidateApiKeyCaches("custom");
   },
   setCleanupCustomApiKey: (key: string) => {
     set({ cleanupCustomApiKey: key });
     debouncedSaveSecret("cleanupCustom", key);
-    invalidateApiKeyCaches("custom");
   },
 
   // Enterprise provider setters
@@ -1560,51 +1512,42 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     if (isBrowser) localStorage.setItem("bedrockRegion", value);
     set({ bedrockRegion: value });
     window.electronAPI?.saveBedrockRegion?.(value);
-    debouncedPersistToEnv();
   },
   setBedrockProfile: (value: string) => {
     if (isBrowser) localStorage.setItem("bedrockProfile", value);
     set({ bedrockProfile: value });
     window.electronAPI?.saveBedrockProfile?.(value);
-    debouncedPersistToEnv();
   },
   setBedrockAccessKeyId: (key: string) => {
     set({ bedrockAccessKeyId: key });
     debouncedSaveSecret("bedrockAccessKeyId", key);
-    debouncedPersistToEnv();
   },
   setBedrockSecretAccessKey: (key: string) => {
     set({ bedrockSecretAccessKey: key });
     debouncedSaveSecret("bedrockSecretAccessKey", key);
-    debouncedPersistToEnv();
   },
   setBedrockSessionToken: (key: string) => {
     set({ bedrockSessionToken: key });
     debouncedSaveSecret("bedrockSessionToken", key);
-    debouncedPersistToEnv();
   },
   setAzureEndpoint: (value: string) => {
     if (isBrowser) localStorage.setItem("azureEndpoint", value);
     set({ azureEndpoint: value });
     window.electronAPI?.saveAzureEndpoint?.(value);
-    debouncedPersistToEnv();
   },
   setAzureApiKey: (key: string) => {
     set({ azureApiKey: key });
     debouncedSaveSecret("azureApiKey", key);
-    debouncedPersistToEnv();
   },
   setAzureDeploymentName: (value: string) => {
     if (isBrowser) localStorage.setItem("azureDeploymentName", value);
     set({ azureDeploymentName: value });
     window.electronAPI?.saveAzureDeployment?.(value);
-    debouncedPersistToEnv();
   },
   setAzureApiVersion: (value: string) => {
     if (isBrowser) localStorage.setItem("azureApiVersion", value);
     set({ azureApiVersion: value });
     window.electronAPI?.saveAzureApiVersion?.(value);
-    debouncedPersistToEnv();
   },
   setVertexAuthMode: (value: string) => {
     if (isBrowser) localStorage.setItem("vertexAuthMode", value);
@@ -1614,18 +1557,15 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     if (isBrowser) localStorage.setItem("vertexProject", value);
     set({ vertexProject: value });
     window.electronAPI?.saveVertexProject?.(value);
-    debouncedPersistToEnv();
   },
   setVertexLocation: (value: string) => {
     if (isBrowser) localStorage.setItem("vertexLocation", value);
     set({ vertexLocation: value });
     window.electronAPI?.saveVertexLocation?.(value);
-    debouncedPersistToEnv();
   },
   setVertexApiKey: (key: string) => {
     set({ vertexApiKey: key });
     debouncedSaveSecret("vertexApiKey", key);
-    debouncedPersistToEnv();
   },
 
   setDictationKey: (key: string) => {
@@ -2239,85 +2179,36 @@ export async function initializeSettings(): Promise<void> {
 
   if (window.electronAPI) {
     try {
-      const [
-        openai,
-        anthropic,
-        gemini,
-        groq,
-        xai,
-        mistral,
-        openrouter,
-        cortiClientId,
-        cortiClientSecret,
-        cortiApiKey,
-        tinfoil,
-        customTx,
-        customRx,
-        bedrockAccessKeyId,
-        bedrockSecretAccessKey,
-        bedrockSessionToken,
-        azureApiKey,
-        vertexApiKey,
-      ] = await Promise.all([
-        window.electronAPI.getOpenAIKey?.(),
-        window.electronAPI.getAnthropicKey?.(),
-        window.electronAPI.getGeminiKey?.(),
-        window.electronAPI.getGroqKey?.(),
-        window.electronAPI.getXaiKey?.(),
-        window.electronAPI.getMistralKey?.(),
-        window.electronAPI.getOpenrouterKey?.(),
-        window.electronAPI.getCortiClientId?.(),
-        window.electronAPI.getCortiClientSecret?.(),
-        window.electronAPI.getCortiKey?.(),
-        window.electronAPI.getTinfoilKey?.(),
-        window.electronAPI.getCustomTranscriptionKey?.(),
-        window.electronAPI.getCleanupCustomKey?.(),
-        window.electronAPI.getBedrockAccessKeyId?.(),
-        window.electronAPI.getBedrockSecretAccessKey?.(),
-        window.electronAPI.getBedrockSessionToken?.(),
-        window.electronAPI.getAzureApiKey?.(),
-        window.electronAPI.getVertexApiKey?.(),
-      ]);
+      const status = await window.electronAPI.providerCredentialStatus?.();
+      const configured = status?.credentials || {};
+      const placeholder = (credential: string) =>
+        configured[credential] ? STORED_SECRET_PLACEHOLDER : "";
 
       useSettingsStore.setState({
-        openaiApiKey: openai || "",
-        anthropicApiKey: anthropic || "",
-        geminiApiKey: gemini || "",
-        groqApiKey: groq || "",
-        xaiApiKey: xai || "",
-        mistralApiKey: mistral || "",
-        openrouterApiKey: openrouter || "",
-        cortiClientId: cortiClientId || "",
-        cortiClientSecret: cortiClientSecret || "",
-        cortiApiKey: cortiApiKey || "",
-        tinfoilApiKey: tinfoil || "",
-        customTranscriptionApiKey: customTx || "",
-        cleanupCustomApiKey: customRx || "",
-        bedrockAccessKeyId: bedrockAccessKeyId || "",
-        bedrockSecretAccessKey: bedrockSecretAccessKey || "",
-        bedrockSessionToken: bedrockSessionToken || "",
-        azureApiKey: azureApiKey || "",
-        vertexApiKey: vertexApiKey || "",
+        openaiApiKey: placeholder("openai"),
+        anthropicApiKey: placeholder("anthropic"),
+        geminiApiKey: placeholder("gemini"),
+        groqApiKey: placeholder("groq"),
+        xaiApiKey: placeholder("xai"),
+        mistralApiKey: placeholder("mistral"),
+        openrouterApiKey: placeholder("openrouter"),
+        cortiClientId: placeholder("cortiClientId"),
+        cortiClientSecret: placeholder("cortiClientSecret"),
+        cortiApiKey: placeholder("cortiApiKey"),
+        tinfoilApiKey: placeholder("tinfoil"),
+        customTranscriptionApiKey: placeholder("customTranscription"),
+        cleanupCustomApiKey: placeholder("cleanupCustom"),
+        bedrockAccessKeyId: placeholder("bedrockAccessKeyId"),
+        bedrockSecretAccessKey: placeholder("bedrockSecretAccessKey"),
+        bedrockSessionToken: placeholder("bedrockSessionToken"),
+        azureApiKey: placeholder("azureApiKey"),
+        vertexApiKey: placeholder("vertexApiKey"),
       });
 
       for (const key of STALE_SECRET_LOCALSTORAGE_KEYS) {
         localStorage.removeItem(key);
       }
 
-      // Users who configured OpenRouter through the Custom tab keep their key
-      // in the shared custom slot — seed the dedicated slot from it once.
-      if (!openrouter && customRx) {
-        const hydrated = useSettingsStore.getState();
-        const usesOpenRouterViaCustom = (Object.keys(INFERENCE_SCOPES) as InferenceScope[]).some(
-          (scope) => {
-            const cfg = selectResolvedLLMConfig(hydrated, scope);
-            return cfg.provider === "custom" && (cfg.cloudBaseUrl || "").includes("openrouter.ai");
-          }
-        );
-        if (usesOpenRouterViaCustom) {
-          hydrated.setOpenrouterApiKey(customRx);
-        }
-      }
     } catch (err) {
       logger.warn(
         "Failed to hydrate secrets from main process",

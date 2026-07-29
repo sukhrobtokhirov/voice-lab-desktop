@@ -412,8 +412,8 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       if (localStorage.getItem("onboardingCompleted") !== "true") return;
       if (sessionStorage.getItem("aishaKeyPromptShown") === "true") return;
       try {
-        const key = await window.electronAPI?.getAishaApiKey?.();
-        if (cancelled || (typeof key === "string" && key.trim())) return;
+        const status = await window.electronAPI?.providerCredentialStatus?.();
+        if (cancelled || status?.credentials?.aishaApiKey) return;
         sessionStorage.setItem("aishaKeyPromptShown", "true");
         setSettingsSection("account");
         setShowSettings(true);

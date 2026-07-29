@@ -291,14 +291,6 @@ class AudioManager {
     this.onTranscriptionComplete = null;
     this.onPartialTranscript = null;
     this.micCaptureStatus = "inactive";
-    this.cachedApiKey = null;
-    this.cachedApiKeyProvider = null;
-
-    this._onApiKeyChanged = () => {
-      this.cachedApiKey = null;
-      this.cachedApiKeyProvider = null;
-    };
-    window.addEventListener("api-key-changed", this._onApiKeyChanged);
 
     // Invalidate the pinned mic device when the OS adds/removes/suspends inputs.
     // Otherwise wake-after-idle keeps requesting a stale deviceId that yields silence.
@@ -309,9 +301,6 @@ class AudioManager {
       this.rejectedMicDeviceId = null;
     };
     navigator.mediaDevices?.addEventListener?.("devicechange", this._onDeviceChange);
-    this.cachedTranscriptionEndpoint = null;
-    this.cachedEndpointProvider = null;
-    this.cachedEndpointBaseUrl = null;
     this.recordingStartTime = null;
     this.reasoningAvailabilityCache = { value: false, expiresAt: 0 };
     this.cachedReasoningPreference = null;
@@ -1479,142 +1468,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     }
   }
 
-  async getAPIKey() {
-    const s = getSettings();
-    if (shouldSkipTranscriptionApiKey(s)) {
-      return null;
-    }
-
-    const provider = s.cloudTranscriptionProvider || "openai";
-
-    // Check cache (invalidate if provider changed)
-    if (this.cachedApiKey !== null && this.cachedApiKeyProvider === provider) {
-      return this.cachedApiKey;
-    }
-
-    let apiKey = null;
-
-    if (provider === "custom") {
-      // Prefer store value (user-entered via UI) over main process (.env)
-      apiKey = s.customTranscriptionApiKey || "";
-      if (!apiKey.trim()) {
-        try {
-          apiKey = await window.electronAPI.getCustomTranscriptionKey?.();
-        } catch (err) {
-          logger.debug(
-            "Failed to get custom transcription key via IPC",
-            { error: err?.message },
-            "transcription"
-          );
-        }
-      }
-      apiKey = apiKey?.trim() || "";
-
-      logger.debug(
-        "Custom STT API key retrieval",
-        {
-          provider,
-          hasKey: !!apiKey,
-          keyLength: apiKey?.length || 0,
-        },
-        "transcription"
-      );
-
-      // For custom, we allow null/empty - the endpoint may not require auth
-      if (!apiKey) {
-        apiKey = null;
-      }
-    } else if (provider === "mistral") {
-      // Prefer store value (user-entered via UI) over main process (.env)
-      // to avoid stale keys in process.env after auth mode transitions
-      apiKey = s.mistralApiKey;
-      if (!isValidApiKey(apiKey, "mistral")) {
-        apiKey = await window.electronAPI.getMistralKey?.();
-      }
-      if (!isValidApiKey(apiKey, "mistral")) {
-        const err = new Error(
-          "Mistral API key not found. Please set your API key in the Control Panel."
-        );
-        err.code = "API_KEY_MISSING";
-        throw err;
-      }
-    } else if (provider === "corti") {
-      // Tokens are minted in the main process; only verify credentials exist here
-      let clientId = s.cortiClientId;
-      let clientSecret = s.cortiClientSecret;
-      if (!clientId?.trim() || !clientSecret?.trim()) {
-        [clientId, clientSecret] = await Promise.all([
-          window.electronAPI.getCortiClientId?.(),
-          window.electronAPI.getCortiClientSecret?.(),
-        ]);
-      }
-      if (!clientId?.trim() || !clientSecret?.trim()) {
-        const err = new Error(
-          "Corti credentials not found. Please set your Client ID and Client Secret in the Control Panel."
-        );
-        err.code = "API_KEY_MISSING";
-        throw err;
-      }
-      apiKey = null;
-    } else if (provider === "tinfoil") {
-      apiKey = s.tinfoilApiKey;
-      if (!apiKey?.trim()) {
-        apiKey = await window.electronAPI.getTinfoilKey?.();
-      }
-      if (!apiKey?.trim()) {
-        const err = new Error(
-          "Tinfoil API key not found. Please set your API key in the Control Panel."
-        );
-        err.code = "API_KEY_MISSING";
-        throw err;
-      }
-    } else if (provider === "groq") {
-      // Prefer store value (user-entered via UI) over main process (.env)
-      apiKey = s.groqApiKey;
-      if (!isValidApiKey(apiKey, "groq")) {
-        apiKey = await window.electronAPI.getGroqKey?.();
-      }
-      if (!isValidApiKey(apiKey, "groq")) {
-        const err = new Error(
-          "Groq API key not found. Please set your API key in the Control Panel."
-        );
-        err.code = "API_KEY_MISSING";
-        throw err;
-      }
-    } else if (provider === "xai") {
-      apiKey = s.xaiApiKey;
-      if (!isValidApiKey(apiKey, "xai")) {
-        apiKey = await window.electronAPI.getXaiKey?.();
-      }
-      if (!isValidApiKey(apiKey, "xai")) {
-        const err = new Error(
-          "xAI API key not found. Please set your API key in the Control Panel."
-        );
-        err.code = "API_KEY_MISSING";
-        throw err;
-      }
-    } else {
-      // Default to OpenAI
-      // Prefer store value (user-entered via UI) over main process (.env)
-      // to avoid stale keys in process.env after auth mode transitions
-      apiKey = s.openaiApiKey;
-      if (!isValidApiKey(apiKey, "openai")) {
-        apiKey = await window.electronAPI.getOpenAIKey();
-      }
-      if (!isValidApiKey(apiKey, "openai")) {
-        const err = new Error(
-          "OpenAI API key not found. Please set your API key in the .env file or Control Panel."
-        );
-        err.code = "API_KEY_MISSING";
-        throw err;
-      }
-    }
-
-    this.cachedApiKey = apiKey;
-    this.cachedApiKeyProvider = provider;
-    return apiKey;
-  }
-
   async processWithReasoningModel(text, model, agentName, config) {
     logger.logReasoning("CALLING_REASONING_SERVICE", {
       model,
@@ -1932,161 +1785,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     return normalizedText;
   }
 
-  shouldStreamTranscription(model, provider) {
-    if (provider !== "openai") {
-      return false;
-    }
-    const normalized = typeof model === "string" ? model.trim() : "";
-    if (!normalized || normalized === "whisper-1") {
-      return false;
-    }
-    if (normalized === "gpt-4o-transcribe" || normalized === "gpt-4o-transcribe-diarize") {
-      return true;
-    }
-    return normalized.startsWith("gpt-4o-mini-transcribe");
-  }
-
-  async readTranscriptionStream(response) {
-    const reader = response.body?.getReader();
-    if (!reader) {
-      logger.error("Streaming response body not available", {}, "transcription");
-      throw new Error("Streaming response body not available");
-    }
-
-    const decoder = new TextDecoder("utf-8");
-    let buffer = "";
-    let collectedText = "";
-    let finalText = null;
-    let eventCount = 0;
-    const eventTypes = {};
-
-    const handleEvent = (payload) => {
-      if (!payload || typeof payload !== "object") {
-        return;
-      }
-      eventCount++;
-      const eventType = payload.type || "unknown";
-      eventTypes[eventType] = (eventTypes[eventType] || 0) + 1;
-
-      logger.debug(
-        "Stream event received",
-        {
-          type: eventType,
-          eventNumber: eventCount,
-          payloadKeys: Object.keys(payload),
-        },
-        "transcription"
-      );
-
-      if (payload.type === "transcript.text.delta" && typeof payload.delta === "string") {
-        collectedText += payload.delta;
-        return;
-      }
-      if (payload.type === "transcript.text.segment" && typeof payload.text === "string") {
-        collectedText += payload.text;
-        return;
-      }
-      if (payload.type === "transcript.text.done" && typeof payload.text === "string") {
-        finalText = payload.text;
-        logger.debug(
-          "Final transcript received",
-          {
-            textLength: payload.text.length,
-          },
-          "transcription"
-        );
-      }
-    };
-
-    logger.debug("Starting to read transcription stream", {}, "transcription");
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) {
-        logger.debug(
-          "Stream reading complete",
-          {
-            eventCount,
-            eventTypes,
-            collectedTextLength: collectedText.length,
-            hasFinalText: finalText !== null,
-          },
-          "transcription"
-        );
-        break;
-      }
-      const chunk = decoder.decode(value, { stream: true });
-      buffer += chunk;
-
-      // Log first chunk to see format
-      if (eventCount === 0 && chunk.length > 0) {
-        logger.debug(
-          "First stream chunk received",
-          {
-            chunkLength: chunk.length,
-            chunkPreview: chunk.substring(0, 500),
-          },
-          "transcription"
-        );
-      }
-
-      // Process complete lines from the buffer
-      // Each SSE event is "data: <json>\n" followed by empty line
-      const lines = buffer.split("\n");
-      buffer = "";
-
-      for (const line of lines) {
-        const trimmedLine = line.trim();
-
-        // Skip empty lines
-        if (!trimmedLine) {
-          continue;
-        }
-
-        // Extract data from "data: " prefix
-        let data = "";
-        if (trimmedLine.startsWith("data: ")) {
-          data = trimmedLine.slice(6);
-        } else if (trimmedLine.startsWith("data:")) {
-          data = trimmedLine.slice(5).trim();
-        } else {
-          // Not a data line, could be leftover - keep in buffer
-          buffer += line + "\n";
-          continue;
-        }
-
-        // Handle [DONE] marker
-        if (data === "[DONE]") {
-          finalText = finalText ?? collectedText;
-          continue;
-        }
-
-        // Try to parse JSON
-        try {
-          const parsed = JSON.parse(data);
-          handleEvent(parsed);
-        } catch (error) {
-          // Incomplete JSON - put back in buffer for next iteration
-          buffer += line + "\n";
-        }
-      }
-    }
-
-    const result = finalText ?? collectedText;
-    logger.debug(
-      "Stream processing complete",
-      {
-        resultLength: result.length,
-        usedFinalText: finalText !== null,
-        eventCount,
-        eventTypes,
-      },
-      "transcription"
-    );
-
-    return result;
-  }
-
   async processWithOpenWhisprCloud(audioBlob, metadata = {}) {
     if (!navigator.onLine) {
       const err = new Error("You're offline. Cloud transcription requires an internet connection.");
@@ -2276,457 +1974,102 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
   async processWithOpenAIAPI(audioBlob, metadata = {}) {
     const timings = {};
-    const apiSettings = getSettings();
-    const language = getBaseLanguageCode(this.getEffectiveSttLanguage(apiSettings));
-    const allowLocalFallback = apiSettings.allowLocalFallback;
-    const fallbackModel = apiSettings.fallbackWhisperModel || "base";
+    const settings = getSettings();
+    const language = getBaseLanguageCode(this.getEffectiveSttLanguage(settings));
+    const allowLocalFallback = settings.allowLocalFallback;
+    const fallbackModel = settings.fallbackWhisperModel || "base";
 
     try {
-      const durationSeconds = metadata.durationSeconds ?? null;
+      if (!window.electronAPI?.providerTranscribe) {
+        throw new Error("Provider transcription is unavailable in this window");
+      }
+
+      const selectedProvider = settings.cloudTranscriptionProvider || "openai";
+      const selfHosted = isSelfHostedTranscription(settings);
+      const provider = selfHosted ? "lan" : selectedProvider;
       const model = this.getTranscriptionModel();
-      const provider = apiSettings.cloudTranscriptionProvider || "openai";
+      const mimeType = audioBlob.type || "audio/webm";
+      const dictionaryPrompt = this.getCustomDictionaryPrompt();
+      const apiCallStart = performance.now();
+      const keyterms = this.getKeyterms()
+        .map((term) => term.trim().slice(0, 100))
+        .filter(Boolean)
+        .slice(0, 100);
 
       logger.debug(
-        "Transcription request starting",
+        "Main-process provider transcription starting",
         {
           provider,
           model,
           blobSize: audioBlob.size,
-          blobType: audioBlob.type,
-          durationSeconds,
+          blobType: mimeType,
+          durationSeconds: metadata.durationSeconds ?? null,
           language,
         },
         "transcription"
       );
 
-      const apiKey = await this.getAPIKey();
-      const optimizedAudio = audioBlob;
-
-      // Dispatch before endpoint resolution (which defaults to OpenAI and would leak
-      // the key). Self-hosted wins, so a leftover "tinfoil" provider isn't diverted here.
-      if (provider === "tinfoil" && !isSelfHostedTranscription(apiSettings)) {
-        if (!window.electronAPI?.proxyTinfoilTranscription) {
-          throw new Error("Tinfoil transcription is unavailable in this window");
-        }
-        const dictionaryPrompt = this.getCustomDictionaryPrompt();
-        const apiCallStart = performance.now();
-        const result = await window.electronAPI.proxyTinfoilTranscription({
-          audioBuffer: await optimizedAudio.arrayBuffer(),
-          language,
-          prompt: dictionaryPrompt || undefined,
-        });
-        if (result?.error) {
-          const err = new Error(result.error);
-          if (result.code) err.code = result.code;
-          if (result.messageKey) err.messageKey = result.messageKey;
-          throw err;
-        }
-        const proxyText = result?.text;
-        if (!proxyText?.trim()) {
-          throw new Error("No text transcribed - Tinfoil response was empty");
-        }
-        if (this.isDictionaryEcho(proxyText)) {
-          throw new Error("No audio detected");
-        }
-        timings.transcriptionProcessingDurationMs = Math.round(performance.now() - apiCallStart);
-        const reasoningStart = performance.now();
-        const text = await this.processTranscription(proxyText, "tinfoil");
-        timings.reasoningProcessingDurationMs = Math.round(performance.now() - reasoningStart);
-
-        const source = (await this.isReasoningAvailable()) ? "tinfoil-reasoned" : "tinfoil";
-        return { success: true, text, rawText: proxyText, source, timings };
-      }
-
-      const formData = new FormData();
-      // Determine the correct file extension based on the blob type
-      const mimeType = optimizedAudio.type || "audio/webm";
-      const extension = mimeType.includes("webm")
-        ? "webm"
-        : mimeType.includes("ogg")
-          ? "ogg"
-          : mimeType.includes("mp4")
-            ? "mp4"
-            : mimeType.includes("mpeg")
-              ? "mp3"
-              : mimeType.includes("wav")
-                ? "wav"
-                : "webm";
-
-      logger.debug(
-        "FormData preparation",
-        {
-          mimeType,
-          extension,
-          optimizedSize: optimizedAudio.size,
-          hasApiKey: !!apiKey,
-        },
-        "transcription"
-      );
-
-      formData.append("file", optimizedAudio, `audio.${extension}`);
-      formData.append("model", model);
-
-      if (language) {
-        formData.append("language", language);
-      }
-
-      const endpoint = this.getTranscriptionEndpoint(model);
-
-      // Groq rejects prompts > 896 chars (incl. when reached via "custom" provider).
-      // 890 leaves margin for UTF-16 vs codepoint counting drift.
-      const isGroqEndpoint = provider === "groq" || endpoint.includes("api.groq.com");
-      const MAX_PROMPT_CHARS = isGroqEndpoint ? 890 : 900;
-      let dictionaryPrompt = this.getCustomDictionaryPrompt();
-      if (dictionaryPrompt) {
-        if (dictionaryPrompt.length > MAX_PROMPT_CHARS) {
-          const originalLength = dictionaryPrompt.length;
-          const truncated = dictionaryPrompt.slice(0, MAX_PROMPT_CHARS);
-          const lastComma = truncated.lastIndexOf(",");
-          dictionaryPrompt = lastComma > 0 ? truncated.slice(0, lastComma) : truncated;
-          logger.debug(
-            "Custom dictionary prompt truncated",
-            {
-              originalLength,
-              truncatedLength: dictionaryPrompt.length,
-              maxChars: MAX_PROMPT_CHARS,
-            },
-            "transcription"
-          );
-        }
-        formData.append("prompt", dictionaryPrompt);
-      }
-
-      const shouldStream = this.shouldStreamTranscription(model, provider);
-      if (shouldStream) {
-        formData.append("stream", "true");
-      }
-
-      const isCustomEndpoint =
-        provider === "custom" ||
-        (!endpoint.includes("api.openai.com") &&
-          !endpoint.includes("api.groq.com") &&
-          !endpoint.includes("api.x.ai") &&
-          !endpoint.includes("api.mistral.ai"));
-
-      const apiCallStart = performance.now();
-
-      // Mistral uses x-api-key auth (not Bearer) and doesn't allow browser CORS — proxy through main process
-      if (provider === "mistral" && window.electronAPI?.proxyMistralTranscription) {
-        const audioBuffer = await optimizedAudio.arrayBuffer();
-        const proxyData = { audioBuffer, model, language };
-
-        if (dictionaryPrompt) {
-          const tokens = dictionaryPrompt
-            .split(",")
-            .flatMap((entry) => entry.trim().split(/\s+/))
-            .filter(Boolean)
-            .slice(0, 100);
-          if (tokens.length > 0) {
-            proxyData.contextBias = tokens;
-          }
-        }
-
-        const result = await window.electronAPI.proxyMistralTranscription(proxyData);
-        const proxyText = result?.text;
-
-        if (proxyText && proxyText.trim().length > 0) {
-          if (this.isDictionaryEcho(proxyText)) {
-            throw new Error("No audio detected");
-          }
-          timings.transcriptionProcessingDurationMs = Math.round(performance.now() - apiCallStart);
-          const rawText = proxyText;
-          const reasoningStart = performance.now();
-          const text = await this.processTranscription(proxyText, "mistral");
-          timings.reasoningProcessingDurationMs = Math.round(performance.now() - reasoningStart);
-
-          const source = (await this.isReasoningAvailable()) ? "mistral-reasoned" : "mistral";
-          return { success: true, text, rawText, source, timings };
-        }
-
-        throw new Error("No text transcribed - Mistral response was empty");
-      }
-
-      // xAI STT has a non-OpenAI-compatible API — proxy through main process. See #910.
-      if (provider === "xai" && window.electronAPI?.proxyXaiTranscription) {
-        const audioBuffer = await optimizedAudio.arrayBuffer();
-        const proxyData = { audioBuffer, language: language !== "auto" ? language : undefined };
-
-        const keyterms = this.getKeyterms()
-          .map((t) => t.trim().slice(0, 50))
-          .filter(Boolean)
-          .slice(0, 100);
-        if (keyterms.length > 0) {
-          proxyData.keyterms = keyterms;
-        }
-
-        const result = await window.electronAPI.proxyXaiTranscription(proxyData);
-        const proxyText = result?.text;
-
-        if (proxyText && proxyText.trim().length > 0) {
-          if (this.isDictionaryEcho(proxyText)) {
-            throw new Error("No audio detected");
-          }
-          timings.transcriptionProcessingDurationMs = Math.round(performance.now() - apiCallStart);
-          const rawText = proxyText;
-          const reasoningStart = performance.now();
-          const text = await this.processTranscription(proxyText, "xai");
-          timings.reasoningProcessingDurationMs = Math.round(performance.now() - reasoningStart);
-
-          const source = (await this.isReasoningAvailable()) ? "xai-reasoned" : "xai";
-          return { success: true, text, rawText, source, timings };
-        }
-
-        throw new Error("No text transcribed - xAI response was empty");
-      }
-
-      // Corti uses OAuth client credentials and an interaction-based REST flow — proxy through main process
-      if (provider === "corti" && window.electronAPI?.proxyCortiTranscription) {
-        const audioBuffer = await optimizedAudio.arrayBuffer();
-        const proxyData = {
-          audioBuffer,
-          // Corti requires a concrete primaryLanguage; default to English when auto-detecting
-          language: language || "en",
-          environment: apiSettings.cortiEnvironment || "us",
-          tenant: (apiSettings.cortiTenant || "").trim() || "base",
-        };
-
-        const result = await window.electronAPI.proxyCortiTranscription(proxyData);
-        const proxyText = result?.text;
-
-        if (proxyText && proxyText.trim().length > 0) {
-          if (this.isDictionaryEcho(proxyText)) {
-            throw new Error("No audio detected");
-          }
-          timings.transcriptionProcessingDurationMs = Math.round(performance.now() - apiCallStart);
-          const rawText = proxyText;
-          const reasoningStart = performance.now();
-          const text = await this.processTranscription(proxyText, "corti");
-          timings.reasoningProcessingDurationMs = Math.round(performance.now() - reasoningStart);
-
-          const source = (await this.isReasoningAvailable()) ? "corti-reasoned" : "corti";
-          return { success: true, text, rawText, source, timings };
-        }
-
-        throw new Error("No text transcribed - Corti response was empty");
-      }
-
-      logger.debug(
-        "Making transcription API request",
-        {
-          endpoint,
-          shouldStream,
-          model,
-          provider,
-          isCustomEndpoint,
-          hasApiKey: !!apiKey,
-        },
-        "transcription"
-      );
-
-      // Build headers - only include Authorization if we have an API key
-      const headers = {};
-      if (apiKey) {
-        // Azure OpenAI authenticates API keys via the `api-key` header, not a
-        // Bearer token (which it reserves for Entra ID access tokens).
-        if (isAzureOpenAIEndpoint(endpoint)) {
-          headers["api-key"] = apiKey;
-        } else {
-          headers.Authorization = `Bearer ${apiKey}`;
-        }
-      }
-
-      logger.debug(
-        "STT request details",
-        {
-          endpoint,
-          method: "POST",
-          hasAuthHeader: !!apiKey,
-          formDataFields: [
-            "file",
-            "model",
-            language && language !== "auto" ? "language" : null,
-            shouldStream ? "stream" : null,
-          ].filter(Boolean),
-        },
-        "transcription"
-      );
-
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers,
-        body: formData,
+      const result = await window.electronAPI.providerTranscribe({
+        audioBuffer: await audioBlob.arrayBuffer(),
+        mimeType,
+        provider,
+        model,
+        baseUrl: selfHosted
+          ? settings.remoteTranscriptionUrl
+          : selectedProvider === "custom"
+            ? settings.cloudTranscriptionBaseUrl
+            : undefined,
+        language: language && language !== "auto" ? language : undefined,
+        prompt: dictionaryPrompt || undefined,
+        keyterms: provider === "xai" ? keyterms : undefined,
+        contextBias: provider === "mistral" ? keyterms : undefined,
+        environment: provider === "corti" ? settings.cortiEnvironment || "us" : undefined,
+        tenant: provider === "corti" ? (settings.cortiTenant || "").trim() || "base" : undefined,
       });
 
-      const responseContentType = response.headers.get("content-type") || "";
-
-      logger.debug(
-        "Transcription API response received",
-        {
-          status: response.status,
-          statusText: response.statusText,
-          contentType: responseContentType,
-          ok: response.ok,
-        },
-        "transcription"
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        logger.error(
-          "Transcription API error response",
-          {
-            status: response.status,
-            errorText,
-          },
-          "transcription"
-        );
-        const err = new Error(`API Error: ${response.status} ${errorText}`);
-        if (response.status === 401) err.code = "INVALID_KEY";
-        else if (response.status === 429) {
-          // The user's own provider rate-limited the request — not an OpenWhispr plan limit
-          err.code = "PROVIDER_RATE_LIMITED";
-          err.messageKey = "hooks.audioRecording.errorDescriptions.providerRateLimited";
-        } else if (response.status >= 500) err.code = "SERVER_ERROR";
-        throw err;
+      if (!result?.success) {
+        const error = new Error(result?.error || "Provider transcription failed");
+        if (result?.code) error.code = result.code;
+        throw error;
       }
 
-      let result;
-      const contentType = responseContentType;
-
-      if (shouldStream && contentType.includes("text/event-stream")) {
-        logger.debug("Processing streaming response", { contentType }, "transcription");
-        const streamedText = await this.readTranscriptionStream(response);
-        result = { text: streamedText };
-        logger.debug(
-          "Streaming response parsed",
-          {
-            hasText: !!streamedText,
-            textLength: streamedText?.length,
-          },
-          "transcription"
-        );
-      } else {
-        const rawText = await response.text();
-        logger.debug(
-          "Raw API response body",
-          {
-            rawText: rawText.substring(0, 1000),
-            fullLength: rawText.length,
-          },
-          "transcription"
-        );
-
-        try {
-          result = JSON.parse(rawText);
-        } catch (parseError) {
-          logger.error(
-            "Failed to parse JSON response",
-            {
-              parseError: parseError.message,
-              rawText: rawText.substring(0, 500),
-            },
-            "transcription"
-          );
-          throw new Error(`Failed to parse API response: ${parseError.message}`);
-        }
-
-        logger.debug(
-          "Parsed transcription result",
-          {
-            hasText: !!result.text,
-            textLength: result.text?.length,
-            resultKeys: Object.keys(result),
-            fullResult: result,
-          },
-          "transcription"
-        );
-      }
-
-      // Check for text - handle both empty string and missing field
-      if (result.text && result.text.trim().length > 0) {
-        if (this.isDictionaryEcho(result.text)) {
-          throw new Error("No audio detected");
-        }
-        timings.transcriptionProcessingDurationMs = Math.round(performance.now() - apiCallStart);
-        const rawText = result.text;
-
-        const reasoningStart = performance.now();
-        const text = await this.processTranscription(result.text, "openai");
-        timings.reasoningProcessingDurationMs = Math.round(performance.now() - reasoningStart);
-
-        const source = (await this.isReasoningAvailable()) ? "openai-reasoned" : "openai";
-        logger.debug(
-          "Transcription successful",
-          {
-            originalLength: result.text.length,
-            processedLength: text.length,
-            source,
-            transcriptionProcessingDurationMs: timings.transcriptionProcessingDurationMs,
-            reasoningProcessingDurationMs: timings.reasoningProcessingDurationMs,
-          },
-          "transcription"
-        );
-        return { success: true, text, rawText, source, timings };
-      } else {
-        // Log at info level so it shows without debug mode
-        logger.info(
-          "Transcription returned empty - check audio input",
-          {
-            model,
-            provider,
-            endpoint,
-            blobSize: audioBlob.size,
-            blobType: audioBlob.type,
-            mimeType,
-            extension,
-            resultText: result.text,
-            resultKeys: Object.keys(result),
-          },
-          "transcription"
-        );
-        logger.error(
-          "No text in transcription result",
-          {
-            result,
-            resultKeys: Object.keys(result),
-          },
-          "transcription"
-        );
+      const rawText = result.text?.trim();
+      if (!rawText) {
         throw new Error(
           "No text transcribed - audio may be too short, silent, or in an unsupported format"
         );
       }
+      if (this.isDictionaryEcho(rawText)) throw new Error("No audio detected");
+
+      timings.transcriptionProcessingDurationMs = Math.round(performance.now() - apiCallStart);
+      const reasoningStart = performance.now();
+      const text = await this.processTranscription(rawText, provider);
+      timings.reasoningProcessingDurationMs = Math.round(performance.now() - reasoningStart);
+      const source = (await this.isReasoningAvailable()) ? `${provider}-reasoned` : provider;
+      return { success: true, text, rawText, source, timings };
     } catch (error) {
-      if (error.message === "No audio detected") {
-        throw error;
-      }
+      if (error.message === "No audio detected") throw error;
 
-      const isOpenAIMode = !getSettings().useLocalWhisper;
-
-      if (allowLocalFallback && isOpenAIMode) {
+      const isRemoteMode = !getSettings().useLocalWhisper;
+      if (allowLocalFallback && isRemoteMode) {
         try {
-          const arrayBuffer = await audioBlob.arrayBuffer();
           const options = { model: fallbackModel };
-          if (language && language !== "auto") {
-            options.language = language;
-          }
-
-          const result = await window.electronAPI.transcribeLocalWhisper(arrayBuffer, options);
-
+          if (language && language !== "auto") options.language = language;
+          const result = await window.electronAPI.transcribeLocalWhisper(
+            await audioBlob.arrayBuffer(),
+            options
+          );
           if (result.success && result.text) {
             const text = await this.processTranscription(result.text, "local-fallback");
-            if (text) {
-              return { success: true, text, source: "local-fallback" };
-            }
+            if (text) return { success: true, text, source: "local-fallback" };
           }
           throw error;
         } catch (fallbackError) {
           throw new Error(
-            `OpenAI API failed: ${error.message}. Local fallback also failed: ${fallbackError.message}`
+            `Provider transcription failed: ${error.message}. Local fallback also failed: ${fallbackError.message}`
           );
         }
       }
-
       throw error;
     }
   }
@@ -2778,188 +2121,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       return "gpt-4o-mini-transcribe";
     } catch (error) {
       return "gpt-4o-mini-transcribe";
-    }
-  }
-
-  getTranscriptionEndpoint(deploymentName = "") {
-    const s = getSettings();
-    const currentProvider = s.cloudTranscriptionProvider || "openai";
-
-    // Backstop against the OpenAI-default leak: Tinfoil goes through the main-process
-    // proxy, never here — except self-hosted, which resolves its remote URL below.
-    if (currentProvider === "tinfoil" && !isSelfHostedTranscription(s)) {
-      throw new Error("Tinfoil transcription must go through the attested main-process proxy");
-    }
-
-    const currentBaseUrl = s.cloudTranscriptionBaseUrl || "";
-    const transcriptionMode = s.transcriptionMode || "";
-    const remoteUrl = (s.remoteTranscriptionUrl || "").trim();
-    const deployment = (deploymentName || "").trim();
-
-    const isSelfHosted = isSelfHostedTranscription(s);
-    const isCustomEndpoint = isSelfHosted || currentProvider === "custom";
-
-    // Never fall back to the cloud default for self-hosted — fail closed instead.
-    if (isSelfHosted) {
-      const normalizedRemote = normalizeBaseUrl(remoteUrl);
-      if (!normalizedRemote || !isSecureEndpoint(normalizedRemote)) {
-        throw new Error("Self-hosted transcription URL is invalid or unsupported");
-      }
-    }
-
-    if (
-      this.cachedTranscriptionEndpoint &&
-      (this.cachedEndpointProvider !== currentProvider ||
-        this.cachedEndpointDeployment !== deployment ||
-        this.cachedEndpointBaseUrl !== currentBaseUrl ||
-        this.cachedEndpointMode !== transcriptionMode ||
-        this.cachedEndpointRemoteUrl !== remoteUrl)
-    ) {
-      logger.debug(
-        "STT endpoint cache invalidated",
-        {
-          previousProvider: this.cachedEndpointProvider,
-          newProvider: currentProvider,
-          previousBaseUrl: this.cachedEndpointBaseUrl,
-          newBaseUrl: currentBaseUrl,
-          previousMode: this.cachedEndpointMode,
-          newMode: transcriptionMode,
-          previousRemoteUrl: this.cachedEndpointRemoteUrl,
-          newRemoteUrl: remoteUrl,
-        },
-        "transcription"
-      );
-      this.cachedTranscriptionEndpoint = null;
-    }
-
-    if (this.cachedTranscriptionEndpoint) {
-      return this.cachedTranscriptionEndpoint;
-    }
-
-    try {
-      let base;
-      if (isSelfHosted) {
-        base = remoteUrl;
-      } else if (currentProvider === "custom") {
-        base = currentBaseUrl.trim() || API_ENDPOINTS.TRANSCRIPTION_BASE;
-      } else if (currentProvider === "groq") {
-        base = API_ENDPOINTS.GROQ_BASE;
-      } else if (currentProvider === "xai") {
-        base = API_ENDPOINTS.XAI_BASE;
-      } else if (currentProvider === "mistral") {
-        base = API_ENDPOINTS.MISTRAL_BASE;
-      } else {
-        // OpenAI or other standard providers
-        base = API_ENDPOINTS.TRANSCRIPTION_BASE;
-      }
-
-      const normalizedBase = normalizeBaseUrl(base);
-
-      logger.debug(
-        "STT endpoint resolution",
-        {
-          provider: currentProvider,
-          mode: transcriptionMode,
-          isSelfHosted,
-          isCustomEndpoint,
-          rawBaseUrl: currentBaseUrl,
-          remoteUrl,
-          normalizedBase,
-          defaultBase: API_ENDPOINTS.TRANSCRIPTION_BASE,
-        },
-        "transcription"
-      );
-
-      const cacheResult = (endpoint) => {
-        this.cachedTranscriptionEndpoint = endpoint;
-        this.cachedEndpointProvider = currentProvider;
-        this.cachedEndpointBaseUrl = currentBaseUrl;
-        this.cachedEndpointMode = transcriptionMode;
-        this.cachedEndpointRemoteUrl = remoteUrl;
-        this.cachedEndpointDeployment = deployment;
-
-        logger.debug(
-          "STT endpoint resolved",
-          {
-            endpoint,
-            provider: currentProvider,
-            isCustomEndpoint,
-            usingDefault: endpoint === API_ENDPOINTS.TRANSCRIPTION,
-          },
-          "transcription"
-        );
-
-        return endpoint;
-      };
-
-      if (!normalizedBase) {
-        logger.debug(
-          "STT endpoint: using default (normalization failed)",
-          { rawBase: base },
-          "transcription"
-        );
-        return cacheResult(API_ENDPOINTS.TRANSCRIPTION);
-      }
-
-      // Only validate HTTPS for custom endpoints (known providers are already HTTPS)
-      if (isCustomEndpoint && !isSecureEndpoint(normalizedBase)) {
-        logger.warn(
-          "STT endpoint: HTTPS required, falling back to default",
-          { attemptedUrl: normalizedBase },
-          "transcription"
-        );
-        return cacheResult(API_ENDPOINTS.TRANSCRIPTION);
-      }
-
-      let endpoint;
-      if (isCustomEndpoint && isAzureOpenAIEndpoint(normalizedBase)) {
-        // Azure OpenAI routes by deployment in the URL path and requires an
-        // api-version query string — the plain {base}/audio/transcriptions
-        // shape returns DeploymentNotFound. Build the deployment-style URL.
-        // The api-version defaults to a transcribe-capable preview; a user can
-        // override it by appending ?api-version=... to their endpoint URL.
-        const azureUrl = buildAzureTranscriptionUrl(normalizedBase, deployment);
-        if (azureUrl) {
-          endpoint = azureUrl;
-          logger.debug(
-            "STT endpoint: built Azure deployment URL",
-            { base: normalizedBase, deployment, endpoint },
-            "transcription"
-          );
-        } else {
-          endpoint = buildApiUrl(normalizedBase, "/audio/transcriptions");
-          logger.warn(
-            "STT endpoint: Azure host detected but no deployment name; falling back to default path",
-            { base: normalizedBase, endpoint },
-            "transcription"
-          );
-        }
-      } else if (/\/audio\/(transcriptions|translations)$/i.test(normalizedBase)) {
-        endpoint = normalizedBase;
-        logger.debug("STT endpoint: using full path from config", { endpoint }, "transcription");
-      } else {
-        endpoint = buildApiUrl(normalizedBase, "/audio/transcriptions");
-        logger.debug(
-          "STT endpoint: appending /audio/transcriptions to base",
-          { base: normalizedBase, endpoint },
-          "transcription"
-        );
-      }
-
-      return cacheResult(endpoint);
-    } catch (error) {
-      logger.error(
-        "STT endpoint resolution failed",
-        { error: error.message, stack: error.stack },
-        "transcription"
-      );
-      if (isSelfHosted) throw error;
-      this.cachedTranscriptionEndpoint = API_ENDPOINTS.TRANSCRIPTION;
-      this.cachedEndpointProvider = currentProvider;
-      this.cachedEndpointBaseUrl = currentBaseUrl;
-      this.cachedEndpointMode = transcriptionMode;
-      this.cachedEndpointRemoteUrl = remoteUrl;
-      return API_ENDPOINTS.TRANSCRIPTION;
     }
   }
 
@@ -4085,9 +3246,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     this.onTranscriptionComplete = null;
     this.onPartialTranscript = null;
     this.onStreamingCommit = null;
-    if (this._onApiKeyChanged) {
-      window.removeEventListener("api-key-changed", this._onApiKeyChanged);
-    }
     if (this._onDeviceChange) {
       navigator.mediaDevices?.removeEventListener?.("devicechange", this._onDeviceChange);
     }

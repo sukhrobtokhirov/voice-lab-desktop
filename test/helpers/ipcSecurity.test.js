@@ -67,15 +67,15 @@ test("accepts only registered top-level application frames", () => {
   });
 });
 
-test("groups write credentials and auth into control-panel capabilities", () => {
+test("groups generic credential writes and auth into control-panel capabilities", () => {
   withSecurity(({ assertTrustedIpcSender }) => {
     const { event, manager, sender } = fixture();
     assert.throws(
-      () => assertTrustedIpcSender(event, "save-openai-key", manager),
+      () => assertTrustedIpcSender(event, "provider-save-credential", manager),
       { code: "IPC_CAPABILITY_FORBIDDEN" }
     );
     sender._window = manager.controlPanelWindow;
-    assert.doesNotThrow(() => assertTrustedIpcSender(event, "save-openai-key", manager));
+    assert.doesNotThrow(() => assertTrustedIpcSender(event, "provider-save-credential", manager));
     assert.doesNotThrow(() => assertTrustedIpcSender(event, "auth-start-browser", manager));
   });
 });

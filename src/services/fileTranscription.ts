@@ -21,7 +21,6 @@ export interface FileTranscriptionConfig {
   whisperModel: string;
   parakeetModel: string;
   isOpenWhisprCloud: boolean;
-  getApiKey: () => string;
   cloudTranscriptionProvider: string;
   cloudTranscriptionBaseUrl: string;
   cloudTranscriptionModel: string;
@@ -64,9 +63,8 @@ export async function transcribeFile(
     });
   }
 
-  const result = await window.electronAPI.transcribeAudioFileByok?.({
+  const result = await window.electronAPI.providerTranscribeFile?.({
     filePath,
-    apiKey: cfg.getApiKey(),
     baseUrl: cfg.cloudTranscriptionBaseUrl,
     model: cfg.cloudTranscriptionModel,
     diarize,

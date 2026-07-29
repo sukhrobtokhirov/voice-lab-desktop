@@ -3,10 +3,12 @@ const { isAllowedRendererUrl } = require("./windowSecurity");
 
 const CONTROL_PANEL_ONLY = [
   /^auth-(?:start-browser|refresh-session|logout|delete-account)$/,
+  /^auth-clear-session$/,
   /^(?:check-for-updates|download-update|install-update)$/,
   /^workspace-api-request$/,
+  /^provider-(?:save-credential|list-models|tinfoil-models|transcribe-file)$/,
+  /^save-(?:bedrock-(?:region|profile)|azure-(?:endpoint|deployment|api-version)|vertex-(?:project|location))$/,
   /^save-.*(?:key|secret|token|credential)/,
-  /^save-all-keys-to-env$/,
 ];
 
 const MAIN_OR_CONTROL = [

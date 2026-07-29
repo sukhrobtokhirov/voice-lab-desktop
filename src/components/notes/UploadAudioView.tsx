@@ -415,32 +415,12 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
     return `${name} · ${model}`;
   };
 
-  const getActiveApiKey = (): string => {
-    switch (cloudTranscriptionProvider) {
-      case "openai":
-        return openaiApiKey;
-      case "groq":
-        return groqApiKey;
-      case "xai":
-        return xaiApiKey;
-      case "mistral":
-        return mistralApiKey;
-      case "tinfoil":
-        return tinfoilApiKey;
-      case "custom":
-        return customTranscriptionApiKey || "";
-      default:
-        return "";
-    }
-  };
-
   const buildTranscriptionConfig = (): FileTranscriptionConfig => ({
     useLocalWhisper,
     localTranscriptionProvider: localTranscriptionProvider as string,
     whisperModel,
     parakeetModel,
     isOpenWhisprCloud,
-    getApiKey: getActiveApiKey,
     cloudTranscriptionProvider: cloudTranscriptionProvider as string,
     cloudTranscriptionBaseUrl: cloudTranscriptionBaseUrl || "",
     cloudTranscriptionModel,

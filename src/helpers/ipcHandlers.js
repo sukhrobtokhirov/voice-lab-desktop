@@ -6,8 +6,12 @@ const http = require("http");
 const https = require("https");
 const crypto = require("crypto");
 const debugLogger = require("./debugLogger");
-const { BYOK_API_KEYS } = require("../config/secretKeys");
 const { createSecureHandler } = require("./ipcSecurity");
+const { ProviderService } = require("./providerService");
+const { registerProviderIpc } = require("./ipc/registerProviderIpc");
+const { registerAuthIpc } = require("./ipc/registerAuthIpc");
+const { registerSyncIpc } = require("./ipc/registerSyncIpc");
+const { registerUpdateIpc } = require("./ipc/registerUpdateIpc");
 const {
   collectSyncBootstrapV2,
   isRestartableBootstrapError,
@@ -23,8 +27,6 @@ const CortiStreaming = require("./cortiStreaming");
 const OpenAIRealtimeStreaming = require("./openaiRealtimeStreaming");
 const { getCortiToken } = require("./cortiAuth");
 const { createTinfoilRealtimeSocket } = require("./tinfoilSecureClient");
-const { getTinfoilChatModels } = require("./tinfoilCatalog");
-const { transcribeWithTinfoil } = require("./tinfoilTranscription");
 const AudioStorageManager = require("./audioStorage");
 
 // Tinfoil's only realtime STT model — fallback when the renderer omits one.
@@ -88,37 +90,6 @@ function parseAttendees(raw) {
 
 const MISTRAL_TRANSCRIPTION_URL = "https://api.mistral.ai/v1/audio/transcriptions";
 
-const XAI_STT_URL = "https://api.x.ai/v1/stt";
-
-// xAI STT supports 25 languages; language must be in this set to enable ITN via format=true
-const XAI_STT_LANGUAGES = new Set([
-  "ar",
-  "cs",
-  "da",
-  "de",
-  "en",
-  "es",
-  "fa",
-  "fil",
-  "fr",
-  "hi",
-  "id",
-  "it",
-  "ja",
-  "ko",
-  "mk",
-  "ms",
-  "nl",
-  "pl",
-  "pt",
-  "ro",
-  "ru",
-  "sv",
-  "th",
-  "tr",
-  "vi",
-]);
-
 // Debounce delay: wait for user to stop typing before processing corrections
 const AUTO_LEARN_DEBOUNCE_MS = 1500;
 
@@ -139,53 +110,8 @@ const CLOUD_CHUNK_CONCURRENCY = 5;
 const CLOUD_CHUNK_SEGMENT_SECONDS = 240;
 const CLOUD_CHUNK_MAX_ATTEMPTS = 3;
 
-const {
-  formatTimestamp: formatDiarTime,
-  mergeSpeakersWithText,
-  formatSpeakerTranscript,
-} = require("./speakerMerge");
-
-// Canonicalize allowed dirs so realpath'd inputs match on macOS (/var -> /private/var).
-// Deliberately narrow: user-picked paths anywhere else are approved individually via
-// approvedAudioPaths, so a compromised renderer can't read arbitrary files.
-function getCanonicalAllowedAudioDirs() {
-  const os = require("os");
-  const { getSafeTempDir } = require("./safeTempDir");
-  const dirs = [os.tmpdir(), getSafeTempDir(), app.getPath("userData")];
-  return dirs.map((d) => {
-    try {
-      return fs.realpathSync(d);
-    } catch {
-      return d;
-    }
-  });
-}
-
-// User-picked paths (OS file dialog, real drag-dropped files) may live outside the
-// static dirs (external volumes, /mnt, D:\) and are approved individually.
-const approvedAudioPaths = new Set();
-
-function approveAudioPath(filePath) {
-  if (typeof filePath !== "string" || !filePath) return;
-  try {
-    approvedAudioPaths.add(fs.realpathSync(path.resolve(filePath)));
-  } catch {
-    // File vanished or unreadable; nothing to approve.
-  }
-}
-
-// Returns the realpath'd file path if it lives under an allowed dir, else null.
-function resolveAllowedAudioPath(filePath) {
-  const real = fs.realpathSync(path.resolve(filePath));
-  if (approvedAudioPaths.has(real)) {
-    return real;
-  }
-  const allowed = getCanonicalAllowedAudioDirs();
-  if (allowed.some((dir) => real === dir || real.startsWith(dir + path.sep))) {
-    return real;
-  }
-  return null;
-}
+const { mergeSpeakersWithText, formatSpeakerTranscript } = require("./speakerMerge");
+const { approveAudioPath, resolveAllowedAudioPath } = require("./audioPathPolicy");
 
 function buildMultipartBody(
   fileBuffer,
@@ -556,6 +482,7 @@ class IPCHandlers {
     this.desktopAuthManager = managers.desktopAuthManager;
     this.voiceLabApiClient = managers.voiceLabApiClient;
     this._handle = createSecureHandler(ipcMain, this.windowManager);
+    this.providerService = new ProviderService(this.environmentManager);
     this._authGeneration = 0;
     this.desktopAuthManager?.on?.("status", (status) => {
       this._authGeneration += 1;
@@ -1128,6 +1055,18 @@ class IPCHandlers {
   }
 
   setupHandlers() {
+    registerProviderIpc({ handle: this._handle, providerService: this.providerService });
+    registerAuthIpc({ handle: this._handle, host: this });
+    registerSyncIpc({ handle: this._handle, host: this });
+    registerUpdateIpc({
+      handle: this._handle,
+      updateManager: this.updateManager,
+      postMigrationDetector,
+      getProtocolState: () => ({
+        registered: this.oauthProtocolRegistered,
+        protocol: this.oauthProtocol,
+      }),
+    });
     this._handle("window-minimize", () => {
       if (this.windowManager.controlPanelWindow) {
         this.windowManager.controlPanelWindow.minimize();
@@ -1201,10 +1140,6 @@ class IPCHandlers {
       return this.windowManager.resizeMainWindow(sizeKey);
     });
 
-    for (const k of BYOK_API_KEYS) {
-      this._handle(`get-${k.base}-key`, () => this.environmentManager[k.get]());
-      this._handle(`save-${k.base}-key`, (event, key) => this.environmentManager[k.save](key));
-    }
 
     this._handle("db-save-transcription", async (event, text, rawText, options) => {
       const result = this.databaseManager.saveTranscription(text, rawText, options);
@@ -1404,18 +1339,6 @@ class IPCHandlers {
         .decideLegacyAttachment(decision);
       this.broadcastToWindows("dictionary-updated", state);
       return state;
-    });
-
-    this._handle("desktop-sync-bootstrap", async () => this._bootstrapDesktopSync());
-    this._handle("desktop-sync-set-preferences", async (_event, preferences) => {
-      return this.databaseManager
-        .getDesktopSyncStore()
-        .setPortablePreferences(preferences);
-    });
-    this._handle("desktop-sync-run", async (_event, options) => this._runDesktopSync(options));
-    this._handle("desktop-sync-pause", async () => {
-      this.databaseManager.getDesktopSyncStore().pause();
-      return { success: true };
     });
 
     this._handle("db-get-snippets", async () => {
@@ -3188,464 +3111,6 @@ class IPCHandlers {
       }
     });
 
-    this._handle(
-      "proxy-xai-transcription",
-      async (event, { audioBuffer, language, keyterms }) => {
-        const apiKey = this.environmentManager.getXaiKey();
-        if (!apiKey) {
-          throw new Error("xAI API key not configured");
-        }
-
-        const formData = new FormData();
-        const audioBlob = new Blob([Buffer.from(audioBuffer)], { type: "audio/webm" });
-        formData.append("file", audioBlob, "audio.webm");
-        if (language && language !== "auto" && XAI_STT_LANGUAGES.has(language)) {
-          formData.append("language", language);
-          formData.append("format", "true");
-        }
-        if (keyterms && keyterms.length > 0) {
-          for (const term of keyterms) {
-            formData.append("keyterm", term);
-          }
-        }
-
-        const response = await proxyFetch(XAI_STT_URL, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}` },
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`xAI API Error: ${response.status} ${errorText}`);
-        }
-
-        return await response.json();
-      }
-    );
-
-    this._handle(
-      "proxy-mistral-transcription",
-      async (event, { audioBuffer, model, language, contextBias }) => {
-        const apiKey = this.environmentManager.getMistralKey();
-        if (!apiKey) {
-          throw new Error("Mistral API key not configured");
-        }
-
-        const formData = new FormData();
-        const audioBlob = new Blob([Buffer.from(audioBuffer)], { type: "audio/webm" });
-        formData.append("file", audioBlob, "audio.webm");
-        formData.append("model", model || "voxtral-mini-latest");
-        if (language && language !== "auto") {
-          formData.append("language", language);
-        }
-        if (contextBias && contextBias.length > 0) {
-          for (const token of contextBias) {
-            formData.append("context_bias", token);
-          }
-        }
-
-        const response = await proxyFetch(MISTRAL_TRANSCRIPTION_URL, {
-          method: "POST",
-          headers: {
-            "x-api-key": apiKey,
-          },
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Mistral API Error: ${response.status} ${errorText}`);
-        }
-
-        return await response.json();
-      }
-    );
-
-    this._handle("get-corti-client-id", async () => {
-      return this.environmentManager.getCortiClientId();
-    });
-
-    this._handle("save-corti-client-id", async (event, key) => {
-      return this.environmentManager.saveCortiClientId(key);
-    });
-
-    this._handle("get-corti-client-secret", async () => {
-      return this.environmentManager.getCortiClientSecret();
-    });
-
-    this._handle("save-corti-client-secret", async (event, key) => {
-      return this.environmentManager.saveCortiClientSecret(key);
-    });
-
-    this._handle(
-      "proxy-corti-transcription",
-      async (event, { audioBuffer, language, environment, tenant }) => {
-        const clientId = this.environmentManager.getCortiClientId();
-        const clientSecret = this.environmentManager.getCortiClientSecret();
-        if (!clientId || !clientSecret) {
-          throw new Error("Corti credentials not configured");
-        }
-
-        const { transcribeAudio } = require("./cortiTranscription");
-        return transcribeAudio({
-          environment,
-          tenant,
-          clientId,
-          clientSecret,
-          audioBuffer,
-          language,
-        });
-      }
-    );
-
-    this._handle("get-tinfoil-chat-models", async () => {
-      return getTinfoilChatModels();
-    });
-
-    // Enclave attestation is Node-only, so batch transcription is proxied through main.
-    this._handle(
-      "proxy-tinfoil-transcription",
-      async (event, { audioBuffer, language, prompt }) => {
-        try {
-          return await transcribeWithTinfoil({
-            audioBuffer: Buffer.from(audioBuffer),
-            fileName: "audio.webm",
-            contentType: "audio/webm",
-            language,
-            prompt,
-            apiKey: this.environmentManager.getTinfoilKey(),
-          });
-        } catch (error) {
-          // ipcMain.handle keeps only the message when a promise rejects, dropping
-          // custom props — return the code so the renderer can rebuild the error.
-          return { error: error.message, code: error.code, messageKey: error.messageKey };
-        }
-      }
-    );
-
-    this._handle("get-custom-transcription-key", async () => {
-      return this.environmentManager.getCustomTranscriptionKey();
-    });
-
-    this._handle("save-custom-transcription-key", async (event, key) => {
-      return this.environmentManager.saveCustomTranscriptionKey(key);
-    });
-
-    this._handle("get-cleanup-custom-key", async () => {
-      return this.environmentManager.getCleanupCustomKey();
-    });
-
-    this._handle("save-cleanup-custom-key", async (event, key) => {
-      return this.environmentManager.saveCleanupCustomKey(key);
-    });
-
-    // Enterprise provider key handlers
-    this._handle("get-bedrock-region", async () => {
-      return this.environmentManager.getBedrockRegion();
-    });
-    this._handle("save-bedrock-region", async (event, value) => {
-      return this.environmentManager.saveBedrockRegion(value);
-    });
-    this._handle("get-bedrock-profile", async () => {
-      return this.environmentManager.getBedrockProfile();
-    });
-    this._handle("save-bedrock-profile", async (event, value) => {
-      return this.environmentManager.saveBedrockProfile(value);
-    });
-    this._handle("get-bedrock-access-key-id", async () => {
-      return this.environmentManager.getBedrockAccessKeyId();
-    });
-    this._handle("save-bedrock-access-key-id", async (event, key) => {
-      return this.environmentManager.saveBedrockAccessKeyId(key);
-    });
-    this._handle("get-bedrock-secret-access-key", async () => {
-      return this.environmentManager.getBedrockSecretAccessKey();
-    });
-    this._handle("save-bedrock-secret-access-key", async (event, key) => {
-      return this.environmentManager.saveBedrockSecretAccessKey(key);
-    });
-    this._handle("get-bedrock-session-token", async () => {
-      return this.environmentManager.getBedrockSessionToken();
-    });
-    this._handle("save-bedrock-session-token", async (event, key) => {
-      return this.environmentManager.saveBedrockSessionToken(key);
-    });
-    this._handle("get-azure-endpoint", async () => {
-      return this.environmentManager.getAzureEndpoint();
-    });
-    this._handle("save-azure-endpoint", async (event, value) => {
-      return this.environmentManager.saveAzureEndpoint(value);
-    });
-    this._handle("get-azure-api-key", async () => {
-      return this.environmentManager.getAzureApiKey();
-    });
-    this._handle("save-azure-api-key", async (event, key) => {
-      return this.environmentManager.saveAzureApiKey(key);
-    });
-    this._handle("get-aisha-api-key", async () => {
-      return this.environmentManager.getAishaApiKey();
-    });
-    this._handle("save-aisha-api-key", async (_event, key) => {
-      return this.environmentManager.saveAishaApiKey(typeof key === "string" ? key.trim() : "");
-    });
-    this._handle("get-azure-deployment", async () => {
-      return this.environmentManager.getAzureDeployment();
-    });
-    this._handle("save-azure-deployment", async (event, value) => {
-      return this.environmentManager.saveAzureDeployment(value);
-    });
-    this._handle("get-azure-api-version", async () => {
-      return this.environmentManager.getAzureApiVersion();
-    });
-    this._handle("save-azure-api-version", async (event, value) => {
-      return this.environmentManager.saveAzureApiVersion(value);
-    });
-    this._handle("get-vertex-project", async () => {
-      return this.environmentManager.getVertexProject();
-    });
-    this._handle("save-vertex-project", async (event, value) => {
-      return this.environmentManager.saveVertexProject(value);
-    });
-    this._handle("get-vertex-location", async () => {
-      return this.environmentManager.getVertexLocation();
-    });
-    this._handle("save-vertex-location", async (event, value) => {
-      return this.environmentManager.saveVertexLocation(value);
-    });
-    this._handle("get-vertex-api-key", async () => {
-      return this.environmentManager.getVertexApiKey();
-    });
-    this._handle("save-vertex-api-key", async (event, key) => {
-      return this.environmentManager.saveVertexApiKey(key);
-    });
-
-    // Enterprise provider test connection
-    this._handle("test-enterprise-connection", async (event, provider, config) => {
-      const {
-        mapEnterpriseError,
-        pickEnterpriseConfig,
-        validateEnterpriseEndpoint,
-      } = require("./enterpriseProviderErrors");
-      try {
-        validateEnterpriseEndpoint(config.azureEndpoint);
-
-        const { generateText } = require("ai");
-        const { getEnterpriseAIModel } = require("./enterpriseAiProviders");
-
-        const model = getEnterpriseAIModel(
-          provider,
-          config.model || "test",
-          config.apiKey || "",
-          pickEnterpriseConfig(config)
-        );
-
-        await generateText({
-          model,
-          prompt: "Say hello in one word.",
-          maxOutputTokens: 10,
-        });
-
-        return { success: true };
-      } catch (err) {
-        const mapped = mapEnterpriseError(provider, err, config);
-        return {
-          success: false,
-          error: mapped.message,
-          action: mapped.action,
-          copyCommand: mapped.copyCommand,
-          retryable: mapped.retryable,
-        };
-      }
-    });
-
-    this._handle(
-      "process-enterprise-reasoning",
-      async (event, text, modelId, _agentName, config) => {
-        const {
-          isEnterpriseProvider,
-          mapEnterpriseError,
-          pickEnterpriseConfig,
-          validateEnterpriseEndpoint,
-        } = require("./enterpriseProviderErrors");
-        const provider = config?.provider;
-        try {
-          if (!isEnterpriseProvider(provider)) {
-            throw new Error(`Unsupported enterprise provider: ${provider}`);
-          }
-          if (!modelId) {
-            throw new Error("No model specified for enterprise reasoning");
-          }
-
-          validateEnterpriseEndpoint(config?.azureEndpoint);
-
-          const { generateText } = require("ai");
-          const { getEnterpriseAIModel } = require("./enterpriseAiProviders");
-
-          const model = getEnterpriseAIModel(
-            provider,
-            modelId,
-            config.apiKey || "",
-            pickEnterpriseConfig(config)
-          );
-
-          const timeoutMs = config?.timeoutMs || 60000;
-          // Opus 4.7 / GPT-5 / o-series dropped `temperature`; renderer
-          // derives support from the model registry and we honor that here.
-          const useTemperature = config?.supportsTemperature !== false;
-          const { text: generated } = await generateText({
-            model,
-            system: config?.systemPrompt || "",
-            prompt: text,
-            maxOutputTokens: config?.maxTokens || 4096,
-            ...(useTemperature ? { temperature: config?.temperature ?? 0.3 } : {}),
-            abortSignal: AbortSignal.timeout(timeoutMs),
-          });
-
-          return { success: true, text: (generated || "").trim() };
-        } catch (err) {
-          debugLogger.error("Enterprise reasoning error:", err);
-          const mapped = mapEnterpriseError(provider, err, config || {});
-          return { success: false, error: mapped.message, retryable: mapped.retryable };
-        }
-      }
-    );
-
-    // Runs doStream for the renderer's enterprise chat model shim; parts are
-    // relayed verbatim over enterprise-stream-part, ending with {done}/{error}.
-    this.enterpriseStreamAborts = new Map();
-    this._handle("enterprise-stream-start", async (event, payload) => {
-      const {
-        isEnterpriseProvider,
-        mapEnterpriseError,
-        pickEnterpriseConfig,
-        validateEnterpriseEndpoint,
-      } = require("./enterpriseProviderErrors");
-      const { streamId, provider, modelId, config, options } = payload || {};
-      const send = (message) => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send("enterprise-stream-part", { streamId, ...message });
-        }
-      };
-      const abortController = new AbortController();
-      this.enterpriseStreamAborts.set(streamId, abortController);
-      // isDestroyed() stays false across reload/navigation, which wipes the
-      // renderer listeners — abort so the provider request isn't billed for
-      // a generation nobody receives.
-      const abortOnGone = (_event, _url, isInPlace, isMainFrame) => {
-        if (isMainFrame && !isInPlace) abortController.abort();
-      };
-      const abortOnDestroyed = () => abortController.abort();
-      event.sender.on("did-start-navigation", abortOnGone);
-      event.sender.once("destroyed", abortOnDestroyed);
-      try {
-        if (!streamId || !isEnterpriseProvider(provider)) {
-          throw new Error(`Unsupported enterprise provider: ${provider}`);
-        }
-        if (!modelId) {
-          throw new Error("No model specified for enterprise streaming");
-        }
-        validateEnterpriseEndpoint(config?.azureEndpoint);
-
-        const { getEnterpriseAIModel } = require("./enterpriseAiProviders");
-        const model = getEnterpriseAIModel(
-          provider,
-          modelId,
-          config?.apiKey || "",
-          pickEnterpriseConfig(config || {})
-        );
-
-        const { stream } = await model.doStream({
-          ...options,
-          abortSignal: abortController.signal,
-        });
-        const reader = stream.getReader();
-        try {
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (event.sender.isDestroyed()) {
-              abortController.abort();
-              break;
-            }
-            send({ part: value });
-          }
-        } finally {
-          reader.releaseLock();
-        }
-        send({ done: true });
-        return { success: true };
-      } catch (err) {
-        debugLogger.error("Enterprise stream error:", err);
-        const mapped = mapEnterpriseError(provider, err, config || {});
-        send({ error: mapped.message });
-        return { success: false, error: mapped.message };
-      } finally {
-        this.enterpriseStreamAborts.delete(streamId);
-        if (!event.sender.isDestroyed()) {
-          event.sender.removeListener("did-start-navigation", abortOnGone);
-          event.sender.removeListener("destroyed", abortOnDestroyed);
-        }
-      }
-    });
-
-    this._handle("enterprise-stream-cancel", async (event, streamId) => {
-      this.enterpriseStreamAborts.get(streamId)?.abort();
-      this.enterpriseStreamAborts.delete(streamId);
-    });
-
-    // Lists the text models the account serves in the selected region,
-    // resolved to invocable IDs (bare on-demand or geo-scoped profile IDs).
-    this._handle("bedrock-list-models", async (event, config) => {
-      const { mapEnterpriseError } = require("./enterpriseProviderErrors");
-      try {
-        const {
-          BedrockClient,
-          ListFoundationModelsCommand,
-          paginateListInferenceProfiles,
-        } = require("@aws-sdk/client-bedrock");
-        const { normalizeBedrockCatalog } = require("./bedrockCatalog");
-
-        const region = config?.bedrockRegion || "us-east-1";
-        let credentials;
-        if (config?.bedrockProfile) {
-          const { fromNodeProviderChain } = require("@aws-sdk/credential-providers");
-          credentials = fromNodeProviderChain({ profile: config.bedrockProfile });
-        } else if (config?.bedrockAccessKeyId && config?.bedrockSecretAccessKey) {
-          credentials = {
-            accessKeyId: config.bedrockAccessKeyId,
-            secretAccessKey: config.bedrockSecretAccessKey,
-            sessionToken: config.bedrockSessionToken || undefined,
-          };
-        }
-        const client = new BedrockClient({ region, ...(credentials ? { credentials } : {}) });
-
-        const [foundationModels, profileSummaries] = await Promise.all([
-          client.send(new ListFoundationModelsCommand({ byOutputModality: "TEXT" })),
-          (async () => {
-            const summaries = [];
-            const paginator = paginateListInferenceProfiles(
-              { client },
-              { typeEquals: "SYSTEM_DEFINED" }
-            );
-            for await (const page of paginator) {
-              summaries.push(...(page.inferenceProfileSummaries || []));
-            }
-            return summaries;
-          })(),
-        ]);
-
-        return {
-          success: true,
-          models: normalizeBedrockCatalog(foundationModels.modelSummaries, profileSummaries),
-        };
-      } catch (err) {
-        debugLogger.error("Bedrock model listing error:", err);
-        const mapped = mapEnterpriseError("bedrock", err, config || {});
-        return { success: false, error: mapped.message };
-      }
-    });
-
     this._handle("get-dictation-key", async () => {
       return this.environmentManager.getDictationKey();
     });
@@ -3686,10 +3151,6 @@ class IPCHandlers {
       this.windowManager?.refreshLocalizedUi?.();
       this.getTrayManager?.()?.updateTrayMenu?.();
       return { success: true, language: result.language };
-    });
-
-    this._handle("save-all-keys-to-env", async () => {
-      return this.environmentManager.saveAllKeysToEnvFile();
     });
 
     this._handle("sync-startup-preferences", async (event, prefs) => {
@@ -3789,65 +3250,6 @@ class IPCHandlers {
         return { success: false, error: error.message };
       }
     });
-
-    this._handle(
-      "process-anthropic-reasoning",
-      async (event, text, modelId, _agentName, config) => {
-        try {
-          const apiKey = this.environmentManager.getAnthropicKey();
-
-          if (!apiKey) {
-            throw new Error("Anthropic API key not configured");
-          }
-
-          const systemPrompt = config?.systemPrompt || "";
-          const userPrompt = text;
-
-          if (!modelId) {
-            throw new Error("No model specified for Anthropic API call");
-          }
-
-          const requestBody = {
-            model: modelId,
-            messages: [{ role: "user", content: userPrompt }],
-            system: systemPrompt,
-            max_tokens: config?.maxTokens || Math.max(100, Math.min(text.length * 2, 4096)),
-            temperature: config?.temperature || 0.3,
-          };
-
-          const response = await proxyFetch("https://api.anthropic.com/v1/messages", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-API-Key": apiKey,
-              "anthropic-version": "2023-06-01",
-            },
-            body: JSON.stringify(requestBody),
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            let errorData = { error: response.statusText };
-            try {
-              errorData = JSON.parse(errorText);
-            } catch {
-              errorData = { error: errorText || response.statusText };
-            }
-            throw new Error(
-              errorData.error?.message ||
-                errorData.error ||
-                `Anthropic API error: ${response.status}`
-            );
-          }
-
-          const data = await response.json();
-          return { success: true, text: data.content[0].text.trim() };
-        } catch (error) {
-          debugLogger.error("Anthropic reasoning error:", error);
-          return { success: false, error: error.message };
-        }
-      }
-    );
 
     this._handle("check-local-reasoning-available", async () => {
       try {
@@ -4293,61 +3695,6 @@ this._handle("open-voicelab-billing", async (_event, source = "dictate") => {
       this._dictationStreaming = null;
       this._dictationConnectPromise = null;
     };
-
-    this._handle("auth-start-browser", async (_event, provider) => {
-      if (!this.desktopAuthManager) {
-        return { status: "error", user: null, errorCode: "AUTH_MANAGER_UNAVAILABLE" };
-      }
-      if (provider !== undefined && provider !== "google") {
-        return { status: "error", user: null, errorCode: "AUTH_PROVIDER_UNAVAILABLE" };
-      }
-      return this.desktopAuthManager.startAuthorization();
-    });
-
-    this._handle("auth-get-status", () =>
-      this.desktopAuthManager?.getPublicStatus() || {
-        status: "error",
-        user: null,
-        errorCode: "AUTH_MANAGER_UNAVAILABLE",
-      }
-    );
-
-    this._handle("auth-refresh-session", async () => {
-      if (!this.desktopAuthManager) {
-        return { status: "signed-out", user: null, errorCode: "AUTH_MANAGER_UNAVAILABLE" };
-      }
-      return this.desktopAuthManager.refreshSession({ force: true });
-    });
-
-    this._handle("auth-logout", async (event) => {
-      this.databaseManager.getDesktopSyncStore().pause();
-      const result = this.desktopAuthManager
-        ? await this.desktopAuthManager.logout()
-        : { success: true, revoked: false };
-      await clearAuthenticatedRuntime();
-      const win = BrowserWindow.fromWebContents(event.sender);
-      if (win) await win.webContents.session.clearStorageData({ storages: ["cookies"] });
-      return result;
-    });
-
-    this._handle("auth-clear-session", async (event) => {
-      this.databaseManager.getDesktopSyncStore().pause();
-      const result = this.desktopAuthManager
-        ? await this.desktopAuthManager.logout()
-        : { success: true, revoked: false };
-      await clearAuthenticatedRuntime();
-      const win = BrowserWindow.fromWebContents(event.sender);
-      if (win) await win.webContents.session.clearStorageData({ storages: ["cookies"] });
-      return result;
-    });
-
-    this._handle("auth-delete-account", async () => {
-      if (!this.desktopAuthManager) throw new Error("Authentication manager unavailable");
-      this.databaseManager.getDesktopSyncStore().pause();
-      const result = await this.desktopAuthManager.deleteAccount();
-      await clearAuthenticatedRuntime();
-      return result;
-    });
 
     // In production, VITE_* env vars aren't available in the main process because
     // Vite only inlines them into the renderer bundle at build time. Load the
@@ -5194,47 +4541,16 @@ this._handle("cloud-transcribe", async (_event, audioBuffer, opts = {}) => {
     };
 
     const fetchRealtimeToken = async (event, options, { streams } = {}) => {
-const postServerToken = async (_path, _body = {}) => {
-  const error = new Error(
-    "VoiceLab-funded streaming is disabled until server-authoritative metering is available."
-  );
-  error.code = "VOICELAB_STREAMING_DISABLED";
-  throw error;
-        const apiUrl = getApiUrl();
-        if (!apiUrl) {
-          const err = new Error("OpenWhispr API URL not configured");
-          err.code = "NO_API";
-          throw err;
-        }
-        const authHeader = await getAuthHeader(event);
-        if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
-        const url = `${apiUrl}${path}`;
-        let response;
-        try {
-          response = await proxyFetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...authHeader },
-            body: JSON.stringify(body),
-          });
-        } catch (err) {
-          const classified = classifyAndLog(err, url);
-          if (classified.isNetworkError) {
-            throw Object.assign(new Error(err.message || "Network request failed"), {
-              code: "NETWORK_ERROR",
-              networkCode: classified.code,
-              messageKey: classified.messageKey,
-            });
-          }
-          throw err;
-        }
-        if (!response.ok) {
-          const err = await response.json().catch(() => ({}));
-          throw new Error(err.error || `Token request failed: ${response.status}`);
-        }
-        return response.json();
+      const postServerToken = async () => {
+        const error = new Error(
+          "VoiceLab-funded streaming is disabled until server-authoritative metering is available."
+        );
+        error.code = "VOICELAB_STREAMING_DISABLED";
+        throw error;
       };
 
-      const dual = (factory) => (streams === 2 ? Promise.all([factory(), factory()]) : factory());
+      const dual = (factory) =>
+        streams === 2 ? Promise.all([factory(), factory()]) : factory();
 
       if (options.provider === "assemblyai-realtime") {
         if (options.mode === "byok") {
@@ -7456,223 +6772,6 @@ this._handle("transcribe-audio-file-cloud", async (event, filePath, options = {}
   }
 });
 
-    this._handle(
-      "transcribe-audio-file-byok",
-      async (
-        event,
-        {
-          filePath,
-          apiKey,
-          baseUrl,
-          model,
-          diarize,
-          provider,
-          language,
-          environment,
-          tenant,
-          transcriptionMode,
-          remoteTranscriptionUrl,
-          remoteTranscriptionModel,
-        }
-      ) => {
-        const fs = require("fs");
-        const BYOK_FILE_SIZE_LIMIT = 25 * 1024 * 1024; // 25 MB
-        try {
-          if (typeof filePath !== "string") {
-            return { success: false, error: "Invalid file path" };
-          }
-          const realByok = resolveAllowedAudioPath(filePath);
-          if (!realByok) return { success: false, error: "File path not allowed" };
-
-          const { resolveSelfHostedRetryRoute } = await import("./retryTranscriptionRouting.js");
-          const selfHostedRoute = resolveSelfHostedRetryRoute({
-            transcriptionMode,
-            remoteTranscriptionUrl,
-            remoteTranscriptionModel,
-          });
-
-          // Fail closed: a misconfigured self-hosted setup must never fall through to BYOK.
-          if (selfHostedRoute?.kind === "configuration-error") {
-            return { success: false, error: selfHostedRoute.error };
-          }
-
-          if (selfHostedRoute?.kind === "self-hosted") {
-            // User's own server, so the 25 MB third-party cap does not apply.
-            const ext = path.extname(realByok).toLowerCase().replace(".", "");
-            const { body, boundary } = buildMultipartBody(
-              fs.readFileSync(realByok),
-              path.basename(realByok),
-              AUDIO_MIME_TYPES[ext] || "audio/mpeg",
-              { model: selfHostedRoute.model, language }
-            );
-            const data = await postMultipart(new URL(selfHostedRoute.endpoint), body, boundary);
-            if (data.statusCode !== 200) {
-              throw new Error(
-                data.data?.error?.message ||
-                  data.data?.error ||
-                  `Self-hosted API Error: ${data.statusCode}`
-              );
-            }
-            return { success: true, text: data.data.text };
-          }
-
-          const fileSize = fs.statSync(realByok).size;
-          if (fileSize > BYOK_FILE_SIZE_LIMIT) {
-            return {
-              success: false,
-              error: "File too large. Maximum size for bring-your-own-key is 25 MB.",
-            };
-          }
-
-          if (provider === "corti") {
-            const clientId = this.environmentManager.getCortiClientId();
-            const clientSecret = this.environmentManager.getCortiClientSecret();
-            if (!clientId || !clientSecret) {
-              throw new Error("Corti credentials not configured. Add them in Settings.");
-            }
-            const { transcribeAudio } = require("./cortiTranscription");
-            const { text } = await transcribeAudio({
-              environment,
-              tenant,
-              clientId,
-              clientSecret,
-              audioBuffer: fs.readFileSync(realByok),
-              language: language || "en",
-            });
-            return { success: true, text };
-          }
-
-          if (provider === "tinfoil") {
-            const ext = path.extname(realByok).toLowerCase().replace(".", "");
-            const { text } = await transcribeWithTinfoil({
-              audioBuffer: fs.readFileSync(realByok),
-              fileName: path.basename(realByok),
-              contentType: AUDIO_MIME_TYPES[ext] || "audio/mpeg",
-              language,
-              apiKey: this.environmentManager.getTinfoilKey(),
-            });
-            return { success: true, text };
-          }
-
-          if (!apiKey) throw new Error("No API key configured. Add your key in Settings.");
-          if (!baseUrl && provider !== "xai") {
-            throw new Error("No transcription endpoint configured.");
-          }
-
-          const audioBuffer = fs.readFileSync(realByok);
-          const ext = path.extname(realByok).toLowerCase().replace(".", "");
-          const contentType = AUDIO_MIME_TYPES[ext] || "audio/mpeg";
-          const fileName = path.basename(realByok);
-
-          let transcriptionUrl;
-          const multipartFields = {};
-          if (provider === "xai") {
-            // xAI STT has a fixed endpoint and accepts no model field. See #910.
-            transcriptionUrl = XAI_STT_URL;
-            if (language && XAI_STT_LANGUAGES.has(language)) {
-              multipartFields.language = language;
-              multipartFields.format = "true";
-            }
-          } else {
-            transcriptionUrl = baseUrl.replace(/\/+$/, "");
-            if (!transcriptionUrl.endsWith("/audio/transcriptions")) {
-              transcriptionUrl += "/audio/transcriptions";
-            }
-            multipartFields.model = model || "whisper-1";
-          }
-
-          if (diarize) {
-            let isMistral = false;
-            let isOpenAi = false;
-            try {
-              const h = new URL(baseUrl).hostname;
-              isMistral = h.endsWith(".mistral.ai") || h === "mistral.ai";
-              isOpenAi = h.endsWith(".openai.com") || h === "openai.com";
-            } catch {}
-            if (isMistral) {
-              multipartFields.model = model || "voxtral-mini-latest";
-              multipartFields.diarize = "true";
-              multipartFields.timestamp_granularities = "segment";
-            } else if (isOpenAi) {
-              multipartFields.model = "gpt-4o-transcribe-diarize";
-              // Speaker annotations require diarized_json; verbose_json is not supported by this model.
-              multipartFields.response_format = "diarized_json";
-              multipartFields.chunking_strategy = "auto";
-            } else {
-              // The renderer gates on provider name; this re-check is by hostname.
-              // A non-canonical base URL (Azure/OpenAI-compatible gateway) can
-              // disagree — degrade to a plain transcript, never fail the upload.
-              debugLogger.warn(
-                "BYOK diarization requested but base URL is not OpenAI/Mistral; transcribing without speakers",
-                { baseUrl }
-              );
-            }
-          }
-
-          const { body, boundary } = buildMultipartBody(
-            audioBuffer,
-            fileName,
-            contentType,
-            multipartFields
-          );
-
-          const url = new URL(transcriptionUrl);
-          const data = await postMultipart(url, body, boundary, {
-            Authorization: `Bearer ${apiKey}`,
-          });
-
-          if (data.statusCode === 401) {
-            return { success: false, error: "Invalid API key. Check your key in Settings." };
-          }
-          if (data.statusCode === 429) {
-            return { success: false, error: "Rate limit exceeded. Please try again later." };
-          }
-          if (data.statusCode !== 200) {
-            throw new Error(
-              data.data?.error?.message || data.data?.error || `API error: ${data.statusCode}`
-            );
-          }
-
-          if (diarize && data.data?.speakers) {
-            const segments = (data.data.speakers || []).map((s) => ({
-              speaker: s.id || `Speaker ${s.speaker || "?"}`,
-              text: s.text || "",
-              start: s.start || 0,
-              end: s.end || 0,
-            }));
-            const formatted = segments
-              .map(
-                (s) =>
-                  `[${s.speaker}] ${formatDiarTime(s.start)} - ${formatDiarTime(s.end)}\n${s.text}`
-              )
-              .join("\n\n");
-            return { success: true, text: formatted, diarized: true };
-          }
-
-          if (diarize && data.data?.segments) {
-            const segments = data.data.segments || [];
-            const formatted = segments
-              .map((s) => {
-                const speaker = s.speaker || "Speaker ?";
-                const start = formatDiarTime(s.start || 0);
-                const end = formatDiarTime(s.end || 0);
-                return `[${speaker}] ${start} - ${end}\n${s.text || ""}`;
-              })
-              .join("\n\n");
-            return { success: true, text: formatted, diarized: true };
-          }
-
-          if (diarize) {
-            debugLogger.warn("BYOK diarization requested but provider returned no speaker data");
-          }
-          return { success: true, text: data.data.text };
-        } catch (error) {
-          debugLogger.error("BYOK audio file transcription error", { error: error.message });
-          return { success: false, error: error.message };
-        }
-      }
-    );
-
     this._handle("get-referral-stats", async (event) => {
       try {
         const apiUrl = getApiUrl();
@@ -7898,95 +6997,18 @@ this._handle("transcribe-audio-file-cloud", async (event, filePath, options = {}
       }
     });
 
-    this._handle("check-for-updates", async () => {
-      return this.updateManager.checkForUpdates();
-    });
-
-    this._handle("download-update", async () => {
-      return this.updateManager.downloadUpdate();
-    });
-
-    this._handle("install-update", async () => {
-      return this.updateManager.installUpdate();
-    });
-
-    this._handle("get-app-version", async () => {
-      return this.updateManager.getAppVersion();
-    });
-
-    this._handle("get-post-migration-state", () => ({
-      justMigrated: postMigrationDetector.isReturningFromOldBundle(),
-    }));
-
-    this._handle("get-oauth-protocol-registered", () => this.oauthProtocolRegistered);
-
-    this._handle("get-oauth-protocol", () => this.oauthProtocol);
-
-    this._handle("mark-bundle-migrated", () => {
-      postMigrationDetector.markBundleMigrated();
-    });
-
-    this._handle("mark-bundle-migration-dismissed", () => {
-      postMigrationDetector.markBundleMigrationDismissed();
-    });
-
-    this._handle("get-update-status", async () => {
-      return this.updateManager.getUpdateStatus();
-    });
-
-    this._handle("get-update-info", async () => {
-      return this.updateManager.getUpdateInfo();
-    });
-
-const fetchStreamingToken = async (_event) => {
-  const error = new Error(
-    "VoiceLab-funded streaming is disabled until server-authoritative metering is available."
-  );
-  error.code = "VOICELAB_STREAMING_DISABLED";
-  throw error;
-      const apiUrl = getApiUrl();
-      if (!apiUrl) {
-        throw new Error("OpenWhispr API URL not configured");
-      }
-
-      const authHeader = await getAuthHeader(event);
-      if (!Object.keys(authHeader).length) {
-        throw new Error("Not authenticated");
-      }
-
-      const tokenResponse = await proxyFetch(`${apiUrl}/api/streaming-token`, {
-        method: "POST",
-        headers: {
-          ...authHeader,
-        },
-      });
-
-      if (!tokenResponse.ok) {
-        if (tokenResponse.status === 401) {
-          const err = new Error("Session expired");
-          err.code = "AUTH_EXPIRED";
-          throw err;
-        }
-        const errorData = await tokenResponse.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || `Failed to get streaming token: ${tokenResponse.status}`
-        );
-      }
-
-      const { token } = await tokenResponse.json();
+    const fetchStreamingToken = async () => {
+      const token = this.environmentManager.getAssemblyAIKey?.();
       if (!token) {
-        throw new Error("No token received from API");
+        const error = new Error("AssemblyAI API key is not configured");
+        error.code = "API_KEY_MISSING";
+        throw error;
       }
-
       return token;
     };
 
     this._handle("assemblyai-streaming-warmup", async (event, options = {}) => {
       try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) {
-          return { success: false, error: "API not configured", code: "NO_API" };
-        }
 
         if (!this.assemblyAiStreaming) {
           this.assemblyAiStreaming = new AssemblyAiStreaming();
@@ -8026,10 +7048,6 @@ const fetchStreamingToken = async (_event) => {
 
       streamingStartInProgress = true;
       try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) {
-          return { success: false, error: "API not configured", code: "NO_API" };
-        }
 
         const win = BrowserWindow.fromWebContents(event.sender);
 
@@ -8145,89 +7163,20 @@ const fetchStreamingToken = async (_event) => {
 
     let deepgramTokenWindowId = null;
 
-const fetchDeepgramStreamingTokenFromWindow = async (_windowId) => {
-  const error = new Error(
-    "VoiceLab-funded streaming is disabled until server-authoritative metering is available."
-  );
-  error.code = "VOICELAB_STREAMING_DISABLED";
-  throw error;
-      const apiUrl = getApiUrl();
-      if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
-
-      const win = BrowserWindow.fromId(windowId);
-      if (!win || win.isDestroyed()) throw new Error("Window not available for token refresh");
-
-      const authHeader = await getAuthHeaderFromWindow(win);
-      if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
-
-      const tokenResponse = await proxyFetch(`${apiUrl}/api/deepgram-streaming-token`, {
-        method: "POST",
-        headers: authHeader,
-      });
-
-      if (!tokenResponse.ok) {
-        if (tokenResponse.status === 401) {
-          const err = new Error("Session expired");
-          err.code = "AUTH_EXPIRED";
-          throw err;
-        }
-        throw new Error(`Failed to get Deepgram streaming token: ${tokenResponse.status}`);
-      }
-
-      const { token } = await tokenResponse.json();
-      if (!token) throw new Error("No token received from API");
-      return token;
-    };
-
-const fetchDeepgramStreamingToken = async (_event) => {
-  const error = new Error(
-    "VoiceLab-funded streaming is disabled until server-authoritative metering is available."
-  );
-  error.code = "VOICELAB_STREAMING_DISABLED";
-  throw error;
-      const apiUrl = getApiUrl();
-      if (!apiUrl) {
-        throw new Error("OpenWhispr API URL not configured");
-      }
-
-      const authHeader = await getAuthHeader(event);
-      if (!Object.keys(authHeader).length) {
-        throw new Error("Not authenticated");
-      }
-
-      const tokenResponse = await proxyFetch(`${apiUrl}/api/deepgram-streaming-token`, {
-        method: "POST",
-        headers: {
-          ...authHeader,
-        },
-      });
-
-      if (!tokenResponse.ok) {
-        if (tokenResponse.status === 401) {
-          const err = new Error("Session expired");
-          err.code = "AUTH_EXPIRED";
-          throw err;
-        }
-        const errorData = await tokenResponse.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || `Failed to get Deepgram streaming token: ${tokenResponse.status}`
-        );
-      }
-
-      const { token } = await tokenResponse.json();
+    const fetchDeepgramStreamingTokenFromWindow = async () => {
+      const token = this.environmentManager.getDeepgramKey?.();
       if (!token) {
-        throw new Error("No token received from API");
+        const error = new Error("Deepgram API key is not configured");
+        error.code = "API_KEY_MISSING";
+        throw error;
       }
-
       return token;
     };
+
+    const fetchDeepgramStreamingToken = fetchDeepgramStreamingTokenFromWindow;
 
     this._handle("deepgram-streaming-warmup", async (event, options = {}) => {
       try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) {
-          return { success: false, error: "API not configured", code: "NO_API" };
-        }
 
         const win = BrowserWindow.fromWebContents(event.sender);
         if (win && !win.isDestroyed()) {
@@ -8282,10 +7231,6 @@ const fetchDeepgramStreamingToken = async (_event) => {
 
       deepgramStreamingStartInProgress = true;
       try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) {
-          return { success: false, error: "API not configured", code: "NO_API" };
-        }
 
         const win = BrowserWindow.fromWebContents(event.sender);
         if (win && !win.isDestroyed()) {

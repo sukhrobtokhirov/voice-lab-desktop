@@ -5,7 +5,7 @@ import { Input } from "./ui/input";
 import ApiKeyInput from "./ui/ApiKeyInput";
 import ModelCardList from "./ui/ModelCardList";
 import SearchableModelList, { MODEL_SEARCH_THRESHOLD } from "./ui/SearchableModelList";
-import { buildApiUrl, getModelListBaseCandidates, normalizeBaseUrl } from "../config/constants";
+import { getModelListBaseCandidates, normalizeBaseUrl } from "../config/constants";
 import { isSecureEndpoint } from "../utils/urlUtils";
 import { GetApiKeyLink } from "./ui/GetApiKeyLink";
 
@@ -109,8 +109,6 @@ export default function OpenAICompatiblePanel({
         setModelsError(null);
       }
 
-      const trimmedKey = apiKey?.trim();
-      const effectiveKey = trimmedKey && trimmedKey.length > 0 ? trimmedKey : undefined;
       let activeBase = normalized;
 
       try {
@@ -130,37 +128,16 @@ export default function OpenAICompatiblePanel({
           return;
         }
 
-        const headers: Record<string, string> = {};
-        if (effectiveKey) {
-          headers.Authorization = `Bearer ${effectiveKey}`;
-        }
-
         const fetchModelOptions = async (base: string): Promise<ModelOption[]> => {
-          const response = await fetch(buildApiUrl(base, "/models"), { method: "GET", headers });
-
-          if (!response.ok) {
-            const errorText = await response.text().catch(() => "");
-            const summary = errorText
-              ? `${response.status} ${errorText.slice(0, 200)}`
-              : `${response.status} ${response.statusText}`;
-            throw new Error(summary.trim());
-          }
-
-          const payload = await response.json().catch(() => ({}));
-          const rawModels = Array.isArray(payload?.data)
-            ? payload.data
-            : Array.isArray(payload?.models)
-              ? payload.models
-              : [];
-
-          // Coerce fields defensively: non-conformant endpoints may return
-          // numeric ids or object descriptions, which would crash the render.
-          return (rawModels as Array<Record<string, unknown>>)
+          const provider = base.includes("openrouter.ai") ? "openrouter" : "custom";
+          const result = await window.electronAPI.providerListModels?.({ provider, baseUrl: base });
+          if (!result?.success) throw new Error(result?.error || "Unable to load models");
+          return (result.models || [])
             .map((item) => {
-              const rawValue = item?.id ?? item?.name;
+              const rawValue = item?.id;
               if (rawValue === undefined || rawValue === null || rawValue === "") return null;
               const value = String(rawValue);
-              const ownedBy = typeof item?.owned_by === "string" ? item.owned_by : undefined;
+              const ownedBy = typeof item?.ownedBy === "string" ? item.ownedBy : undefined;
               const description =
                 typeof item?.description === "string" && item.description
                   ? item.description
@@ -213,7 +190,7 @@ export default function OpenAICompatiblePanel({
         if (isMountedRef.current && latestBaseRef.current === normalized) {
           const message = (error as Error).message || t("reasoning.custom.unableToLoadModels");
           const unauthorized = /\b(401|403)\b/.test(message);
-          if (unauthorized && !effectiveKey) {
+          if (unauthorized && !apiKey?.trim()) {
             setModelsError(t("reasoning.custom.endpointUnauthorized"));
           } else {
             setModelsError(message);

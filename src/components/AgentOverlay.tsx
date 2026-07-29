@@ -95,7 +95,6 @@ export default function AgentOverlay() {
     audioManagerRef.current = am;
     return () => {
       am.cleanup?.();
-      window.removeEventListener("api-key-changed", (am as any)._onApiKeyChanged);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addSystemMessage, handleTranscriptionComplete]);

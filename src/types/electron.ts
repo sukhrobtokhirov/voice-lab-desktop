@@ -851,15 +851,10 @@ declare global {
       onTranscriptionDeleted?: (callback: (payload: { id: number }) => void) => () => void;
       onTranscriptionsCleared?: (callback: (payload: { cleared: number }) => void) => () => void;
 
-      // API key management
-      getOpenAIKey: () => Promise<string>;
-      saveOpenAIKey: (key: string) => Promise<{ success: boolean }>;
-      getAnthropicKey: () => Promise<string | null>;
-      saveAnthropicKey: (key: string) => Promise<void>;
+
       getUiLanguage: () => Promise<string>;
       saveUiLanguage: (language: string) => Promise<{ success: boolean; language: string }>;
       setUiLanguage: (language: string) => Promise<{ success: boolean; language: string }>;
-      saveAllKeysToEnv: () => Promise<{ success: boolean; path: string }>;
       syncStartupPreferences: (prefs: {
         useLocalWhisper: boolean;
         localTranscriptionProvider: LocalTranscriptionProvider;
@@ -1161,82 +1156,15 @@ declare global {
       onAccessibilityMissing?: (callback: () => void) => () => void;
       checkAccessibilityTrusted?: () => Promise<boolean>;
 
-      // Gemini API key management
-      getGeminiKey: () => Promise<string | null>;
-      saveGeminiKey: (key: string) => Promise<void>;
-
-      // Groq API key management
-      getGroqKey: () => Promise<string | null>;
-      saveGroqKey: (key: string) => Promise<void>;
-      getOpenrouterKey: () => Promise<string | null>;
-      saveOpenrouterKey: (key: string) => Promise<void>;
-
-      // xAI API key management
-      getXaiKey?: () => Promise<string | null>;
-      saveXaiKey?: (key: string) => Promise<void>;
-      proxyXaiTranscription?: (data: {
-        audioBuffer: ArrayBuffer;
-        language?: string;
-        keyterms?: string[];
-      }) => Promise<{ text: string }>;
-
-      // Mistral API key management
-      getMistralKey: () => Promise<string | null>;
-      saveMistralKey: (key: string) => Promise<void>;
-      proxyMistralTranscription: (data: {
-        audioBuffer: ArrayBuffer;
-        model?: string;
-        language?: string;
-        contextBias?: string[];
-      }) => Promise<{ text: string }>;
-
-      // Corti credential management
-      getCortiClientId?: () => Promise<string | null>;
-      saveCortiClientId?: (key: string) => Promise<void>;
-      getCortiClientSecret?: () => Promise<string | null>;
-      saveCortiClientSecret?: (key: string) => Promise<void>;
-      getCortiKey?: () => Promise<string | null>;
-      saveCortiKey?: (key: string) => Promise<void>;
-      proxyCortiTranscription?: (data: {
-        audioBuffer: ArrayBuffer;
-        language: string;
-        environment: string;
-        tenant: string;
-      }) => Promise<{ text: string }>;
-      getTinfoilKey?: () => Promise<string | null>;
-      saveTinfoilKey?: (key: string) => Promise<void>;
       getTinfoilChatModels?: () => Promise<TinfoilCatalogModel[]>;
-      proxyTinfoilTranscription?: (data: {
-        audioBuffer: ArrayBuffer;
-        language?: string;
-        prompt?: string;
-      }) => Promise<
-        { text: string; model: string } | { error: string; code?: string; messageKey?: string }
-      >;
-
-      // Custom endpoint API keys
-      getCustomTranscriptionKey?: () => Promise<string | null>;
-      saveCustomTranscriptionKey?: (key: string) => Promise<void>;
-      getCleanupCustomKey?: () => Promise<string | null>;
-      saveCleanupCustomKey?: (key: string) => Promise<void>;
 
       // Enterprise provider key persistence
       getBedrockRegion?: () => Promise<string | null>;
       saveBedrockRegion?: (value: string) => Promise<void>;
       getBedrockProfile?: () => Promise<string | null>;
       saveBedrockProfile?: (value: string) => Promise<void>;
-      getBedrockAccessKeyId?: () => Promise<string | null>;
-      saveBedrockAccessKeyId?: (key: string) => Promise<void>;
-      getBedrockSecretAccessKey?: () => Promise<string | null>;
-      saveBedrockSecretAccessKey?: (key: string) => Promise<void>;
-      getBedrockSessionToken?: () => Promise<string | null>;
-      saveBedrockSessionToken?: (key: string) => Promise<void>;
       getAzureEndpoint?: () => Promise<string | null>;
       saveAzureEndpoint?: (value: string) => Promise<void>;
-      getAzureApiKey?: () => Promise<string | null>;
-      saveAzureApiKey?: (key: string) => Promise<void>;
-      getAishaApiKey?: () => Promise<string | null>;
-      saveAishaApiKey?: (key: string) => Promise<{ success: boolean } | void>;
       validateAishaApiKey?: (
         key?: string
       ) => Promise<{
@@ -1254,8 +1182,6 @@ declare global {
       saveVertexProject?: (value: string) => Promise<void>;
       getVertexLocation?: () => Promise<string | null>;
       saveVertexLocation?: (value: string) => Promise<void>;
-      getVertexApiKey?: () => Promise<string | null>;
-      saveVertexApiKey?: (key: string) => Promise<void>;
       testEnterpriseConnection?: (
         provider: string,
         config: Record<string, string>
@@ -1505,10 +1431,9 @@ openVoiceLabBilling?: (
         callback: (data: { stage: string; chunksTotal: number; chunksCompleted: number }) => void
       ) => () => void;
 
-      // BYOK audio file transcription
-      transcribeAudioFileByok?: (options: {
+      // Main-process BYOK audio file transcription
+      providerTranscribeFile?: (options: {
         filePath: string;
-        apiKey: string;
         baseUrl: string;
         model: string;
         diarize?: boolean;
@@ -1524,6 +1449,66 @@ openVoiceLabBilling?: (
         text?: string;
         error?: string;
         diarized?: boolean;
+      }>;
+
+      // Main-process provider boundary. Renderer code can select providers and
+      // submit work, but it cannot read stored credentials.
+      providerCredentialStatus?: () => Promise<{
+        credentials: Record<string, boolean>;
+      }>;
+      providerSaveCredential?: (
+        credential: string,
+        value: string
+      ) => Promise<{ success: boolean; configured?: boolean; error?: string }>;
+      providerListModels?: (payload: {
+        provider: "openai" | "openrouter" | "custom" | "lan";
+        baseUrl: string;
+      }) => Promise<{
+        success: boolean;
+        models?: Array<{ id: string; ownedBy?: string; description?: string }>;
+        error?: string;
+      }>;
+      providerReason?: (payload: {
+        provider: string;
+        model: string;
+        text: string;
+        config?: Record<string, unknown>;
+      }) => Promise<{ success: boolean; text?: string; error?: string }>;
+      providerStreamStart?: (payload: {
+        streamId: string;
+        provider: string;
+        modelId: string;
+        config?: Record<string, unknown>;
+        options: Record<string, unknown>;
+      }) => Promise<{ success: boolean; error?: string }>;
+      providerStreamCancel?: (
+        streamId: string
+      ) => Promise<{ success: boolean; error?: string }>;
+      onProviderStreamPart?: (
+        callback: (payload: {
+          streamId: string;
+          part?: unknown;
+          done?: boolean;
+          error?: string;
+        }) => void
+      ) => () => void;
+      providerTranscribe?: (payload: {
+        provider: string;
+        audioBuffer: ArrayBuffer | Uint8Array;
+        mimeType?: string;
+        model?: string;
+        baseUrl?: string;
+        language?: string;
+        prompt?: string;
+        keyterms?: string[];
+        contextBias?: string[];
+        environment?: "us" | "eu" | "au";
+        tenant?: string;
+      }) => Promise<{
+        success: boolean;
+        text?: string;
+        error?: string;
+        code?: string;
       }>;
 
       // Usage limit events
