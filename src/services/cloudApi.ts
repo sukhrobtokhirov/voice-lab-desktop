@@ -18,6 +18,17 @@ export class CloudApiError extends Error {
 }
 
 async function cloudRequest<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
+  if (
+    ["/api/dictionary/", "/api/snippets/", "/api/notes/", "/api/transcriptions/"].some(
+      (prefix) => path.startsWith(prefix)
+    )
+  ) {
+    throw new CloudApiError(
+      "Legacy cloud sync is disabled. Use the account-scoped desktop sync contract.",
+      410,
+      "LEGACY_SYNC_DISABLED"
+    );
+  }
   const result = (await window.electronAPI?.cloudApiRequest?.({
     method,
     path,

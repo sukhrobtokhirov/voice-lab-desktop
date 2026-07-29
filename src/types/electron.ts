@@ -17,6 +17,16 @@ export type TranscriptionErrorCode =
   | "AUTH_EXPIRED"
   | "AUTH_REQUIRED"
   | "LIMIT_REACHED"
+  | "INSUFFICIENT_CREDITS"
+  | "ENTITLEMENT_REQUIRED"
+  | "DEVICE_LIMIT"
+  | "CONCURRENCY_LIMIT"
+  | "DAILY_CAP_REACHED"
+  | "RATE_LIMITED"
+  | "AUDIO_LIMIT_EXCEEDED"
+  | "IDEMPOTENCY_CONFLICT"
+  | "SERVICE_UNAVAILABLE"
+  | "VOICELAB_STREAMING_DISABLED"
   | "PROVIDER_RATE_LIMITED"
   | "API_KEY_MISSING"
   | "INVALID_KEY"
@@ -114,6 +124,34 @@ export interface DictionaryEntryItem {
   cloud_id: string | null;
   sync_status: "synced" | "pending" | "error";
   deleted_at: string | null;
+}
+
+export interface DesktopDictionaryEntry {
+  id: string;
+  displayForm: string;
+  normalizedKey: string;
+  language: string;
+  replacement: string | null;
+  pronunciation: string | null;
+  context: string | null;
+  source: "manual" | "learned";
+  version: number;
+  deletedAt: string | null;
+  syncStatus: "saved_local" | "syncing" | "synced" | "conflict" | "error";
+  lastErrorCode: string | null;
+  updatedAt: string;
+}
+
+export interface DesktopDictionaryState {
+  accountId: string | null;
+  entries: DesktopDictionaryEntry[];
+  vocabulary: string[];
+  legacyCount: number;
+  legacyAttachDecision: "attached" | "keep_local" | null;
+  requiresLegacyDecision: boolean;
+  supportedLanguages: string[];
+  autoDetectionSupported: boolean;
+  portablePreferences: Record<string, unknown>;
 }
 
 export interface SnippetEntryItem {
@@ -647,7 +685,9 @@ declare global {
       // Dictionary operations
       getDictionary: () => Promise<string[]>;
       setDictionary: (words: string[]) => Promise<{ success: boolean }>;
-      onDictionaryUpdated?: (callback: (words: string[]) => void) => () => void;
+      onDictionaryUpdated?: (
+        callback: (state: DesktopDictionaryState | string[]) => void
+      ) => () => void;
       getSnippets?: () => Promise<Array<{ trigger: string; replacement: string }>>;
       setSnippets?: (
         snippets: Array<{ trigger: string; replacement: string }>
@@ -1285,9 +1325,42 @@ declare global {
       setAutoStartEnabled?: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
 
       // Auth
-      authClearSession?: () => Promise<void>;
-      authGetToken?: () => Promise<string | null>;
-      authSetToken?: (token: string) => Promise<void>;
+      authStartBrowser?: (provider?: "google") => Promise<{
+        status: string;
+        user: Record<string, unknown> | null;
+        errorCode: string | null;
+      }>;
+      authGetStatus?: () => Promise<{
+        status: string;
+        user: Record<string, unknown> | null;
+        errorCode: string | null;
+      }>;
+      authAdoptSession?: (session: {
+        access_token: string;
+        refresh_token?: string;
+        expires_in?: number;
+        refresh_expires_in?: number;
+        session_id?: string;
+        user?: Record<string, unknown> | null;
+      }) => Promise<{
+        status: string;
+        user: Record<string, unknown> | null;
+        errorCode: string | null;
+      }>;
+      authRefreshSession?: () => Promise<{
+        status: string;
+        user: Record<string, unknown> | null;
+        errorCode: string | null;
+      }>;
+      authLogout?: () => Promise<{ success: boolean; revoked: boolean }>;
+      authDeleteAccount?: () => Promise<{ success: boolean }>;
+      onAuthStateChanged?: (
+        callback: (status: {
+          status: string;
+          user: Record<string, unknown> | null;
+          errorCode: string | null;
+        }) => void
+      ) => () => void;
 
       // OpenWhispr Cloud API
       cloudTranscribe?: (
@@ -1300,8 +1373,16 @@ declare global {
         clientTranscriptionId?: string;
         wordsUsed?: number;
         wordsRemaining?: number;
-        limitReached?: boolean;
-        error?: string;
+limitReached?: boolean;
+operationId?: string;
+estimatedCredits?: string | null;
+chargedCredits?: string | null;
+balanceCredits?: string;
+reservedCredits?: string;
+availableCredits?: string;
+limits?: Record<string, unknown>;
+retryAfterSeconds?: number | null;
+error?: string;
         code?: string;
       }>;
       cloudReason?: (
@@ -1353,22 +1434,23 @@ declare global {
         code?: string;
         messageKey?: string;
       }>;
-      cloudUsage?: () => Promise<{
-        success: boolean;
-        wordsUsed?: number;
-        wordsRemaining?: number;
-        limit?: number;
-        plan?: string;
-        status?: string;
-        isSubscribed?: boolean;
-        isTrial?: boolean;
-        trialDaysLeft?: number | null;
-        currentPeriodEnd?: string | null;
-        billingInterval?: "monthly" | "annual" | null;
-        resetAt?: string;
-        error?: string;
-        code?: string;
-      }>;
+cloudUsage?: () => Promise<{
+  success: boolean;
+  balanceCredits?: string;
+  reservedCredits?: string;
+  availableCredits?: string;
+  plan?: string;
+  estimatedCredits?: string | null;
+  chargedCredits?: string | null;
+  limits?: Record<string, unknown>;
+  topUpUrl?: string | null;
+  updatedAt?: string | null;
+  error?: string;
+  code?: string;
+}>;
+openVoiceLabBilling?: (
+  source?: "dictate" | "desktop"
+) => Promise<{ success: boolean; error?: string }>;
       cloudCheckout?: (opts?: {
         plan?: "monthly" | "annual";
         tier?: "pro" | "business";
@@ -1417,7 +1499,10 @@ declare global {
       }>;
 
       // Cloud audio file transcription
-      transcribeAudioFileCloud?: (filePath: string) => Promise<{
+      transcribeAudioFileCloud?: (
+        filePath: string,
+        options?: { language?: string | null }
+      ) => Promise<{
         success: boolean;
         text?: string;
         warning?: string;
@@ -1451,7 +1536,12 @@ declare global {
       }>;
 
       // Usage limit events
-      notifyLimitReached?: (data: { wordsUsed: number; limit: number }) => void;
+      notifyLimitReached?: (data: {
+        wordsUsed?: number;
+        limit?: number;
+        availableCredits?: string;
+        requiredCredits?: string;
+      }) => void;
       onLimitReached?: (
         callback: (data: { wordsUsed: number; limit: number }) => void
       ) => () => void;
@@ -2100,6 +2190,45 @@ declare global {
       hardDeleteTranscription?: (id: number) => Promise<{ success: boolean; id: number }>;
 
       getPendingDictionary?: () => Promise<DictionaryEntryItem[]>;
+      getDictionaryState?: () => Promise<DesktopDictionaryState>;
+      createDictionaryEntry?: (input: {
+        displayForm: string;
+        language?: string;
+        replacement?: string | null;
+        pronunciation?: string | null;
+        context?: string | null;
+        source?: "manual" | "learned";
+      }) => Promise<{
+        entry: DesktopDictionaryEntry;
+        duplicate: boolean;
+        state: DesktopDictionaryState;
+      }>;
+      updateDictionaryEntry?: (
+        id: string,
+        input: Partial<{
+          displayForm: string;
+          language: string;
+          replacement: string | null;
+          pronunciation: string | null;
+          context: string | null;
+          source: "manual" | "learned";
+        }>
+      ) => Promise<{ entry: DesktopDictionaryEntry; state: DesktopDictionaryState }>;
+      deleteDictionaryEntry?: (
+        id: string
+      ) => Promise<{ deleted: boolean; state: DesktopDictionaryState }>;
+      decideLegacyDictionary?: (
+        decision: "attach" | "keep_local"
+      ) => Promise<DesktopDictionaryState>;
+      desktopSyncBootstrap?: () => Promise<DesktopDictionaryState>;
+      desktopSyncSetPreferences?: (
+        preferences: Record<string, unknown>
+      ) => Promise<DesktopDictionaryState>;
+      desktopSyncRun?: (options?: {
+        pull?: boolean;
+        maxPushBatches?: number;
+      }) => Promise<{ success: boolean; state?: DesktopDictionaryState; code?: string }>;
+      desktopSyncPause?: () => Promise<{ success: boolean }>;
       getPendingDictionaryDeletes?: () => Promise<DictionaryEntryItem[]>;
       getDictionaryByClientId?: (clientDictId: string) => Promise<DictionaryEntryItem | null>;
       upsertDictionaryFromCloud?: (

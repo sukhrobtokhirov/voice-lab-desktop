@@ -15,12 +15,20 @@ const BACKUP_FILE = "master-key-backup.enc";
 let mode = null;
 let masterKey = null;
 
+function _hasStrongSafeStorageBackend() {
+  if (!safeStorage.isEncryptionAvailable()) return false;
+  if (process.platform !== "linux") return true;
+  if (typeof safeStorage.getSelectedStorageBackend !== "function") return false;
+  const backend = safeStorage.getSelectedStorageBackend();
+  return Boolean(backend && backend !== "basic_text" && backend !== "unknown");
+}
+
 function _backupPath() {
   return path.join(app.getPath("userData"), "secure-keys", BACKUP_FILE);
 }
 
 function _saveMasterKeyBackup() {
-  if (!masterKey || !safeStorage.isEncryptionAvailable()) return;
+  if (!masterKey || !_hasStrongSafeStorageBackend()) return;
   const target = _backupPath();
   try {
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -34,7 +42,7 @@ function _saveMasterKeyBackup() {
 }
 
 function _loadMasterKeyBackup() {
-  if (!safeStorage.isEncryptionAvailable()) return false;
+  if (!_hasStrongSafeStorageBackend()) return false;
   try {
     const buf = fs.readFileSync(_backupPath());
     const b64 = safeStorage.decryptString(buf);
@@ -95,7 +103,7 @@ function _ensureInit() {
     debugLogger.info("recovered master key from safeStorage backup", {}, "secretCrypto");
     return;
   }
-  mode = safeStorage.isEncryptionAvailable() ? "safeStorage" : "unavailable";
+  mode = _hasStrongSafeStorageBackend() ? "safeStorage" : "unavailable";
 }
 
 function isAvailable() {
@@ -130,7 +138,7 @@ function decrypt(blob) {
       // Legacy safeStorage blob — handled by the fallback below.
     }
   }
-  if (safeStorage.isEncryptionAvailable()) {
+  if (_hasStrongSafeStorageBackend()) {
     return {
       value: safeStorage.decryptString(blob),
       needsReencrypt: mode === "keychain",

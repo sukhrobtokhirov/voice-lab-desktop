@@ -29,34 +29,11 @@ const {
 } = require("electron");
 const path = require("path");
 const fs = require("fs");
-const http = require("http");
 const tls = require("tls");
-// Dev: project-root .env. Packaged: electron-builder extraResources/.env
-require("dotenv").config({ path: path.join(__dirname, ".env") });
-if (app.isPackaged) {
-  require("dotenv").config({
-    path: path.join(process.resourcesPath, ".env"),
-    override: false,
-  });
-}
-
-/**
- * Fill AISHA_API_KEY from an env file only when unset.
- * User-saved keys in userData must always win over packaged Resources/.env.
- */
-function ensureAishaApiKeyFromFile(envPath) {
-  if (process.env.AISHA_API_KEY) return false;
-  try {
-    if (!fs.existsSync(envPath)) return false;
-    const match = fs.readFileSync(envPath, "utf8").match(/^AISHA_API_KEY\s*=\s*(.+)$/m);
-    if (!match?.[1]) return false;
-    const value = match[1].trim().replace(/^['"]|['"]$/g, "");
-    if (!value) return false;
-    process.env.AISHA_API_KEY = value;
-    return true;
-  } catch {
-    return false;
-  }
+// Development may load local configuration. Packaged builds never load or ship
+// a project-level .env; user-provided credentials live in the encrypted user profile.
+if (!app.isPackaged) {
+  require("dotenv").config({ path: path.join(__dirname, ".env") });
 }
 
 // Extend Node's TLS trust with the OS store so ws and https.get see corporate
@@ -80,7 +57,6 @@ const DEFAULT_OAUTH_PROTOCOL_BY_CHANNEL = {
   production: "voicelab",
 };
 const BASE_WINDOWS_APP_ID = "com.gizmolabs.openwhispr";
-const DEFAULT_AUTH_BRIDGE_PORT = 5199;
 
 function isElectronBinaryExec() {
   const execPath = (process.execPath || "").toLowerCase();
@@ -99,7 +75,20 @@ function inferDefaultChannel() {
 }
 
 function resolveAppChannel() {
-  const rawChannel = (process.env.OPENWHISPR_CHANNEL || process.env.VITE_OPENWHISPR_CHANNEL || "")
+  if (app.isPackaged) {
+    try {
+      const packagedMetadata = require(path.join(__dirname, "package.json"));
+      const packagedChannel = String(packagedMetadata.voicelabChannel || "")
+        .trim()
+        .toLowerCase();
+      if (VALID_CHANNELS.has(packagedChannel)) {
+        return packagedChannel;
+      }
+    } catch {}
+    return "production";
+  }
+
+  const rawChannel = (process.env.OPENWHISPR_CHANNEL || "")
     .trim()
     .toLowerCase();
 
@@ -132,15 +121,6 @@ require("dotenv").config({
   override: true,
 });
 
-// Dev / packaged Resources/.env only fill AISHA_API_KEY when still unset.
-if (!process.env.AISHA_API_KEY) {
-  if (app.isPackaged) {
-    ensureAishaApiKeyFromFile(path.join(process.resourcesPath, ".env"));
-  } else {
-    ensureAishaApiKeyFromFile(path.join(__dirname, ".env"));
-  }
-}
-
 // Fix transparent window flickering on Linux: --enable-transparent-visuals requires
 // the compositor to set up an ARGB visual before any windows are created.
 // --disable-gpu-compositing prevents GPU compositing conflicts with the compositor.
@@ -171,20 +151,68 @@ if (process.platform === "win32") {
 }
 
 function getOAuthProtocol() {
-  const fromEnv = (process.env.VITE_OPENWHISPR_PROTOCOL || process.env.OPENWHISPR_PROTOCOL || "")
-    .trim()
-    .toLowerCase();
-
-  if (/^[a-z][a-z0-9+.-]*$/.test(fromEnv)) {
-    return fromEnv;
-  }
-
   return (
     DEFAULT_OAUTH_PROTOCOL_BY_CHANNEL[APP_CHANNEL] || DEFAULT_OAUTH_PROTOCOL_BY_CHANNEL.production
   );
 }
 
 const OAUTH_PROTOCOL = getOAuthProtocol();
+
+function resolveDesktopRuntimeAuthConfig() {
+  const defaults = {
+    development: {
+      apiBaseUrl: "http://localhost:8000",
+      browserOrigins: ["http://localhost:3000"],
+    },
+    staging: {
+      apiBaseUrl: "https://api-staging.voicelab.uz",
+      browserOrigins: ["https://staging.voicelab.uz"],
+    },
+    production: {
+      apiBaseUrl: "https://api.voicelab.uz",
+      browserOrigins: ["https://voicelab.uz"],
+    },
+  }[APP_CHANNEL];
+  const apiBaseUrl = (process.env.VOICELAB_DESKTOP_API_URL || defaults.apiBaseUrl).trim();
+  const configuredOrigins = (process.env.VOICELAB_DESKTOP_AUTH_ORIGINS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const browserOrigins = configuredOrigins.length ? configuredOrigins : defaults.browserOrigins;
+  const validateOrigin = (value, label) => {
+    const url = new URL(value);
+    const localDevelopment =
+      APP_CHANNEL === "development" &&
+      url.protocol === "http:" &&
+      ["localhost", "127.0.0.1"].includes(url.hostname);
+    if ((!localDevelopment && url.protocol !== "https:") || url.username || url.password) {
+      throw new Error(`${label} must use a trusted HTTPS origin`);
+    }
+    if ((url.pathname && url.pathname !== "/") || url.search || url.hash) {
+      throw new Error(`${label} must be an origin without path, query, or fragment`);
+    }
+    return url.origin;
+  };
+  const normalizedApiOrigin = validateOrigin(apiBaseUrl, "VOICELAB_DESKTOP_API_URL");
+  const normalizedBrowserOrigins = browserOrigins.map((origin) =>
+    validateOrigin(origin, "VOICELAB_DESKTOP_AUTH_ORIGINS")
+  );
+  if (!/^[a-z][a-z0-9+.-]*$/.test(OAUTH_PROTOCOL)) {
+    throw new Error("OPENWHISPR_PROTOCOL is invalid");
+  }
+  return {
+    apiBaseUrl: normalizedApiOrigin,
+    authorizationOrigins: normalizedBrowserOrigins,
+    billingOrigin: normalizedBrowserOrigins[0],
+    scheme: OAUTH_PROTOCOL,
+  };
+}
+
+const DESKTOP_AUTH_CONFIG = resolveDesktopRuntimeAuthConfig();
+
+const initialProtocolUrls = process.argv.filter((arg) =>
+  arg.startsWith(`${OAUTH_PROTOCOL}://`)
+);
 
 function shouldRegisterProtocolWithAppArg() {
   return Boolean(process.defaultApp) || isElectronBinaryExec();
@@ -307,6 +335,8 @@ const WhisperManager = require("./src/helpers/whisper");
 const ParakeetManager = require("./src/helpers/parakeet");
 const DiarizationManager = require("./src/helpers/diarization");
 const TrayManager = require("./src/helpers/tray");
+const DesktopAuthManager = require("./src/helpers/desktopAuthManager");
+const VoiceLabApiClient = require("./src/helpers/voiceLabApiClient");
 const dockManager = require("./src/helpers/dockManager");
 const IPCHandlers = require("./src/helpers/ipcHandlers");
 const CliBridge = require("./src/helpers/cliBridge");
@@ -342,6 +372,8 @@ let whisperManager = null;
 let parakeetManager = null;
 let diarizationManager = null;
 let trayManager = null;
+let desktopAuthManager = null;
+let voiceLabApiClient = null;
 let updateManager = null;
 let globeKeyManager = null;
 let windowsKeyManager = null;
@@ -359,28 +391,127 @@ let qdrantManager = null;
 let ipcHandlers = null;
 let cliBridge = null;
 let globeKeyAlertShown = false;
-let authBridgeServer = null;
 let pendingNoteCloudId = null;
 let pendingNoteRetryTimer = null;
 let pendingNoteRetryCount = 0;
 const WHISPER_WAKE_REWARM_DELAY_MS = 3000;
 let wakeRewarmTimer = null;
 
-function parseAuthBridgePort() {
-  const raw = (process.env.OPENWHISPR_AUTH_BRIDGE_PORT || "").trim();
-  if (!raw) return DEFAULT_AUTH_BRIDGE_PORT;
+let protocolRouterReady = false;
+const pendingProtocolUrls = [];
 
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
-    return DEFAULT_AUTH_BRIDGE_PORT;
-  }
-
-  return parsed;
+function protocolRouteError(code) {
+  const error = new Error("Desktop protocol URL rejected");
+  error.code = code;
+  return error;
 }
 
-const AUTH_BRIDGE_HOST = "127.0.0.1";
-const AUTH_BRIDGE_PORT = parseAuthBridgePort();
-const AUTH_BRIDGE_PATH = "/oauth/callback";
+function parseProtocolRoute(value) {
+  if (typeof value !== "string" || value.length > 4096) {
+    throw protocolRouteError("DESKTOP_PROTOCOL_INVALID");
+  }
+
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw protocolRouteError("DESKTOP_PROTOCOL_INVALID");
+  }
+
+  if (
+    url.protocol !== `${OAUTH_PROTOCOL}:` ||
+    url.username ||
+    url.password ||
+    url.port ||
+    url.hash
+  ) {
+    throw protocolRouteError("DESKTOP_PROTOCOL_INVALID");
+  }
+
+  if (url.hostname === "auth" && url.pathname === "/callback") {
+    return { kind: "auth", value: url.toString() };
+  }
+
+  if (
+    url.hostname === "upgrade-success" &&
+    (url.pathname === "" || url.pathname === "/") &&
+    !url.search
+  ) {
+    return { kind: "upgrade", value: url.toString() };
+  }
+
+  const singlePathPart = url.pathname.match(/^\/([^/]+)\/?$/)?.[1] || "";
+  if (url.hostname === "notes" && singlePathPart && !url.search) {
+    const cloudId = decodeURIComponent(singlePathPart);
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cloudId)) {
+      return { kind: "note", value: url.toString(), payload: cloudId };
+    }
+  }
+
+  if (url.hostname === "invitations" && singlePathPart && !url.search) {
+    const invitationToken = decodeURIComponent(singlePathPart);
+    if (/^[A-Za-z0-9._~-]{1,1024}$/.test(invitationToken)) {
+      return { kind: "invitation", value: url.toString(), payload: invitationToken };
+    }
+  }
+
+  throw protocolRouteError("DESKTOP_PROTOCOL_ROUTE_REJECTED");
+}
+
+async function dispatchProtocolRoute(route) {
+  if (route.kind === "upgrade") {
+    handleUpgradeDeepLink();
+    return;
+  }
+  if (route.kind === "note") {
+    await handleNoteDeepLink(route.payload);
+    return;
+  }
+  if (route.kind === "invitation") {
+    handleInvitationDeepLink(route.payload);
+    return;
+  }
+  await handleOAuthDeepLink(route.value);
+}
+
+function notifyProtocolFailure(error) {
+  const errorCode =
+    typeof error?.code === "string" && /^[A-Z0-9_]{3,80}$/.test(error.code)
+      ? error.code
+      : "DESKTOP_PROTOCOL_FAILED";
+  console.warn("[Protocol] Deep link rejected", { errorCode });
+  if (isLiveWindow(windowManager?.controlPanelWindow)) {
+    windowManager.controlPanelWindow.webContents.send("desktop-protocol-error", { errorCode });
+  }
+}
+
+async function safelyAcceptProtocolUrl(url) {
+  try {
+    await acceptProtocolUrl(url);
+  } catch (error) {
+    notifyProtocolFailure(error);
+  }
+}
+
+async function acceptProtocolUrl(url) {
+  const route = parseProtocolRoute(url);
+
+  if (!protocolRouterReady) {
+    if (!pendingProtocolUrls.includes(route.value) && pendingProtocolUrls.length < 16) {
+      pendingProtocolUrls.push(route.value);
+    }
+    return;
+  }
+
+  await dispatchProtocolRoute(route);
+}
+
+async function flushPendingProtocolUrls() {
+  const queued = pendingProtocolUrls.splice(0);
+  for (const url of queued) {
+    await safelyAcceptProtocolUrl(url);
+  }
+}
 
 // Set up PATH for production builds to find system tools (whisper.cpp, ffmpeg)
 function setupProductionPath() {
@@ -415,7 +546,7 @@ function cleanupOrphanedLinuxRestoreToken() {
   } catch {}
 }
 
-function initializeCoreManagers() {
+async function initializeCoreManagers() {
   setupProductionPath();
 
   debugLogger = require("./src/helpers/debugLogger");
@@ -428,6 +559,22 @@ function initializeCoreManagers() {
   debugLogger.refreshLogLevel();
 
   windowManager = new WindowManager();
+  const appVersion = require("./package.json").version;
+desktopAuthManager = new DesktopAuthManager({
+  channel: APP_CHANNEL,
+  scheme: DESKTOP_AUTH_CONFIG.scheme,
+  appVersion,
+  apiBaseUrl: DESKTOP_AUTH_CONFIG.apiBaseUrl,
+  authorizationOrigins: DESKTOP_AUTH_CONFIG.authorizationOrigins,
+});
+await desktopAuthManager.initialize();
+voiceLabApiClient = new VoiceLabApiClient({
+  authManager: desktopAuthManager,
+  apiBaseUrl: DESKTOP_AUTH_CONFIG.apiBaseUrl,
+  appVersion,
+  channel: APP_CHANNEL,
+  billingOrigin: DESKTOP_AUTH_CONFIG.billingOrigin,
+});
   hotkeyManager = windowManager.hotkeyManager;
   databaseManager = new DatabaseManager();
   clipboardManager = new ClipboardManager();
@@ -488,6 +635,8 @@ function initializeCoreManagers() {
     windowsLoopbackAudioManager,
     meetingAecManager,
     getTrayManager: () => trayManager,
+    desktopAuthManager,
+    voiceLabApiClient,
     oauthProtocolRegistered: protocolRegistered,
     oauthProtocol: OAUTH_PROTOCOL,
   });
@@ -551,51 +700,8 @@ function initializeDeferredManagers() {
 
 app.on("open-url", (event, url) => {
   event.preventDefault();
-  if (!url.startsWith(`${OAUTH_PROTOCOL}://`)) return;
-
-  if (url.includes("upgrade-success")) {
-    handleUpgradeDeepLink();
-    return;
-  }
-
-  if (isNoteDeepLink(url)) {
-    void handleNoteDeepLink(url);
-    return;
-  }
-
-  if (isInvitationDeepLink(url)) {
-    handleInvitationDeepLink(url);
-    return;
-  }
-
-  void handleOAuthDeepLink(url);
-
-  if (windowManager && isLiveWindow(windowManager.controlPanelWindow)) {
-    windowManager.controlPanelWindow.show();
-    windowManager.controlPanelWindow.focus();
-    dockManager.setControlPanelVisible(true);
-  }
+  void safelyAcceptProtocolUrl(url);
 });
-
-function isInvitationDeepLink(url) {
-  return url.slice(`${OAUTH_PROTOCOL}://`.length).startsWith("invitations/");
-}
-
-function isNoteDeepLink(url) {
-  return url.slice(`${OAUTH_PROTOCOL}://`.length).startsWith("notes/");
-}
-
-function parseNoteCloudId(deepLinkUrl) {
-  try {
-    const match = deepLinkUrl.match(/notes\/([^/?#]+)/);
-    const cloudId = match?.[1] ? decodeURIComponent(match[1]) : "";
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cloudId)
-      ? cloudId
-      : null;
-  } catch {
-    return null;
-  }
-}
 
 function clearPendingNoteDeepLink() {
   clearTimeout(pendingNoteRetryTimer);
@@ -642,23 +748,14 @@ async function flushPendingNoteDeepLink() {
   }
 }
 
-async function handleNoteDeepLink(deepLinkUrl) {
-  const cloudId = parseNoteCloudId(deepLinkUrl);
-  if (!cloudId) {
-    console.warn("Invalid note deep link");
-    return;
-  }
-
+async function handleNoteDeepLink(cloudId) {
   clearPendingNoteDeepLink();
   pendingNoteCloudId = cloudId;
   await flushPendingNoteDeepLink();
 }
 
-function handleInvitationDeepLink(deepLinkUrl) {
+function handleInvitationDeepLink(token) {
   try {
-    const match = deepLinkUrl.match(/invitations\/([^/?#]+)/);
-    const token = match?.[1];
-    if (!token) return;
     if (windowManager && isLiveWindow(windowManager.controlPanelWindow)) {
       windowManager.controlPanelWindow.show();
       windowManager.controlPanelWindow.focus();
@@ -679,92 +776,19 @@ function handleInvitationDeepLink(deepLinkUrl) {
   }
 }
 
-function resolveAuthUrl() {
-  const fs = require("fs");
-  const envPath = path.join(__dirname, "src", "dist", "runtime-env.json");
-  let runtimeEnv = {};
-  try {
-    if (fs.existsSync(envPath)) runtimeEnv = JSON.parse(fs.readFileSync(envPath, "utf8"));
-  } catch {}
-  return (
-    process.env.AUTH_URL ||
-    process.env.VITE_AUTH_URL ||
-    runtimeEnv.VITE_AUTH_URL ||
-    "https://voicelab.uz"
-  );
-}
-
-/** Prefer VoiceLab access_token cookie from the site origin when present. */
-async function migrateCookieToBearerToken() {
-  const tokenStore = require("./src/helpers/tokenStore");
-  if (tokenStore.get()) return;
-
-  const authUrl = resolveAuthUrl();
-  try {
-    const accessCookies = await session.defaultSession.cookies.get({
-      url: authUrl,
-      name: "access_token",
-    });
-    if (!accessCookies.length) return;
-
-    const refreshCookies = await session.defaultSession.cookies.get({
-      url: authUrl,
-      name: "refresh_token",
-    });
-    tokenStore.setSession(accessCookies[0].value, refreshCookies[0]?.value || "");
-    if (debugLogger) debugLogger.debug("Migrated VoiceLab cookies to token store");
-  } catch (err) {
-    if (debugLogger) {
-      debugLogger.warn("Cookie→token migration failed (non-fatal)", {
-        error: err?.message,
-      });
-    }
-  }
-}
-
-// Persist the bearer token and reload the control panel so the renderer's
-// authClient sends `Authorization: Bearer <token>` on its next request.
-async function applySessionTokenAndRefresh(token, refreshToken = "") {
-  if (!token) return;
-  if (!isLiveWindow(windowManager?.controlPanelWindow)) return;
-
-  const tokenStore = require("./src/helpers/tokenStore");
-  if (refreshToken) tokenStore.setSession(token, refreshToken);
-  else tokenStore.set(token);
-
-  const appUrl = DevServerManager.getAppUrl(true);
-  if (appUrl) {
-    windowManager.controlPanelWindow.loadURL(appUrl);
-  } else {
-    const fileInfo = DevServerManager.getAppFilePath(true);
-    if (fileInfo) {
-      windowManager.controlPanelWindow.loadFile(fileInfo.path, { query: fileInfo.query });
-    }
-  }
-
-  if (debugLogger) {
-    debugLogger.debug("Applied bearer token and reloaded control panel", {
-      appChannel: APP_CHANNEL,
-      oauthProtocol: OAUTH_PROTOCOL,
-    });
-  }
-  windowManager.controlPanelWindow.show();
-  windowManager.controlPanelWindow.focus();
-  dockManager.setControlPanelVisible(true);
-}
-
 async function handleOAuthDeepLink(deepLinkUrl) {
-  try {
-    const parsed = new URL(deepLinkUrl);
-    const bearerToken =
-      parsed.searchParams.get("bearer_token") ||
-      parsed.searchParams.get("access_token") ||
-      parsed.searchParams.get("token");
-    if (!bearerToken) return;
-    const refreshToken = parsed.searchParams.get("refresh_token") || "";
-    void applySessionTokenAndRefresh(bearerToken, refreshToken);
-  } catch (err) {
-    if (debugLogger) debugLogger.error("Failed to handle OAuth deep link:", err);
+  if (!desktopAuthManager) {
+    await acceptProtocolUrl(deepLinkUrl);
+    return;
+  }
+  await desktopAuthManager.handleCallback(deepLinkUrl);
+  if (windowManager) {
+    await windowManager.createControlPanelWindow();
+    if (isLiveWindow(windowManager.controlPanelWindow)) {
+      windowManager.controlPanelWindow.show();
+      windowManager.controlPanelWindow.focus();
+      dockManager.setControlPanelVisible(true);
+    }
   }
 }
 
@@ -779,117 +803,20 @@ function handleUpgradeDeepLink() {
   }
 }
 
-function parseJsonBody(req) {
-  return new Promise((resolve, reject) => {
-    let raw = "";
-    req.on("data", (chunk) => {
-      raw += chunk;
-      if (raw.length > 32 * 1024) {
-        reject(new Error("Request body too large"));
-        req.destroy();
-      }
-    });
-    req.on("end", () => {
-      if (!raw) return resolve({});
-      try {
-        resolve(JSON.parse(raw));
-      } catch {
-        reject(new Error("Invalid JSON payload"));
-      }
-    });
-    req.on("error", reject);
-  });
-}
-
-function writeCorsHeaders(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-}
-
-function startAuthBridgeServer() {
-  if (APP_CHANNEL !== "development" || authBridgeServer) {
-    return;
-  }
-
-  authBridgeServer = http.createServer(async (req, res) => {
-    writeCorsHeaders(res);
-    if (req.method === "OPTIONS") {
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-
-    const requestUrl = new URL(req.url || "/", `http://${AUTH_BRIDGE_HOST}:${AUTH_BRIDGE_PORT}`);
-    if (requestUrl.pathname !== AUTH_BRIDGE_PATH) {
-      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("Not found");
-      return;
-    }
-
-    let token =
-      requestUrl.searchParams.get("bearer_token") ||
-      requestUrl.searchParams.get("access_token") ||
-      requestUrl.searchParams.get("token");
-    let refreshToken = requestUrl.searchParams.get("refresh_token") || "";
-    if (!token && req.method === "POST") {
-      try {
-        const body = await parseJsonBody(req);
-        token = body?.bearer_token || body?.access_token || body?.token || null;
-        refreshToken = body?.refresh_token || refreshToken;
-      } catch (error) {
-        res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end(error.message || "Invalid request");
-        return;
-      }
-    }
-
-    if (!token) {
-      res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("Missing token");
-      return;
-    }
-
-    void applySessionTokenAndRefresh(token, refreshToken);
-
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(
-      "<html><body><h3>VoiceLab sign-in complete.</h3><p>You can close this tab.</p></body></html>"
-    );
-  });
-
-  authBridgeServer.on("error", (error) => {
-    if (debugLogger) {
-      debugLogger.error("OAuth auth bridge server failed:", error);
-    }
-  });
-
-  authBridgeServer.listen(AUTH_BRIDGE_PORT, AUTH_BRIDGE_HOST, () => {
-    if (debugLogger) {
-      debugLogger.debug("OAuth auth bridge server started", {
-        url: `http://${AUTH_BRIDGE_HOST}:${AUTH_BRIDGE_PORT}${AUTH_BRIDGE_PATH}`,
-      });
-    }
-  });
-}
-
 // Main application startup
 async function startApp() {
   reapStaleSidecars();
 
   // Phase 1: Core managers + IPC handlers before windows
-  initializeCoreManagers();
+  await initializeCoreManagers();
   await environmentManager.init();
   registerSidecars();
-  startAuthBridgeServer();
 
   cliBridge = new CliBridge(ipcHandlers);
   cliBridge.start().catch((err) => {
     debugLogger.error("CLI bridge failed to start", { error: err.message });
     cliBridge = null;
   });
-
-  await migrateCookieToBearerToken();
 
   // Electron's file:// renderer sends Origin: null, which Better Auth's
   // trustedOrigins check rejects. Spoof Origin to the request's own URL so
@@ -956,12 +883,12 @@ async function startApp() {
     await windowManager.createControlPanelWindow();
   }
 
-  const initialProtocolUrl = process.argv.find((arg) => arg.startsWith(`${OAUTH_PROTOCOL}://`));
-  if (initialProtocolUrl && isNoteDeepLink(initialProtocolUrl)) {
-    await handleNoteDeepLink(initialProtocolUrl);
-  } else {
-    await flushPendingNoteDeepLink();
+  for (const initialProtocolUrl of initialProtocolUrls) {
+    await safelyAcceptProtocolUrl(initialProtocolUrl);
   }
+  protocolRouterReady = true;
+  await flushPendingProtocolUrls();
+  await flushPendingNoteDeepLink();
 
   // Create agent window (hidden) and set up agent hotkey
   await windowManager.createAgentWindow();
@@ -1626,45 +1553,40 @@ ipcMain.on("limit-reached", (_event, data) => {
 
 // App event handlers
 if (gotSingleInstanceLock) {
-  app.on("second-instance", async (_event, commandLine) => {
-    await app.whenReady();
-    if (!windowManager) {
-      return;
-    }
-
-    if (isLiveWindow(windowManager.controlPanelWindow)) {
-      if (windowManager.controlPanelWindow.isMinimized()) {
-        windowManager.controlPanelWindow.restore();
+  app.on("second-instance", (_event, commandLine) => {
+    void (async () => {
+      await app.whenReady();
+      if (!windowManager) {
+        return;
       }
-      windowManager.controlPanelWindow.show();
-      windowManager.controlPanelWindow.focus();
-      dockManager.setControlPanelVisible(true);
-      if (windowManager.controlPanelWindow.webContents.isCrashed()) {
-        windowManager.loadControlPanel();
-      }
-    } else {
-      windowManager.createControlPanelWindow();
-    }
 
-    if (isLiveWindow(windowManager.mainWindow)) {
-      windowManager.enforceMainWindowOnTop();
-    } else {
-      windowManager.createMainWindow();
-    }
-
-    // Check for OAuth protocol URL in command line arguments (Windows/Linux)
-    const url = commandLine.find((arg) => arg.startsWith(`${OAUTH_PROTOCOL}://`));
-    if (url) {
-      if (url.includes("upgrade-success")) {
-        handleUpgradeDeepLink();
-      } else if (isNoteDeepLink(url)) {
-        await handleNoteDeepLink(url);
-      } else if (isInvitationDeepLink(url)) {
-        handleInvitationDeepLink(url);
+      if (isLiveWindow(windowManager.controlPanelWindow)) {
+        if (windowManager.controlPanelWindow.isMinimized()) {
+          windowManager.controlPanelWindow.restore();
+        }
+        windowManager.controlPanelWindow.show();
+        windowManager.controlPanelWindow.focus();
+        dockManager.setControlPanelVisible(true);
+        if (windowManager.controlPanelWindow.webContents.isCrashed()) {
+          windowManager.loadControlPanel();
+        }
       } else {
-        void handleOAuthDeepLink(url);
+        windowManager.createControlPanelWindow();
       }
-    }
+
+      if (isLiveWindow(windowManager.mainWindow)) {
+        windowManager.enforceMainWindowOnTop();
+      } else {
+        windowManager.createMainWindow();
+      }
+
+      const url = commandLine.find((arg) => arg.startsWith(`${OAUTH_PROTOCOL}://`));
+      if (url) {
+        await safelyAcceptProtocolUrl(url);
+      }
+    })().catch((error) => {
+      notifyProtocolFailure(error);
+    });
   });
 
   app
@@ -1780,10 +1702,6 @@ function performSyncTeardown() {
     wakeRewarmTimer = null;
   }
   clearPendingNoteDeepLink();
-  if (authBridgeServer) {
-    authBridgeServer.close();
-    authBridgeServer = null;
-  }
   if (cliBridge) {
     cliBridge.stop().catch(() => {});
     cliBridge = null;

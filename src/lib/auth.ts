@@ -1,5 +1,3 @@
-import { openExternalLink } from "../utils/externalLinks";
-
 /** VoiceLab marketing / BFF origin (cookies + social OAuth). */
 export const AUTH_URL = import.meta.env.VITE_AUTH_URL || "https://voicelab.uz";
 
@@ -26,8 +24,6 @@ const LAST_SIGN_IN_STORAGE_KEY = "voicelab:lastSignInTime";
 const GRACE_PERIOD_MS = 60_000;
 const GRACE_RETRY_COUNT = 6;
 const INITIAL_GRACE_RETRY_DELAY_MS = 500;
-const DESKTOP_OAUTH_CALLBACK_PATH = "/auth/desktop-callback";
-
 let lastSignInTime: number | null = null;
 let cachedUser: VoiceLabUser | null = null;
 
@@ -136,10 +132,24 @@ function normalizeUser(payload: unknown): VoiceLabUser | null {
   };
 }
 
-async function persistSession(access: string, refresh?: string) {
+async function persistSession(
+  access: string,
+  refresh?: string,
+  user?: VoiceLabUser | null,
+  metadata: Record<string, unknown> = {}
+) {
   if (!access) return;
-  const payload = JSON.stringify({ access, refresh: refresh || "" });
-  await window.electronAPI?.authSetToken?.(payload);
+  if (!window.electronAPI?.authAdoptSession) {
+    throw new Error("Secure desktop session storage is unavailable");
+  }
+  await window.electronAPI.authAdoptSession({
+    access_token: access,
+    refresh_token: refresh || "",
+    expires_in: Number(metadata.expires_in) || undefined,
+    refresh_expires_in: Number(metadata.refresh_expires_in) || undefined,
+    session_id: typeof metadata.session_id === "string" ? metadata.session_id : undefined,
+    user: user || undefined,
+  });
 }
 
 async function apiFetch(path: string, init: RequestInit = {}, accessToken?: string) {
@@ -148,8 +158,7 @@ async function apiFetch(path: string, init: RequestInit = {}, accessToken?: stri
     headers.set("Content-Type", "application/json");
   }
   headers.set("x-voicelab-source", "desktop");
-  const token = accessToken ?? (await window.electronAPI?.authGetToken?.()) ?? "";
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
   const response = await fetch(`${API_URL.replace(/\/+$/, "")}${path}`, {
     ...init,
@@ -160,57 +169,17 @@ async function apiFetch(path: string, init: RequestInit = {}, accessToken?: stri
 }
 
 export async function refreshAccessToken(): Promise<boolean> {
-  const raw = await window.electronAPI?.authGetToken?.();
-  if (!raw) return false;
-
-  let refresh = "";
-  try {
-    const parsed = JSON.parse(raw);
-    refresh = parsed?.refresh || parsed?.refresh_token || "";
-  } catch {
-    return false;
-  }
-  if (!refresh) return false;
-
-  const { response, data } = await apiFetch(
-    "/api/auth/token/refresh/",
-    {
-      method: "POST",
-      body: JSON.stringify({ refresh, refresh_token: refresh }),
-    },
-    ""
-  );
-
-  if (!response.ok) return false;
-  const tokens = extractTokens(data);
-  if (!tokens.access) return false;
-  await persistSession(tokens.access, tokens.refresh || refresh);
-  return true;
+  const status = await window.electronAPI?.authRefreshSession?.();
+  return status?.status === "authenticated";
 }
 
 export async function fetchSession(): Promise<VoiceLabUser | null> {
-  const token = await window.electronAPI?.authGetToken?.();
-  if (!token) {
+  const status = await window.electronAPI?.authGetStatus?.();
+  if (status?.status !== "authenticated") {
     cachedUser = null;
     return null;
   }
-
-  let { response, data } = await apiFetch("/api/auth/me/");
-  if (response.status === 401) {
-    const refreshed = await refreshAccessToken();
-    if (!refreshed) {
-      cachedUser = null;
-      return null;
-    }
-    ({ response, data } = await apiFetch("/api/auth/me/"));
-  }
-
-  if (!response.ok) {
-    cachedUser = null;
-    return null;
-  }
-
-  cachedUser = normalizeUser(data);
+  cachedUser = normalizeUser(status.user);
   return cachedUser;
 }
 
@@ -246,9 +215,10 @@ export async function signInWithPassword(
     return { error: new Error("Login succeeded but no access token was returned") };
   }
 
-  await persistSession(tokens.access, tokens.refresh);
+  const responseUser = normalizeUser(data);
+  await persistSession(tokens.access, tokens.refresh, responseUser, data);
   updateLastSignInTime();
-  const user = (await fetchSession()) || normalizeUser(data);
+  const user = (await fetchSession()) || responseUser;
   return { user };
 }
 
@@ -285,7 +255,8 @@ export async function signUpWithPassword(input: {
   const requiresVerification = Boolean(data.requiresVerification || data.requires_verification);
 
   if (tokens.access) {
-    await persistSession(tokens.access, tokens.refresh);
+    const responseUser = normalizeUser(data);
+    await persistSession(tokens.access, tokens.refresh, responseUser, data);
     updateLastSignInTime();
     const user = await fetchSession();
     return { user, requiresVerification };
@@ -299,11 +270,11 @@ export const authClient = { configured: true as const };
 
 export async function deleteAccount(): Promise<{ error?: Error }> {
   try {
-    const { response, data } = await apiFetch("/api/auth/delete-account/", { method: "DELETE" });
-    if (!response.ok) {
-      throw new Error(String(data.error || "Failed to delete account"));
+    if (!window.electronAPI?.authDeleteAccount) {
+      throw new Error("Secure account deletion is unavailable");
     }
-    await signOut();
+    await window.electronAPI.authDeleteAccount();
+    markSignedOutState();
     return {};
   } catch (error) {
     return { error: error instanceof Error ? error : new Error("Failed to delete account") };
@@ -312,17 +283,9 @@ export async function deleteAccount(): Promise<{ error?: Error }> {
 
 export async function signOut(): Promise<void> {
   try {
-    await apiFetch("/api/auth/logout/", { method: "POST" }).catch(() => null);
-    await fetch(`${AUTH_URL.replace(/\/+$/, "")}/api/auth/logout`, { method: "POST" }).catch(
-      () => null
-    );
+    await window.electronAPI?.authLogout?.();
   } catch {
-    // ignore
-  }
-  try {
-    await window.electronAPI?.authClearSession?.();
-  } catch {
-    // ignore
+    // Main process clears secure state even when backend revocation fails.
   }
   markSignedOutState();
 }
@@ -373,11 +336,10 @@ export async function signInWithSocial(provider: SocialProvider): Promise<{ erro
       };
     }
 
-    const protocol = (await window.electronAPI?.getOAuthProtocol?.()) || "voicelab";
-    const next = `${DESKTOP_OAUTH_CALLBACK_PATH}?protocol=${encodeURIComponent(protocol)}`;
-    const url = new URL(`${AUTH_URL.replace(/\/+$/, "")}/api/auth/social/google`);
-    url.searchParams.set("next", next);
-    openExternalLink(url.toString());
+    const status = await window.electronAPI?.authStartBrowser?.("google");
+    if (!status || status.status === "error") {
+      throw new Error(status?.errorCode || "Social sign-in failed");
+    }
     return {};
   } catch (error) {
     return { error: error instanceof Error ? error : new Error("Social sign-in failed") };

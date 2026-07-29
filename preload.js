@@ -79,8 +79,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Dictionary functions
   getDictionary: () => ipcRenderer.invoke("db-get-dictionary"),
   setDictionary: (words) => ipcRenderer.invoke("db-set-dictionary", words),
+  getDictionaryState: () => ipcRenderer.invoke("desktop-dictionary-state"),
+  createDictionaryEntry: (input) => ipcRenderer.invoke("desktop-dictionary-create", input),
+  updateDictionaryEntry: (id, input) =>
+    ipcRenderer.invoke("desktop-dictionary-update", id, input),
+  deleteDictionaryEntry: (id) => ipcRenderer.invoke("desktop-dictionary-delete", id),
+  decideLegacyDictionary: (decision) =>
+    ipcRenderer.invoke("desktop-dictionary-legacy-decision", decision),
+  desktopSyncBootstrap: () => ipcRenderer.invoke("desktop-sync-bootstrap"),
+  desktopSyncSetPreferences: (preferences) =>
+    ipcRenderer.invoke("desktop-sync-set-preferences", preferences),
+  desktopSyncRun: (options) => ipcRenderer.invoke("desktop-sync-run", options),
+  desktopSyncPause: () => ipcRenderer.invoke("desktop-sync-pause"),
   onDictionaryUpdated: (callback) => {
-    const listener = (_event, words) => callback?.(words);
+    const listener = (_event, state) => callback?.(state);
     ipcRenderer.on("dictionary-updated", listener);
     return () => ipcRenderer.removeListener("dictionary-updated", listener);
   },
@@ -536,9 +548,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
   pauseMediaPlayback: () => ipcRenderer.invoke("pause-media-playback"),
   resumeMediaPlayback: () => ipcRenderer.invoke("resume-media-playback"),
   openWhisperModelsFolder: () => ipcRenderer.invoke("open-whisper-models-folder"),
-  authClearSession: () => ipcRenderer.invoke("auth-clear-session"),
-  authGetToken: () => ipcRenderer.invoke("auth-get-token"),
-  authSetToken: (token) => ipcRenderer.invoke("auth-set-token", token),
+  authStartBrowser: (provider) => ipcRenderer.invoke("auth-start-browser", provider),
+  authGetStatus: () => ipcRenderer.invoke("auth-get-status"),
+  authAdoptSession: (session) => ipcRenderer.invoke("auth-adopt-session", session),
+  authRefreshSession: () => ipcRenderer.invoke("auth-refresh-session"),
+  authLogout: () => ipcRenderer.invoke("auth-logout"),
+  authDeleteAccount: () => ipcRenderer.invoke("auth-delete-account"),
+  onAuthStateChanged: (callback) => {
+    const handler = (_event, status) => callback(status);
+    ipcRenderer.on("auth-state-changed", handler);
+    return () => ipcRenderer.removeListener("auth-state-changed", handler);
+  },
 
   // OpenWhispr Cloud API
   cloudHealthCheck: () => ipcRenderer.invoke("cloud-health-check"),
@@ -547,17 +567,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
   cloudStreamingUsage: (text, audioDurationSeconds, opts) =>
     ipcRenderer.invoke("cloud-streaming-usage", text, audioDurationSeconds, opts),
   cloudUsage: () => ipcRenderer.invoke("cloud-usage"),
+  openVoiceLabBilling: (source = "dictate") =>
+    ipcRenderer.invoke("open-voicelab-billing", source),
   cloudCheckout: (opts) => ipcRenderer.invoke("cloud-checkout", opts),
   cloudBillingPortal: () => ipcRenderer.invoke("cloud-billing-portal"),
   cloudSwitchPlan: (opts) => ipcRenderer.invoke("cloud-switch-plan", opts),
   cloudPreviewSwitch: (opts) => ipcRenderer.invoke("cloud-preview-switch", opts),
-  cloudApiRequest: (opts) => ipcRenderer.invoke("cloud-api-request", opts),
+  cloudApiRequest: (opts) =>
+    ipcRenderer.invoke("cloud-api-request", {
+      method: opts?.method,
+      path: opts?.path,
+      body: opts?.body,
+    }),
   getSttConfig: () => ipcRenderer.invoke("get-stt-config"),
   getNoteRecordingConfig: () => ipcRenderer.invoke("get-note-recording-config"),
 
   // Cloud audio file transcription
-  transcribeAudioFileCloud: (filePath) =>
-    ipcRenderer.invoke("transcribe-audio-file-cloud", filePath),
+  transcribeAudioFileCloud: (filePath, options = {}) =>
+    ipcRenderer.invoke("transcribe-audio-file-cloud", filePath, options),
   transcribeAudioFileByok: (options) => ipcRenderer.invoke("transcribe-audio-file-byok", options),
   onUploadTranscriptionProgress: registerListener(
     "upload-transcription-progress",

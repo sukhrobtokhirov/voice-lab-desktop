@@ -1,110 +1,216 @@
 const { app } = require("electron");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const debugLogger = require("./debugLogger");
+
+const authLogger = require("./authLogger");
 const secretCrypto = require("./secretCrypto");
 
-const tokenFile = () => path.join(app.getPath("userData"), "auth-token.bin");
+const STORE_VERSION = 2;
+const storeFile = () => path.join(app.getPath("userData"), "auth-token.bin");
 
-let cachedRaw = null;
+let cachedStore = null;
 
-function readRaw() {
-  if (cachedRaw !== null) return cachedRaw || "";
-  try {
-    const file = tokenFile();
-    if (!fs.existsSync(file)) return (cachedRaw = "");
-    const buf = fs.readFileSync(file);
-    if (!secretCrypto.isAvailable()) {
-      cachedRaw = buf.toString("utf8");
-      return cachedRaw || "";
-    }
-    const { value, needsReencrypt } = secretCrypto.decrypt(buf);
-    cachedRaw = value;
-    if (needsReencrypt) writeRaw(value);
-    return cachedRaw || "";
-  } catch (err) {
-    debugLogger.error("tokenStore.get failed", { error: err?.message });
-    cachedRaw = "";
-    return "";
-  }
+function emptyStore() {
+  return {
+    version: STORE_VERSION,
+    installationId: crypto.randomUUID(),
+    session: null,
+    pending: null,
+  };
 }
 
-function writeRaw(value) {
-  try {
-    const file = tokenFile();
-    const data = secretCrypto.isAvailable()
-      ? secretCrypto.encrypt(value)
-      : Buffer.from(value, "utf8");
-    fs.writeFileSync(file, data, { mode: 0o600 });
-    cachedRaw = value;
-  } catch (err) {
-    debugLogger.error("tokenStore.set failed", { error: err?.message });
-  }
+function normalizeSession(session) {
+  if (!session || typeof session !== "object") return null;
+  const accessToken = session.accessToken || session.access || session.access_token || "";
+  const refreshToken = session.refreshToken || session.refresh || session.refresh_token || "";
+  if (!accessToken) return null;
+  return {
+    accessToken,
+    accessExpiresAt: Number(session.accessExpiresAt) || Date.now() + 5 * 60 * 1000,
+    refreshToken,
+    refreshExpiresAt: Number(session.refreshExpiresAt) || 0,
+    sessionId: session.sessionId || session.session_id || "",
+    user: session.user && typeof session.user === "object" ? session.user : null,
+    kind: session.kind || "legacy",
+  };
 }
 
-function parseStored(raw) {
-  if (!raw) return { access: null, refresh: null };
+function parseStore(raw) {
+  const parsed = JSON.parse(raw);
+  if (parsed?.version === STORE_VERSION && parsed.installationId) {
+    return {
+      version: STORE_VERSION,
+      installationId: String(parsed.installationId),
+      session: normalizeSession(parsed.session),
+      pending: parsed.pending && typeof parsed.pending === "object" ? parsed.pending : null,
+    };
+  }
+
+  const legacySession = normalizeSession(parsed);
+  return { ...emptyStore(), session: legacySession };
+}
+
+function readStore() {
+  if (cachedStore) return cachedStore;
+  const file = storeFile();
+  if (!fs.existsSync(file)) return (cachedStore = emptyStore());
+  if (!secretCrypto.isAvailable()) {
+    authLogger.error("secure_storage_unavailable", { errorCode: "AUTH_SECURE_STORAGE_UNAVAILABLE" });
+    return (cachedStore = emptyStore());
+  }
+
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") {
-      const access = parsed.access || parsed.access_token || null;
-      const refresh = parsed.refresh || parsed.refresh_token || null;
-      if (access) return { access, refresh };
+    const encrypted = fs.readFileSync(file);
+    let raw;
+    let needsReencrypt = false;
+    try {
+      const decrypted = secretCrypto.decrypt(encrypted);
+      raw = decrypted.value;
+      needsReencrypt = decrypted.needsReencrypt;
+    } catch {
+      // One-time migration for legacy plaintext stores. The next write is always encrypted.
+      raw = encrypted.toString("utf8");
+      needsReencrypt = true;
     }
+    cachedStore = parseStore(raw);
+    if (needsReencrypt) writeStore(cachedStore);
+    return cachedStore;
   } catch {
-    // legacy plain bearer string
+    authLogger.error("secure_store_read_failed", { errorCode: "AUTH_SECURE_STORE_READ_FAILED" });
+    return (cachedStore = emptyStore());
   }
-  return { access: raw, refresh: null };
 }
 
-/** Access token for Authorization headers (legacy callers). */
+function writeStore(value) {
+  if (!secretCrypto.isAvailable()) {
+    const error = new Error("Secure credential storage is unavailable");
+    error.code = "AUTH_SECURE_STORAGE_UNAVAILABLE";
+    throw error;
+  }
+
+  const file = storeFile();
+  const directory = path.dirname(file);
+  const temporary = `${file}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+  fs.mkdirSync(directory, { recursive: true });
+  const encrypted = secretCrypto.encrypt(JSON.stringify(value));
+  try {
+    fs.writeFileSync(temporary, encrypted, { mode: 0o600, flag: "wx" });
+    fs.renameSync(temporary, file);
+    try {
+      fs.chmodSync(file, 0o600);
+    } catch {}
+    cachedStore = value;
+  } finally {
+    try {
+      fs.rmSync(temporary, { force: true });
+    } catch {}
+  }
+}
+
+function update(mutator, { allowMemoryOnly = false } = {}) {
+  const current = readStore();
+  const next = mutator({ ...current });
+  if (!secretCrypto.isAvailable() && allowMemoryOnly) {
+    cachedStore = next;
+    return next;
+  }
+  writeStore(next);
+  return next;
+}
+
+function getInstallationId() {
+  const store = readStore();
+  if (!store.installationId) {
+    store.installationId = crypto.randomUUID();
+    if (secretCrypto.isAvailable()) writeStore(store);
+  }
+  return store.installationId;
+}
+
+function getSession() {
+  return readStore().session;
+}
+
+function saveSession(session) {
+  const normalized = normalizeSession(session);
+  if (!normalized) throw new Error("Invalid authentication session");
+  update((store) => ({ ...store, session: normalized }));
+}
+
+function clearSession() {
+  update((store) => ({ ...store, session: null }), { allowMemoryOnly: true });
+}
+
+function getPending() {
+  return readStore().pending;
+}
+
+function savePending(pending) {
+  if (!pending || typeof pending !== "object") throw new Error("Invalid pending authorization");
+  update((store) => ({ ...store, pending }));
+}
+
+function clearPending() {
+  update((store) => ({ ...store, pending: null }), { allowMemoryOnly: true });
+}
+
+function completeAuthorization(session) {
+  const normalized = normalizeSession(session);
+  if (!normalized) throw new Error("Invalid authentication session");
+  update((store) => ({ ...store, session: normalized, pending: null }));
+}
+
 function get() {
-  return parseStored(readRaw()).access;
+  return getSession()?.accessToken || null;
 }
 
 function getRefresh() {
-  return parseStored(readRaw()).refresh;
+  return getSession()?.refreshToken || null;
 }
 
-/** Accept plain access token or JSON `{ access, refresh }`. */
 function set(token) {
-  if (!token) {
-    clear();
-    return;
-  }
+  if (!token) return clearSession();
   try {
     const parsed = JSON.parse(token);
-    if (parsed && typeof parsed === "object" && (parsed.access || parsed.access_token)) {
-      writeRaw(
-        JSON.stringify({
-          access: parsed.access || parsed.access_token,
-          refresh: parsed.refresh || parsed.refresh_token || "",
-        })
-      );
-      return;
-    }
+    return saveSession(parsed);
   } catch {
-    // plain token
+    const existing = getSession();
+    return saveSession({
+      ...(existing || {}),
+      accessToken: token,
+      accessExpiresAt: Date.now() + 5 * 60 * 1000,
+    });
   }
-  const existing = parseStored(readRaw());
-  writeRaw(JSON.stringify({ access: token, refresh: existing.refresh || "" }));
 }
 
-function setSession(access, refresh) {
-  if (!access) {
-    clear();
-    return;
-  }
-  writeRaw(JSON.stringify({ access, refresh: refresh || "" }));
+function setSession(accessToken, refreshToken) {
+  const existing = getSession();
+  saveSession({
+    ...(existing || {}),
+    accessToken,
+    accessExpiresAt: existing?.accessExpiresAt || Date.now() + 5 * 60 * 1000,
+    refreshToken: refreshToken || existing?.refreshToken || "",
+    kind: existing?.kind || "legacy",
+  });
 }
 
 function clear() {
-  cachedRaw = "";
-  try {
-    fs.rmSync(tokenFile(), { force: true });
-  } catch (err) {
-    debugLogger.error("tokenStore.clear failed", { error: err?.message });
-  }
+  update((store) => ({ ...store, session: null, pending: null }), { allowMemoryOnly: true });
 }
 
-module.exports = { get, getRefresh, set, setSession, clear };
+module.exports = {
+  clear,
+  clearPending,
+  clearSession,
+  completeAuthorization,
+  get,
+  getInstallationId,
+  getPending,
+  getRefresh,
+  getSession,
+  savePending,
+  saveSession,
+  set,
+  setSession,
+};

@@ -7,7 +7,6 @@ const https = require("https");
 const crypto = require("crypto");
 const debugLogger = require("./debugLogger");
 const { BYOK_API_KEYS } = require("../config/secretKeys");
-const tokenStore = require("./tokenStore");
 const { classifyAndLog } = require("./networkErrors");
 const GnomeShortcutManager = require("./gnomeShortcut");
 const HyprlandShortcutManager = require("./hyprlandShortcut");
@@ -288,6 +287,11 @@ function postMultipartNode(url, body, boundary, headers = {}) {
 }
 
 function interpretTranscribeResponse(data) {
+  if (data && typeof data === "object" && data.statusCode == null) {
+    const result = data.result || {};
+    const text = result.transcript || result.text || data.transcript || data.text;
+    if (text != null) return { ...data, text };
+  }
   // Aisha: 401/403 bad key, 402 balance, 503 unavailable (see llms-api.txt)
   if (data.statusCode === 401 || data.statusCode === 403) {
     throw Object.assign(
@@ -396,6 +400,7 @@ async function chunkedCloudTranscribe({
   segmentDuration = CLOUD_CHUNK_SEGMENT_SECONDS,
   inputExt = "webm",
   postFn = postMultipart,
+  requestChunk = null,
 }) {
   const { splitAudioFile } = require("./ffmpegUtils");
   const post = typeof postFn === "function" ? postFn : postMultipart;
@@ -440,11 +445,13 @@ async function chunkedCloudTranscribe({
 
       for (let attempt = 1; ; attempt++) {
         try {
-          const data = await post(url, body, boundary, authHeader);
+          const data = requestChunk
+            ? await requestChunk(chunkBuffer, index, totalChunks)
+            : await post(url, body, boundary, authHeader);
           results[index] = interpretTranscribeResponse(data);
           break;
         } catch (err) {
-          if (attempt >= CLOUD_CHUNK_MAX_ATTEMPTS || !isTransientChunkError(err)) throw err;
+          if (requestChunk || attempt >= CLOUD_CHUNK_MAX_ATTEMPTS || !isTransientChunkError(err)) throw err;
           debugLogger.warn(`Chunk ${index} attempt ${attempt} failed, retrying`, {
             error: err.message,
           });
@@ -540,6 +547,27 @@ class IPCHandlers {
     this.linuxPortalAudioManager = managers.linuxPortalAudioManager;
     this.windowsLoopbackAudioManager = managers.windowsLoopbackAudioManager;
     this.meetingAecManager = managers.meetingAecManager;
+    this.desktopAuthManager = managers.desktopAuthManager;
+    this.voiceLabApiClient = managers.voiceLabApiClient;
+    this._authGeneration = 0;
+    this.desktopAuthManager?.on?.("status", (status) => {
+      this._authGeneration += 1;
+      const generation = this._authGeneration;
+      const store = this.databaseManager.getDesktopSyncStore();
+      store.pause();
+      this.voiceLabApiClient?.resetSessionState?.();
+      if (status?.status !== "authenticated") {
+        return;
+      }
+      this._bootstrapDesktopSync(generation)
+        .then((state) => this._resumePendingDesktopDictations(generation, state.accountId))
+        .catch((error) => {
+          debugLogger.warn("Desktop sync activation failed", {
+            error: error?.message,
+            code: error?.code,
+          });
+        });
+    });
     this.oauthProtocolRegistered = managers.oauthProtocolRegistered === true;
     this.oauthProtocol = managers.oauthProtocol || "openwhispr";
     this.sessionId = crypto.randomUUID();
@@ -777,7 +805,7 @@ class IPCHandlers {
 
   _getDictionarySafe() {
     try {
-      return this.databaseManager.getDictionary();
+      return this.databaseManager.getDesktopSyncStore().getState().vocabulary;
     } catch {
       return [];
     }
@@ -911,7 +939,9 @@ class IPCHandlers {
 
       if (corrections.length > 0) {
         const updatedDict = [...currentDict, ...corrections];
-        const saveResult = this.databaseManager.setDictionary(updatedDict, "learned");
+        const saveResult = this.databaseManager
+          .getDesktopSyncStore()
+          .replaceVocabulary(updatedDict, "learned");
 
         if (saveResult?.success === false) {
           debugLogger.debug("[AutoLearn] Failed to save dictionary", { error: saveResult.error });
@@ -920,7 +950,10 @@ class IPCHandlers {
 
         // Broadcast the post-save normalized list, not the raw input (which
         // still has case-variant dupes), so renderers don't flash ghost rows.
-        this.broadcastToWindows("dictionary-updated", this.databaseManager.getDictionary());
+        this.broadcastToWindows(
+          "dictionary-updated",
+          this.databaseManager.getDesktopSyncStore().getState()
+        );
 
         // Show the overlay so the toast is visible (it may have been hidden after dictation)
         this.windowManager.showDictationPanel();
@@ -969,6 +1002,113 @@ class IPCHandlers {
     const tenant = (options.tenant || "").trim() || "base";
     const token = await getCortiToken({ environment, tenant, clientId, clientSecret });
     return { token, environment, tenant };
+  }
+
+  _desktopSyncContextMatches(expectedGeneration, expectedAccountId) {
+    return (
+      expectedGeneration === this._authGeneration &&
+      this.databaseManager.getDesktopSyncStore().activeAccount()?.account_id === expectedAccountId
+    );
+  }
+
+  async _bootstrapDesktopSync(expectedGeneration = this._authGeneration) {
+    if (!this.voiceLabApiClient) throw new Error("VoiceLab sync client unavailable");
+    const sessionAccountId = this.desktopAuthManager?.getSessionMetadata?.().accountId;
+    if (!sessionAccountId) throw new Error("VoiceLab account unavailable");
+    const bootstrap = await this.voiceLabApiClient.getSyncBootstrap();
+    if (
+      expectedGeneration !== this._authGeneration ||
+      this.desktopAuthManager?.getSessionMetadata?.().accountId !== sessionAccountId
+    ) {
+      const error = new Error("VoiceLab account changed during sync activation");
+      error.code = "AUTH_ACCOUNT_CHANGED";
+      throw error;
+    }
+    return this.databaseManager
+      .getDesktopSyncStore()
+      .bindAccount(bootstrap);
+  }
+
+  async _resumePendingDesktopDictations(expectedGeneration, expectedAccountId) {
+    if (!this._desktopSyncContextMatches(expectedGeneration, expectedAccountId)) return;
+    const completed = await this.voiceLabApiClient.resumePendingDictations();
+    if (!this._desktopSyncContextMatches(expectedGeneration, expectedAccountId)) return;
+    for (const result of completed) {
+      this.broadcastToWindows("dictation-operation-resumed", result);
+    }
+  }
+
+  async _runDesktopSync({ pull = true, maxPushBatches = 5, bestEffort = false } = {}) {
+    const store = this.databaseManager.getDesktopSyncStore();
+    const generation = this._authGeneration;
+    try {
+      const state = await this._bootstrapDesktopSync(generation);
+      const expectedAccountId = state.accountId;
+      if (!this._desktopSyncContextMatches(generation, expectedAccountId)) {
+        const error = new Error("VoiceLab account changed during synchronization");
+        error.code = "AUTH_ACCOUNT_CHANGED";
+        throw error;
+      }
+      for (let index = 0; index < Math.min(10, Math.max(1, maxPushBatches)); index += 1) {
+        const batch = store.prepareMutationBatch();
+        if (!batch) break;
+        try {
+          const response = await this.voiceLabApiClient.pushSyncMutations(
+            batch.payload,
+            batch.idempotencyKey
+          );
+          if (!this._desktopSyncContextMatches(generation, expectedAccountId)) {
+            const error = new Error("VoiceLab account changed during synchronization");
+            error.code = "AUTH_ACCOUNT_CHANGED";
+            throw error;
+          }
+          store.applyMutationResponse(response, batch, expectedAccountId);
+        } catch (error) {
+          if (error?.status === 410 || error?.code === "SYNC_CURSOR_EXPIRED") {
+            await this._bootstrapDesktopSync(generation);
+            index -= 1;
+            continue;
+          }
+          store.markBatchFailure(batch, error);
+          throw error;
+        }
+      }
+      if (pull) {
+        for (let page = 0; page < 10; page += 1) {
+          let response;
+          try {
+            response = await this.voiceLabApiClient.getSyncChanges(
+              store.getCursor(expectedAccountId),
+              200
+            );
+          } catch (error) {
+            if (error?.status === 410 || error?.code === "SYNC_CURSOR_EXPIRED") {
+              await this._bootstrapDesktopSync(generation);
+              response = await this.voiceLabApiClient.getSyncChanges(
+                store.getCursor(expectedAccountId),
+                200
+              );
+            } else {
+              throw error;
+            }
+          }
+          if (!this._desktopSyncContextMatches(generation, expectedAccountId)) {
+            const error = new Error("VoiceLab account changed during synchronization");
+            error.code = "AUTH_ACCOUNT_CHANGED";
+            throw error;
+          }
+          store.applyChanges(response, expectedAccountId);
+          if (!response?.has_more) break;
+        }
+      }
+      const syncState = store.getState();
+      this.broadcastToWindows("dictionary-updated", syncState);
+      return { success: true, state: syncState };
+    } catch (error) {
+      if (error?.status === 401) store.pause();
+      if (bestEffort) return { success: false, code: error?.code || "SYNC_UNAVAILABLE" };
+      throw error;
+    }
   }
 
   setupHandlers() {
@@ -1053,6 +1193,9 @@ class IPCHandlers {
     ipcMain.handle("db-save-transcription", async (event, text, rawText, options) => {
       const result = this.databaseManager.saveTranscription(text, rawText, options);
       if (result?.success && result?.transcription) {
+        this.databaseManager
+          .getDesktopSyncStore()
+          .captureLocalTranscript(result.transcription, options || {});
         setImmediate(() => {
           this.broadcastToWindows("transcription-added", result.transcription);
         });
@@ -1065,6 +1208,7 @@ class IPCHandlers {
     });
 
     ipcMain.handle("db-clear-transcriptions", async (event) => {
+      this.databaseManager.getDesktopSyncStore().deleteAllLocalTranscripts();
       this.audioStorageManager.deleteAllAudio();
       const result = this.databaseManager.clearTranscriptions();
       if (result?.success) {
@@ -1198,14 +1342,64 @@ class IPCHandlers {
     });
 
     ipcMain.handle("db-get-dictionary", async () => {
-      return this.databaseManager.getDictionary();
+      return this.databaseManager.getDesktopSyncStore().getState().vocabulary;
     });
 
     ipcMain.handle("db-set-dictionary", async (event, words) => {
       if (!Array.isArray(words)) {
         throw new Error("words must be an array");
       }
-      return this.databaseManager.setDictionary(words);
+      const result = this.databaseManager.getDesktopSyncStore().replaceVocabulary(words);
+      this.broadcastToWindows(
+        "dictionary-updated",
+        this.databaseManager.getDesktopSyncStore().getState()
+      );
+      return result;
+    });
+
+    ipcMain.handle("desktop-dictionary-state", async () => {
+      return this.databaseManager.getDesktopSyncStore().getState();
+    });
+
+    ipcMain.handle("desktop-dictionary-create", async (_event, input) => {
+      const result = this.databaseManager.getDesktopSyncStore().createEntry(input);
+      const state = this.databaseManager.getDesktopSyncStore().getState();
+      this.broadcastToWindows("dictionary-updated", state);
+      return { ...result, state };
+    });
+
+    ipcMain.handle("desktop-dictionary-update", async (_event, id, input) => {
+      const entry = this.databaseManager.getDesktopSyncStore().updateEntry(id, input);
+      const state = this.databaseManager.getDesktopSyncStore().getState();
+      this.broadcastToWindows("dictionary-updated", state);
+      return { entry, state };
+    });
+
+    ipcMain.handle("desktop-dictionary-delete", async (_event, id) => {
+      const deleted = this.databaseManager.getDesktopSyncStore().deleteEntry(id);
+      const state = this.databaseManager.getDesktopSyncStore().getState();
+      this.broadcastToWindows("dictionary-updated", state);
+      return { deleted, state };
+    });
+
+    ipcMain.handle("desktop-dictionary-legacy-decision", async (_event, decision) => {
+      const state = this.databaseManager
+        .getDesktopSyncStore()
+        .decideLegacyAttachment(decision);
+      this.broadcastToWindows("dictionary-updated", state);
+      return state;
+    });
+
+    ipcMain.handle("desktop-sync-bootstrap", async () => this._bootstrapDesktopSync());
+    ipcMain.handle("desktop-sync-set-preferences", async (_event, preferences) => {
+      return this.databaseManager
+        .getDesktopSyncStore()
+        .setPortablePreferences(preferences);
+    });
+    ipcMain.handle("desktop-sync-run", async (_event, options) => this._runDesktopSync(options));
+    ipcMain.handle("desktop-sync-pause", async () => {
+      this.databaseManager.getDesktopSyncStore().pause();
+      return { success: true };
     });
 
     ipcMain.handle("db-get-pending-dictionary", async () => {
@@ -1310,14 +1504,19 @@ class IPCHandlers {
         const currentDict = this._getDictionarySafe();
         const removeSet = new Set(validWords.map((w) => w.toLowerCase()));
         const updatedDict = currentDict.filter((w) => !removeSet.has(w.toLowerCase()));
-        const saveResult = this.databaseManager.setDictionary(updatedDict);
+        const saveResult = this.databaseManager
+          .getDesktopSyncStore()
+          .replaceVocabulary(updatedDict);
         if (saveResult?.success === false) {
           debugLogger.debug("[AutoLearn] Undo failed to save dictionary", {
             error: saveResult.error,
           });
           return { success: false };
         }
-        this.broadcastToWindows("dictionary-updated", this.databaseManager.getDictionary());
+        this.broadcastToWindows(
+          "dictionary-updated",
+          this.databaseManager.getDesktopSyncStore().getState()
+        );
         debugLogger.debug("[AutoLearn] Undo: removed words", { words: validWords });
         return { success: true };
       } catch (err) {
@@ -4237,31 +4436,96 @@ class IPCHandlers {
       });
     });
 
-    ipcMain.handle("auth-clear-session", async (event) => {
-      try {
-        tokenStore.clear();
-        const win = BrowserWindow.fromWebContents(event.sender);
-        if (win) {
-          await win.webContents.session.clearStorageData({ storages: ["cookies"] });
-        }
-        return { success: true };
-      } catch (error) {
-        debugLogger.error("Failed to clear auth session:", error);
-        return { success: false, error: error.message };
+    const broadcastAuthState = (status) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send("auth-state-changed", status);
       }
+    };
+    this.desktopAuthManager?.on("status", broadcastAuthState);
+
+ipcMain.handle("open-voicelab-billing", async (_event, source = "dictate") => {
+  if (!this.voiceLabApiClient) return { success: false, error: "Billing unavailable" };
+  await shell.openExternal(this.voiceLabApiClient.getBillingUrl(source));
+  return { success: true };
+});
+
+
+    const clearAuthenticatedRuntime = async () => {
+      const services = [
+        this.assemblyAiStreaming,
+        this.deepgramStreaming,
+        this.cortiStreaming,
+        this._dictationStreaming,
+      ];
+      await Promise.allSettled(
+        services.filter(Boolean).map(async (service) => {
+          service.clearCachedToken?.();
+          await service.disconnect?.(false);
+        })
+      );
+      this._dictationStreaming = null;
+      this._dictationConnectPromise = null;
+    };
+
+    ipcMain.handle("auth-start-browser", async (_event, provider) => {
+      if (!this.desktopAuthManager) {
+        return { status: "error", user: null, errorCode: "AUTH_MANAGER_UNAVAILABLE" };
+      }
+      if (provider !== undefined && provider !== "google") {
+        return { status: "error", user: null, errorCode: "AUTH_PROVIDER_UNAVAILABLE" };
+      }
+      return this.desktopAuthManager.startAuthorization();
     });
 
-    ipcMain.handle("auth-get-token", () => tokenStore.get());
-    ipcMain.handle("auth-set-token", (_event, token) => {
-      if (typeof token === "string" && token) {
-        tokenStore.set(token);
-      } else {
-        // Surface silent rotation-to-empty so we can spot regressions where the
-        // renderer thinks it's persisting a token but the value never lands.
-        debugLogger.debug("auth-set-token ignored: empty or non-string token", {
-          type: typeof token,
-        });
+    ipcMain.handle("auth-get-status", () =>
+      this.desktopAuthManager?.getPublicStatus() || {
+        status: "error",
+        user: null,
+        errorCode: "AUTH_MANAGER_UNAVAILABLE",
       }
+    );
+
+    ipcMain.handle("auth-adopt-session", async (_event, sessionPayload) => {
+      if (!this.desktopAuthManager) throw new Error("Authentication manager unavailable");
+      this.databaseManager.getDesktopSyncStore().pause();
+      return this.desktopAuthManager.adoptSession(sessionPayload);
+    });
+
+    ipcMain.handle("auth-refresh-session", async () => {
+      if (!this.desktopAuthManager) {
+        return { status: "signed-out", user: null, errorCode: "AUTH_MANAGER_UNAVAILABLE" };
+      }
+      return this.desktopAuthManager.refreshSession({ force: true });
+    });
+
+    ipcMain.handle("auth-logout", async (event) => {
+      this.databaseManager.getDesktopSyncStore().pause();
+      const result = this.desktopAuthManager
+        ? await this.desktopAuthManager.logout()
+        : { success: true, revoked: false };
+      await clearAuthenticatedRuntime();
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) await win.webContents.session.clearStorageData({ storages: ["cookies"] });
+      return result;
+    });
+
+    ipcMain.handle("auth-clear-session", async (event) => {
+      this.databaseManager.getDesktopSyncStore().pause();
+      const result = this.desktopAuthManager
+        ? await this.desktopAuthManager.logout()
+        : { success: true, revoked: false };
+      await clearAuthenticatedRuntime();
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) await win.webContents.session.clearStorageData({ storages: ["cookies"] });
+      return result;
+    });
+
+    ipcMain.handle("auth-delete-account", async () => {
+      if (!this.desktopAuthManager) throw new Error("Authentication manager unavailable");
+      this.databaseManager.getDesktopSyncStore().pause();
+      const result = await this.desktopAuthManager.deleteAccount();
+      await clearAuthenticatedRuntime();
+      return result;
     });
 
     // In production, VITE_* env vars aren't available in the main process because
@@ -4300,66 +4564,12 @@ class IPCHandlers {
       runtimeEnv.AISHA_API_KEY ||
       "";
 
-    const getSessionCookiesFromWindow = async (win) => {
-      const scopedUrls = [getAuthUrl(), getApiUrl()].filter(Boolean);
-      const cookiesByName = new Map();
-
-      for (const url of scopedUrls) {
-        try {
-          const scopedCookies = await win.webContents.session.cookies.get({ url });
-          for (const cookie of scopedCookies) {
-            if (!cookiesByName.has(cookie.name)) {
-              cookiesByName.set(cookie.name, cookie.value);
-            }
-          }
-        } catch (error) {
-          debugLogger.warn("Failed to read scoped auth cookies", {
-            url,
-            error: error.message,
-          });
-        }
-      }
-
-      // Fallback for older sessions where cookies are not URL-scoped as expected.
-      if (cookiesByName.size === 0) {
-        const allCookies = await win.webContents.session.cookies.get({});
-        for (const cookie of allCookies) {
-          if (!cookiesByName.has(cookie.name)) {
-            cookiesByName.set(cookie.name, cookie.value);
-          }
-        }
-      }
-
-      const cookieHeader = [...cookiesByName.entries()]
-        .map(([name, value]) => `${name}=${value}`)
-        .join("; ");
-
-      debugLogger.debug(
-        "Resolved auth cookies for cloud request",
-        {
-          cookieCount: cookiesByName.size,
-          scopedUrls,
-        },
-        "auth"
-      );
-
-      return cookieHeader;
-    };
-
-    const getSessionCookies = async (event) => {
-      const win = BrowserWindow.fromWebContents(event.sender);
-      if (!win) return "";
-      return getSessionCookiesFromWindow(win);
-    };
-
-    // Prefer Aisha API key for cloud STT. Bearer/cookie kept for account APIs.
-    const getAuthHeaderFromWindow = async (win) => {
+    const getAuthHeaderFromWindow = async () => {
+      const token = await this.desktopAuthManager?.getValidAccessToken?.();
+      if (token) return { Authorization: `Bearer ${token}` };
       const apiKey = getAishaApiKey();
       if (apiKey) return { "X-Api-Key": apiKey };
-      const token = tokenStore.get();
-      if (token) return { Authorization: `Bearer ${token}` };
-      const cookieHeader = win ? await getSessionCookiesFromWindow(win) : "";
-      return cookieHeader ? { Cookie: cookieHeader } : {};
+      return {};
     };
 
     const getAuthHeader = async (event) => {
@@ -4377,173 +4587,79 @@ class IPCHandlers {
     // Electron doesn't auto-attach jar cookies on top of our explicit headers.
     const proxyFetch = (url, init = {}) => net.fetch(url, { ...init, useSessionCookies: false });
 
-    ipcMain.handle("cloud-transcribe", async (event, audioBuffer, opts = {}) => {
-      try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) throw new Error("Aisha API URL not configured");
-
-        const authHeader = await getCloudSttAuthHeader(event);
-        if (!Object.keys(authHeader).length) {
-          throw Object.assign(
-            new Error(
-              "Aisha API key not configured. Add your key in Settings → Account (from https://space.aisha.group)."
-            ),
-            {
-              code: "API_KEY_MISSING",
-              messageKey: "hooks.audioRecording.errorDescriptions.aishaKeyMissing",
-            }
-          );
-        }
-
-        const { prepareAishaSttAudio } = require("./ffmpegUtils");
-        // Aisha accepts mp3/wav/ogg/m4a only — MediaRecorder webm must be converted.
-        const prepared = await prepareAishaSttAudio(Buffer.from(audioBuffer), {
-          hintExt: opts.mimeType?.includes("ogg")
-            ? "ogg"
-            : opts.mimeType?.includes("mp4")
-              ? "m4a"
-              : "webm",
-        });
-        const audioData = prepared.buffer;
-        // Reused for the local SQLite row so SyncService upserts the existing
-        // cloud row (filling in text) instead of creating a duplicate.
-        const clientTranscriptionId = crypto.randomUUID();
-        const language = opts.language || "uz";
-        const apiKey = getAishaApiKey();
-        const aishaFields = {
-          language,
-          ...(opts.hasDiarization ? { has_diarization: "true" } : {}),
-        };
-
-        debugLogger.debug(
-          "Cloud transcribe request (Aisha STT)",
-          {
-            audioSize: audioData.length,
-            language,
-            fileName: prepared.fileName,
-            contentType: prepared.contentType,
-            converted: prepared.converted,
-            keyPrefix: apiKey ? `${apiKey.slice(0, 8)}…` : "(none)",
-            transport: "node-https",
-          },
-          "cloud-api"
-        );
-
-        if (audioData.length > CLOUD_INLINE_LIMIT) {
-          const { text, responses, lastResponse, warning } = await chunkedCloudTranscribe({
-            buffer: audioData,
-            apiUrl,
-            authHeader,
-            multipartFields: aishaFields,
-            inputExt: prepared.fileName.split(".").pop(),
-            postFn: postMultipartNode,
-          });
-          const sum = (field) => responses.reduce((s, r) => s + (r?.[field] || 0), 0);
-          return {
-            success: true,
-            text,
-            ...(warning ? { warning } : {}),
-            clientTranscriptionId,
-            wordsUsed: lastResponse?.wordsUsed,
-            wordsRemaining: lastResponse?.wordsRemaining,
-            plan: lastResponse?.plan,
-            limitReached: lastResponse?.limitReached || false,
-            sttProvider: "aisha",
-            sttModel: lastResponse?.sttModel,
-            sttProcessingMs: sum("sttProcessingMs"),
-            sttWordCount: sum("sttWordCount"),
-            sttLanguage: lastResponse?.sttLanguage || language,
-            audioDurationMs: sum("audioDurationMs") || Math.round((lastResponse?.duration || 0) * 1000),
-          };
-        }
-
-        const sttPath = getAishaSttPath(audioData.length);
-        const url = new URL(`${apiUrl.replace(/\/+$/, "")}${sttPath}`);
-
-        const postOnce = async () => {
-          const { body, boundary } = buildMultipartBody(
-            audioData,
-            prepared.fileName,
-            prepared.contentType,
-            aishaFields,
-            { fileFieldName: "audio" }
-          );
-          return postMultipartNode(url, body, boundary, authHeader);
-        };
-
-        let data = await postOnce();
-        // Aisha occasionally returns 402 "Transaction failed" transiently — retry once.
-        if (
-          data.statusCode === 402 &&
-          /transaction failed/i.test(data.data?.detail || data.data?.error || "")
-        ) {
-          debugLogger.warn(
-            "Aisha STT transient billing error, retrying once",
-            { detail: data.data?.detail, keyPrefix: apiKey ? `${apiKey.slice(0, 8)}…` : "(none)" },
-            "cloud-api"
-          );
-          await new Promise((r) => setTimeout(r, 700));
-          data = await postOnce();
-        }
-
-        debugLogger.debug(
-          "Cloud transcribe response",
-          {
-            statusCode: data.statusCode,
-            path: sttPath,
-            detail: data.data?.detail || data.data?.error_key || null,
-          },
-          "cloud-api"
-        );
-
-        // v2 async: poll detail until SUCCESS
-        if (sttPath.startsWith("/api/v2/") && data.statusCode === 200 && data.data?.id) {
-          const detail = await pollAishaSttV2(apiUrl, authHeader, data.data.id);
-          return {
-            success: true,
-            text: detail.text,
-            clientTranscriptionId,
-            sttProvider: "aisha",
-            sttLanguage: language,
-            audioDurationMs: Math.round((detail.duration || 0) * 1000),
-            cloudId: detail.id,
-          };
-        }
-
-        const result = interpretTranscribeResponse(data);
-        return {
-          success: true,
-          text: result.text,
-          clientTranscriptionId,
-          wordsUsed: result.wordsUsed,
-          wordsRemaining: result.wordsRemaining,
-          plan: result.plan,
-          limitReached: result.limitReached || false,
-          sttProvider: "aisha",
-          sttModel: result.sttModel,
-          sttProcessingMs: result.sttProcessingMs,
-          sttWordCount: result.sttWordCount,
-          sttLanguage: result.sttLanguage || language,
-          audioDurationMs: result.audioDurationMs || Math.round((result.duration || 0) * 1000),
-          cloudId: result.id,
-        };
-      } catch (error) {
-        debugLogger.error(
-          "Cloud transcription error",
-          {
-            error: error.message,
-            code: error.code,
-            statusCode: error.statusCode,
-            detail: error.detail || error.error_key,
-          },
-          "cloud-api"
-        );
-        if (error.code) {
-          return { success: false, error: error.message, code: error.code, ...error };
-        }
-        return { success: false, error: error.message };
-      }
+ipcMain.handle("cloud-transcribe", async (_event, audioBuffer, opts = {}) => {
+  let operation = null;
+  try {
+    if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
+    const { prepareAishaSttAudio } = require("./ffmpegUtils");
+    const prepared = await prepareAishaSttAudio(Buffer.from(audioBuffer), {
+      hintExt: opts.mimeType?.includes("ogg")
+        ? "ogg"
+        : opts.mimeType?.includes("mp4")
+          ? "m4a"
+          : "webm",
     });
+    const audioData = prepared.buffer;
+    const durationMs = Number.isFinite(opts.durationSeconds)
+      ? Math.round(opts.durationSeconds * 1000)
+      : null;
+    await this._runDesktopSync({ pull: false, maxPushBatches: 2, bestEffort: true });
+    operation = await this.voiceLabApiClient.beginDictation({
+      audioBuffer: audioData,
+      source: "dictate",
+      durationMs,
+      language: opts.language ?? null,
+    });
+    let result;
+    if (audioData.length > CLOUD_INLINE_LIMIT) {
+      const chunked = await chunkedCloudTranscribe({
+        buffer: audioData,
+        apiUrl: "",
+        authHeader: {},
+        inputExt: prepared.fileName.split(".").pop(),
+        concurrencyLimit: 1,
+        requestChunk: (chunkBuffer, index, total) =>
+          this.voiceLabApiClient.sendDictationChunk(
+            operation,
+            chunkBuffer,
+            {
+              source: "dictate",
+              language: opts.language ?? null,
+              hasDiarization: !!opts.hasDiarization,
+              durationMs,
+              contentType: "audio/mpeg",
+              fileName: `dictation-${index}.mp3`,
+            },
+            index,
+            total
+          ),
+      });
+      const last = chunked.lastResponse || {};
+      result = {
+        ...last,
+        result: { ...(last.result || {}), text: chunked.text },
+        warning: chunked.warning,
+      };
+    } else {
+      result = await this.voiceLabApiClient.sendDictationChunk(operation, audioData, {
+        source: "dictate",
+        language: opts.language ?? null,
+        hasDiarization: !!opts.hasDiarization,
+        durationMs,
+        contentType: prepared.contentType,
+        fileName: prepared.fileName,
+      });
+    }
+    const response = await this.voiceLabApiClient.publicResult(result, operation.operationId);
+    this.voiceLabApiClient.finishDictation(operation);
+    return { ...response, clientTranscriptionId: operation.operationId };
+  } catch (error) {
+    if (operation) this.voiceLabApiClient?.failDictation(operation, error);
+    return typeof error?.toPublic === "function"
+      ? error.toPublic()
+      : { success: false, error: error.message || "VoiceLab Dictate failed", code: "BACKEND_FAILED" };
+  }
+});
 
     ipcMain.handle("cloud-health-check", async () => {
       const apiUrl = getApiUrl();
@@ -5257,7 +5373,12 @@ class IPCHandlers {
     };
 
     const fetchRealtimeToken = async (event, options, { streams } = {}) => {
-      const postServerToken = async (path, body = {}) => {
+const postServerToken = async (_path, _body = {}) => {
+  const error = new Error(
+    "VoiceLab-funded streaming is disabled until server-authoritative metering is available."
+  );
+  error.code = "VOICELAB_STREAMING_DISABLED";
+  throw error;
         const apiUrl = getApiUrl();
         if (!apiUrl) {
           const err = new Error("OpenWhispr API URL not configured");
@@ -6820,7 +6941,14 @@ class IPCHandlers {
       return result;
     };
 
-    ipcMain.handle("dictation-realtime-warmup", async (event, options = {}) => {
+ipcMain.handle("dictation-realtime-warmup", async (event, options = {}) => {
+  if ((options.mode || "openwhispr") !== "byok") {
+    return {
+      success: false,
+      code: "VOICELAB_STREAMING_DISABLED",
+      error: "VoiceLab-funded streaming requires server-authoritative metering.",
+    };
+  }
       try {
         await connectDictationStreaming(event, options);
         startDictationIdleTimer();
@@ -6830,7 +6958,14 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("dictation-realtime-start", async (event, options = {}) => {
+ipcMain.handle("dictation-realtime-start", async (event, options = {}) => {
+  if ((options.mode || "openwhispr") !== "byok") {
+    return {
+      success: false,
+      code: "VOICELAB_STREAMING_DISABLED",
+      error: "VoiceLab-funded streaming requires server-authoritative metering.",
+    };
+  }
       try {
         clearDictationIdleTimer();
         this._dictationPreviewEnabled = !!options.preview;
@@ -7015,6 +7150,7 @@ class IPCHandlers {
       try {
         this.databaseManager.updateTranscriptionText(id, text, rawText);
         const updated = this.databaseManager.getTranscriptionById(id);
+        this.databaseManager.getDesktopSyncStore().updateLocalTranscript(id, updated);
         return { success: true, transcription: updated };
       } catch (error) {
         debugLogger.error(
@@ -7246,124 +7382,24 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle(
-      "cloud-streaming-usage",
-      async (event, text, audioDurationSeconds, opts = {}) => {
-        try {
-          const apiUrl = getApiUrl();
-          if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
+ipcMain.handle("cloud-streaming-usage", async () => ({
+  success: false,
+  code: "VOICELAB_STREAMING_DISABLED",
+  error:
+    "VoiceLab-funded streaming is disabled until server-authoritative stream metering is available.",
+}));
 
-          const authHeader = await getAuthHeader(event);
-          if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
-
-          const response = await proxyFetch(`${apiUrl}/api/streaming-usage`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...authHeader,
-            },
-            body: JSON.stringify({
-              text,
-              audioDurationSeconds,
-              sessionId: this.sessionId,
-              clientType: "desktop",
-              appVersion: app.getVersion(),
-              clientVersion: app.getVersion(),
-              sttProvider: opts.sttProvider,
-              sttModel: opts.sttModel,
-              sttProcessingMs: opts.sttProcessingMs,
-              sttLanguage: opts.sttLanguage,
-              audioSizeBytes: opts.audioSizeBytes,
-              audioFormat: opts.audioFormat,
-              clientTotalMs: opts.clientTotalMs,
-              sendLogs: opts.sendLogs,
-            }),
-          });
-
-          if (response.status === 401) {
-            return { success: false, error: "Session expired", code: "AUTH_EXPIRED" };
-          }
-          if (response.status === 503) {
-            return { success: false, error: "Request timed out", code: "SERVER_ERROR" };
-          }
-          if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
-          }
-
-          const data = await response.json();
-          return { success: true, ...data };
-        } catch (error) {
-          debugLogger.error("Cloud streaming usage error", { error: error.message }, "cloud-api");
-          return { success: false, error: error.message };
-        }
-      }
-    );
-
-    ipcMain.handle("cloud-usage", async (event) => {
-      try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
-
-        const authHeader = await getAuthHeader(event);
-        if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
-
-        const response = await proxyFetch(`${apiUrl}/api/usage`, {
-          headers: authHeader,
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            return { success: false, error: "Session expired", code: "AUTH_EXPIRED" };
-          }
-          if (response.status === 503) {
-            return { success: false, error: "Request timed out", code: "SERVER_ERROR" };
-          }
-          throw new Error(`API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return { success: true, ...data };
-      } catch (error) {
-        debugLogger.error("Cloud usage fetch error:", error);
-        return { success: false, error: error.message };
-      }
-    });
-
-    const fetchStripeUrl = async (event, endpoint, errorPrefix, body) => {
-      try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
-
-        const authHeader = await getAuthHeader(event);
-        if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
-
-        const headers = { ...authHeader };
-        const fetchOpts = { method: "POST", headers };
-        if (body) {
-          headers["Content-Type"] = "application/json";
-          fetchOpts.body = JSON.stringify(body);
-        }
-
-        const response = await proxyFetch(`${apiUrl}${endpoint}`, fetchOpts);
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            return { success: false, error: "Session expired", code: "AUTH_EXPIRED" };
-          }
-          if (response.status === 503) {
-            return { success: false, error: "Request timed out", code: "SERVER_ERROR" };
-          }
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || `API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return { success: true, url: data.url };
-      } catch (error) {
-        debugLogger.error(`${errorPrefix}: ${error.message}`);
-        return { success: false, error: error.message };
-      }
-    };
+ipcMain.handle("cloud-usage", async () => {
+  try {
+    if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
+    const wallet = await this.voiceLabApiClient.getWallet({ force: true });
+    return { success: true, ...wallet };
+  } catch (error) {
+    return typeof error?.toPublic === "function"
+      ? error.toPublic()
+      : { success: false, error: error.message || "Wallet unavailable", code: "WALLET_UNAVAILABLE" };
+  }
+});
 
     ipcMain.handle("cloud-checkout", (event, opts) =>
       fetchStripeUrl(event, "/api/stripe/checkout", "Cloud checkout error", opts || undefined)
@@ -7445,6 +7481,22 @@ class IPCHandlers {
         if (typeof opts?.path !== "string" || !opts.path.startsWith("/")) {
           return { success: false, error: "Invalid API path" };
         }
+        const method = (opts.method || "GET").toUpperCase();
+        const narrowRoutes = [
+          { method: "GET", pattern: /^\/api\/(?:workspaces|teams)(?:\/|$)/ },
+          { method: "POST", pattern: /^\/api\/(?:workspaces|teams)(?:\/|$)/ },
+          { method: "PATCH", pattern: /^\/api\/workspaces\/[^/]+\/members\/[^/]+\/?$/ },
+          { method: "DELETE", pattern: /^\/api\/(?:workspaces|teams)(?:\/|$)/ },
+          { method: "POST", pattern: /^\/api\/v1\/keys\/[^/]+\/revoke\/?$/ },
+        ];
+        if (!narrowRoutes.some((route) => route.method === method && route.pattern.test(opts.path))) {
+          return {
+            success: false,
+            error: "This renderer API operation is not allowed",
+            code: "DESKTOP_API_ROUTE_REJECTED",
+            status: 403,
+          };
+        }
         const targetUrl = new URL(opts.path, apiUrl);
         if (targetUrl.origin !== new URL(apiUrl).origin) {
           return { success: false, error: "Invalid API path" };
@@ -7453,7 +7505,6 @@ class IPCHandlers {
         const authHeader = await getAuthHeader(event);
         if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
 
-        const method = (opts.method || "GET").toUpperCase();
         const sendWith = (header) => {
           const headers = { ...header };
           const fetchOpts = { method, headers };
@@ -7465,13 +7516,6 @@ class IPCHandlers {
         };
 
         let response = await sendWith(authHeader);
-
-        // A stale bearer is rejected even when the window still holds a valid session
-        // cookie; retry with the cookie alone (a tagging-along bearer overrides it).
-        if (response.status === 401 && authHeader.Authorization) {
-          const cookieHeader = await getSessionCookies(event);
-          if (cookieHeader) response = await sendWith({ Cookie: cookieHeader });
-        }
 
         if (response.status === 401) {
           return {
@@ -7564,86 +7608,70 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("transcribe-audio-file-cloud", async (event, filePath) => {
-      try {
-        if (typeof filePath !== "string") {
-          return { success: false, error: "Invalid file path" };
-        }
-        const realCloud = resolveAllowedAudioPath(filePath);
-        if (!realCloud) return { success: false, error: "File path not allowed" };
-
-        const apiUrl = getApiUrl();
-        if (!apiUrl) throw new Error("Aisha API URL not configured");
-
-        const authHeader = await getCloudSttAuthHeader(event);
-        if (!Object.keys(authHeader).length) {
-          throw Object.assign(
-            new Error(
-              "Aisha API key not configured. Add your key in Settings → Account (from https://space.aisha.group)."
-            ),
-            {
-              code: "API_KEY_MISSING",
-              messageKey: "hooks.audioRecording.errorDescriptions.aishaKeyMissing",
-            }
-          );
-        }
-
-        const multipartFields = {
-          language: "uz",
-          has_diarization: "false",
-          title: path.basename(realCloud),
-        };
-
-        const { prepareAishaSttAudio } = require("./ffmpegUtils");
-        const hintExt = path.extname(realCloud).toLowerCase().replace(".", "");
-        const prepared = await prepareAishaSttAudio(realCloud, { hintExt });
-        const fileSize = prepared.buffer.length;
-
-        if (fileSize > CLOUD_INLINE_LIMIT) {
-          debugLogger.debug("Large file detected, using client-side chunking", {
-            fileSize,
-            filePath: path.basename(realCloud),
-            converted: prepared.converted,
-          });
-          const { text, warning } = await chunkedCloudTranscribe({
-            buffer: prepared.buffer,
-            apiUrl,
-            authHeader,
-            multipartFields,
-            inputExt: prepared.fileName.split(".").pop(),
-            postFn: postMultipartNode,
-            onProgress: (payload) => event.sender.send("upload-transcription-progress", payload),
-          });
-          return { success: true, text, ...(warning ? { warning } : {}) };
-        }
-
-        const sttPath = getAishaSttPath(prepared.buffer.length);
-
-        const { body, boundary } = buildMultipartBody(
-          prepared.buffer,
-          prepared.fileName,
-          prepared.contentType,
-          multipartFields,
-          { fileFieldName: "audio" }
-        );
-        const url = new URL(`${apiUrl.replace(/\/+$/, "")}${sttPath}`);
-        const data = await postMultipartNode(url, body, boundary, authHeader);
-
-        if (sttPath.startsWith("/api/v2/") && data.statusCode === 200 && data.data?.id) {
-          const detail = await pollAishaSttV2(apiUrl, authHeader, data.data.id);
-          return { success: true, text: detail.text };
-        }
-
-        const result = interpretTranscribeResponse(data);
-        return { success: true, text: result.text };
-      } catch (error) {
-        debugLogger.error("Cloud audio file transcription error", { error: error.message });
-        if (error.code) {
-          return { success: false, error: error.message, code: error.code, ...error };
-        }
-        return { success: false, error: error.message };
-      }
+ipcMain.handle("transcribe-audio-file-cloud", async (event, filePath, options = {}) => {
+  let operation = null;
+  try {
+    if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
+    const allowedPath = resolveAllowedAudioPath(filePath);
+    if (!allowedPath) {
+      return { success: false, error: "Audio path is not approved", code: "INVALID_REQUEST" };
+    }
+    const sourceBuffer = fs.readFileSync(allowedPath);
+    const { prepareAishaSttAudio, getAudioDurationSeconds } = require("./ffmpegUtils");
+    const durationSeconds = await getAudioDurationSeconds(allowedPath);
+    const prepared = await prepareAishaSttAudio(sourceBuffer, {
+      hintExt: path.extname(allowedPath).slice(1) || "mp3",
     });
+    await this._runDesktopSync({ pull: false, maxPushBatches: 2, bestEffort: true });
+    operation = await this.voiceLabApiClient.beginDictation({
+      audioBuffer: prepared.buffer,
+      source: "dictate-upload",
+      durationMs: Math.round(durationSeconds * 1000),
+      language: options.language ?? null,
+    });
+    let result;
+    if (prepared.buffer.length > CLOUD_INLINE_LIMIT) {
+      const chunked = await chunkedCloudTranscribe({
+        buffer: prepared.buffer,
+        apiUrl: "",
+        authHeader: {},
+        inputExt: prepared.fileName.split(".").pop(),
+        onProgress: (payload) => event.sender.send("upload-transcription-progress", payload),
+        concurrencyLimit: 1,
+        requestChunk: (chunkBuffer, index, total) =>
+          this.voiceLabApiClient.sendDictationChunk(
+            operation,
+            chunkBuffer,
+            {
+              source: "dictate-upload",
+              language: options.language ?? null,
+              contentType: "audio/mpeg",
+              fileName: `upload-${index}.mp3`,
+            },
+            index,
+            total
+          ),
+      });
+      const last = chunked.lastResponse || {};
+      result = { ...last, result: { ...(last.result || {}), text: chunked.text } };
+    } else {
+      result = await this.voiceLabApiClient.sendDictationChunk(operation, prepared.buffer, {
+        source: "dictate-upload",
+        language: options.language ?? null,
+        contentType: prepared.contentType,
+        fileName: prepared.fileName,
+      });
+    }
+    const response = await this.voiceLabApiClient.publicResult(result, operation.operationId);
+    this.voiceLabApiClient.finishDictation(operation);
+    return response;
+  } catch (error) {
+    if (operation) this.voiceLabApiClient?.failDictation(operation, error);
+    return typeof error?.toPublic === "function"
+      ? error.toPublic()
+      : { success: false, error: error.message || "VoiceLab upload failed", code: "BACKEND_FAILED" };
+  }
+});
 
     ipcMain.handle(
       "transcribe-audio-file-byok",
@@ -8127,7 +8155,12 @@ class IPCHandlers {
       return this.updateManager.getUpdateInfo();
     });
 
-    const fetchStreamingToken = async (event) => {
+const fetchStreamingToken = async (_event) => {
+  const error = new Error(
+    "VoiceLab-funded streaming is disabled until server-authoritative metering is available."
+  );
+  error.code = "VOICELAB_STREAMING_DISABLED";
+  throw error;
       const apiUrl = getApiUrl();
       if (!apiUrl) {
         throw new Error("OpenWhispr API URL not configured");
@@ -8329,7 +8362,12 @@ class IPCHandlers {
 
     let deepgramTokenWindowId = null;
 
-    const fetchDeepgramStreamingTokenFromWindow = async (windowId) => {
+const fetchDeepgramStreamingTokenFromWindow = async (_windowId) => {
+  const error = new Error(
+    "VoiceLab-funded streaming is disabled until server-authoritative metering is available."
+  );
+  error.code = "VOICELAB_STREAMING_DISABLED";
+  throw error;
       const apiUrl = getApiUrl();
       if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
 
@@ -8358,7 +8396,12 @@ class IPCHandlers {
       return token;
     };
 
-    const fetchDeepgramStreamingToken = async (event) => {
+const fetchDeepgramStreamingToken = async (_event) => {
+  const error = new Error(
+    "VoiceLab-funded streaming is disabled until server-authoritative metering is available."
+  );
+  error.code = "VOICELAB_STREAMING_DISABLED";
+  throw error;
       const apiUrl = getApiUrl();
       if (!apiUrl) {
         throw new Error("OpenWhispr API URL not configured");
@@ -9746,6 +9789,7 @@ class IPCHandlers {
   }
 
   deleteTranscriptionInternal(id) {
+    this.databaseManager.getDesktopSyncStore().deleteLocalTranscript(id);
     this.audioStorageManager.deleteAudio(id);
     const result = this.databaseManager.deleteTranscription(id);
     if (result?.success) {
