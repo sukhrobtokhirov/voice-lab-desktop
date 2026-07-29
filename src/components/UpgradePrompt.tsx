@@ -1,132 +1,74 @@
 import { Dialog, DialogContent } from "./ui/dialog";
-import { ChevronRight } from "lucide-react";
-import { useTranslation } from "react-i18next";
+import { Button } from "./ui/button";
 import { useUsage } from "../hooks/useUsage";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useTranslation } from "react-i18next";
+
+export interface CreditShortage {
+  availableCredits?: string | number | null;
+  requiredCredits?: string | number | null;
+}
 
 interface UpgradePromptProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  wordsUsed?: number;
-  limit?: number;
+  shortage?: CreditShortage | null;
 }
 
-export default function UpgradePrompt({
-  open,
-  onOpenChange,
-  wordsUsed = 2000,
-  limit = 2000,
-}: UpgradePromptProps) {
+export default function UpgradePrompt({ open, onOpenChange, shortage }: UpgradePromptProps) {
   const { t } = useTranslation();
   const usage = useUsage();
-  const isPastDue = usage?.isPastDue ?? false;
-
+  const available = shortage?.availableCredits ?? usage?.availableCredits ?? "0";
+  const required = shortage?.requiredCredits;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
-        <div className="text-center space-y-2 pt-2">
+        <div className="space-y-2">
           <h2 className="text-xl font-semibold text-foreground">
-            {isPastDue ? t("upgradePrompt.paymentFailed") : t("upgradePrompt.weeklyLimit")}
+            {t("desktop.creditShortage.title", { defaultValue: "More AI Credits needed" })}
           </h2>
           <p className="text-sm text-muted-foreground">
-            {(isPastDue
-              ? t("upgradePrompt.pastDueDescription", { limit: limit.toLocaleString() })
-              : t("upgradePrompt.limitDescription", {
-                  used: wordsUsed.toLocaleString(),
-                  limit: limit.toLocaleString(),
-                })
-            )
-              .split("\n")
-              .map((line, i, arr) => (
-                <span key={i}>
-                  {line}
-                  {i < arr.length - 1 && <br />}
-                </span>
-              ))}
+            {t("desktop.creditShortage.description", {
+              defaultValue:
+                "There are not enough available credits for this recording. Add credits or continue locally.",
+            })}
           </p>
         </div>
-
-        <div className="space-y-2 pt-2">
-          {isPastDue ? (
-            <OptionCard
-              title={t("upgradePrompt.updatePayment")}
-              description={t("upgradePrompt.updatePaymentDescription")}
-              onClick={() => {
-                usage?.openBillingPortal();
-              }}
-              highlighted
-              disabled={usage?.checkoutLoading}
-            />
-          ) : (
-            <OptionCard
-              title={t("upgradePrompt.upgradeToPro")}
-              description={t("upgradePrompt.upgradeDescription")}
-              onClick={() => {
-                usage?.openCheckout();
-              }}
-              highlighted
-              disabled={usage?.checkoutLoading}
-            />
+        <div className="grid grid-cols-2 gap-3 rounded-xl bg-muted/50 p-3 text-sm">
+          <div>
+            <span className="block text-xs text-muted-foreground">
+              {t("desktop.wallet.available", { defaultValue: "Available" })}
+            </span>
+            <strong>{available} credits</strong>
+          </div>
+          {required != null && (
+            <div>
+              <span className="block text-xs text-muted-foreground">
+                {t("desktop.creditShortage.required", { defaultValue: "Needed" })}
+              </span>
+              <strong>{required} credits</strong>
+            </div>
           )}
-          <OptionCard
-            title={t("upgradePrompt.useApiKey")}
-            description={t("upgradePrompt.useApiKeyDescription")}
-            onClick={() => {
-              const s = useSettingsStore.getState();
-              s.setTranscriptionMode("providers");
-              s.setCloudTranscriptionMode("byok");
-              onOpenChange(false);
-            }}
-          />
-          <OptionCard
-            title={t("upgradePrompt.switchToLocal")}
-            description={t("upgradePrompt.switchToLocalDescription")}
-            onClick={() => {
-              const s = useSettingsStore.getState();
-              s.setTranscriptionMode("local");
-              s.setUseLocalWhisper(true);
-              s.setCloudTranscriptionMode("byok");
-              onOpenChange(false);
-            }}
-          />
         </div>
-
-        <p className="text-xs text-muted-foreground/60 text-center">
-          {t("upgradePrompt.rollingWeeklyLimit")}
-        </p>
+        <div className="flex flex-col gap-2">
+          <Button onClick={() => void usage?.openBillingPortal()}>
+            {t("desktop.wallet.manage", { defaultValue: "Manage billing" })}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              const settings = useSettingsStore.getState();
+              settings.setTranscriptionMode("local");
+              settings.setUseLocalWhisper(true);
+              onOpenChange(false);
+            }}
+          >
+            {t("desktop.creditShortage.useLocal", {
+              defaultValue: "Use local transcription for 0 credits",
+            })}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function OptionCard({
-  title,
-  description,
-  onClick,
-  highlighted = false,
-  disabled = false,
-}: {
-  title: string;
-  description: string;
-  onClick: () => void;
-  highlighted?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`w-full text-left p-4 rounded-lg border transition-shadow duration-150 hover:shadow-md flex items-center justify-between cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-        highlighted
-          ? "bg-primary/5 dark:bg-primary/10 border-primary/20 dark:border-primary/15"
-          : "bg-muted/50 dark:bg-surface-2 border-border dark:border-border-subtle hover:border-border-hover"
-      }`}
-    >
-      <div>
-        <div className="font-medium text-foreground">{title}</div>
-        <div className="text-sm text-muted-foreground">{description}</div>
-      </div>
-      <ChevronRight className="h-4 w-4 text-muted-foreground/60 shrink-0" />
-    </button>
   );
 }

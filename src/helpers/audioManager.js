@@ -1237,49 +1237,45 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     }
 
     try {
-      // Aisha-only STT — ignore local/BYOK settings; always VoiceLab Cloud.
-      logger.debug("Transcription routing", { force: "aisha-cloud" }, "transcription");
-
-      const activeModel = "voicelab-cloud";
-      const result = await this.processWithOpenWhisprCloud(audioBlob, metadata);
-
-      if (!this.isProcessing) {
-        return;
+      let activeModel = settings.cloudTranscriptionModel || "cloud";
+      let result;
+      let mode = "cloud";
+      if (settings.useLocalWhisper) {
+        mode = "local";
+        if (settings.localTranscriptionProvider === "nvidia") {
+          activeModel = settings.parakeetModel;
+          result = await this.processWithLocalParakeet(audioBlob, activeModel, metadata);
+        } else {
+          activeModel = settings.whisperModel || "base";
+          result = await this.processWithLocalWhisper(audioBlob, activeModel, metadata);
+        }
+      } else if (settings.transcriptionMode === "openwhispr" || settings.cloudTranscriptionMode === "openwhispr") {
+        activeModel = "voicelab-cloud";
+        result = await this.processWithOpenWhisprCloud(audioBlob, metadata);
+      } else {
+        activeModel = settings.cloudTranscriptionModel || settings.cloudTranscriptionProvider;
+        result = await this.processWithOpenAIAPI(audioBlob, metadata);
       }
-
+      if (!this.isProcessing) return;
       this.lastAudioMetadata = {
-        durationMs: metadata?.durationSeconds
-          ? Math.round(metadata.durationSeconds * 1000)
-          : Math.round(performance.now() - pipelineStart),
-        provider: result?.source || "aisha",
+        durationMs: metadata?.durationSeconds ? Math.round(metadata.durationSeconds * 1000) : Math.round(performance.now() - pipelineStart),
+        provider: result?.source || mode,
         model: activeModel || null,
       };
-
       this.onTranscriptionComplete?.(result);
-
-      if (result?.source === "openwhispr" || result?.source === "aisha") {
-        window.dispatchEvent(new Event("usage-changed"));
-      }
-
+      if (result?.source === "openwhispr" || result?.source === "aisha") window.dispatchEvent(new Event("usage-changed"));
       const roundTripDurationMs = Math.round(performance.now() - pipelineStart);
-
-      const timingData = {
-        mode: "cloud",
+      logger.info("Pipeline timing", {
+        mode,
         model: activeModel,
-        audioDurationMs: metadata.durationSeconds
-          ? Math.round(metadata.durationSeconds * 1000)
-          : null,
+        audioDurationMs: metadata.durationSeconds ? Math.round(metadata.durationSeconds * 1000) : null,
+        transcriptionProcessingDurationMs: result?.timings?.transcriptionProcessingDurationMs ?? null,
         reasoningProcessingDurationMs: result?.timings?.reasoningProcessingDurationMs ?? null,
         roundTripDurationMs,
         audioSizeBytes: audioBlob.size,
         audioFormat: audioBlob.type,
         outputTextLength: result?.text?.length,
-      };
-
-      timingData.transcriptionProcessingDurationMs =
-        result?.timings?.transcriptionProcessingDurationMs ?? null;
-
-      logger.info("Pipeline timing", timingData, "performance");
+      }, "performance");
     } catch (error) {
       const errorAtMs = Math.round(performance.now() - pipelineStart);
 
@@ -2992,9 +2988,19 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     }
 
     try {
+      const provider = String(this.lastAudioMetadata?.provider || "").toLowerCase();
+      const syncSource = provider.startsWith("local")
+        ? "local"
+        : provider && !["aisha", "voicelab", "voicelab-cloud", "openwhispr"].includes(provider)
+          ? "byok"
+          : null;
       const result = await window.electronAPI.saveTranscription(text, rawText, {
         clientTranscriptionId,
         routeKind: this.translationRequested ? "translation" : null,
+        syncSource,
+        provider: this.lastAudioMetadata?.provider || null,
+        model: this.lastAudioMetadata?.model || null,
+        audioDurationMs: this.lastAudioMetadata?.durationMs || null,
       });
       if (result?.id) syncService.debouncedPush("transcription", result.id);
 
@@ -3126,7 +3132,12 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
   }
 
   shouldUseStreaming(_isSignedInOverride) {
-    // Aisha realtime WebSocket is not wired yet — always use sync cloud dictation.
+    const settings = getSettings();
+    if (settings.useLocalWhisper || settings.transcriptionMode === "local" || settings.transcriptionMode === "self-hosted") return false;
+    if (settings.transcriptionMode === "openwhispr" || settings.cloudTranscriptionMode === "openwhispr") return false;
+    if (settings.cloudTranscriptionProvider === "corti") return !!(settings.cortiApiKey || (settings.cortiClientId && settings.cortiClientSecret));
+    if (settings.cloudTranscriptionProvider === "tinfoil") return !!settings.tinfoilApiKey;
+    if (settings.cloudTranscriptionProvider === "openai") return !!settings.openaiApiKey;
     return false;
   }
 
@@ -3877,7 +3888,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         ...(batchWarning ? { warning: batchWarning } : {}),
       });
 
-      if (!usedBatchFallback) {
+      if (!usedBatchFallback && stSettings.cloudTranscriptionMode === "openwhispr") {
         (async () => {
           try {
             await withSessionRefresh(async () => {
@@ -3906,7 +3917,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           }
           window.dispatchEvent(new Event("usage-changed"));
         })();
-      } else {
+      } else if (usedBatchFallback && stSettings.cloudTranscriptionMode === "openwhispr") {
         window.dispatchEvent(new Event("usage-changed"));
       }
 

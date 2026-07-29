@@ -1,12 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { createElement, useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import AudioManager from "../helpers/audioManager";
 import logger from "../utils/logger";
 import { playStartCue, playStopCue } from "../utils/dictationCues";
-import { getSettings } from "../stores/settingsStore";
+import { getSettings, useSettingsStore } from "../stores/settingsStore";
 import { expandSnippets } from "../utils/snippets";
-import { getRecordingErrorTitle, getRecordingErrorDescription } from "../utils/recordingErrors";
+import {
+  getRecordingErrorTitle,
+  getRecordingErrorDescription,
+  getRecordingRecoveryAction,
+  getRecordingRecoveryActionLabel,
+} from "../utils/recordingErrors";
 import { isAccessibilitySkipped } from "../utils/permissions";
+import { signInWithSocial } from "../lib/auth";
 
 export const useAudioRecording = (toast, options = {}) => {
   const { t } = useTranslation();
@@ -16,11 +22,13 @@ export const useAudioRecording = (toast, options = {}) => {
   const [micCaptureStatus, setMicCaptureStatus] = useState("inactive");
   const [transcript, setTranscript] = useState("");
   const [partialTranscript, setPartialTranscript] = useState("");
+  const [wasPlaced, setWasPlaced] = useState(false);
   const audioManagerRef = useRef(null);
   const startLockRef = useRef(false);
   const stopLockRef = useRef(false);
   const wasRecordingRef = useRef(false);
   const wasMicUnavailableRef = useRef(false);
+  const placedTimerRef = useRef(null);
   const { onToggle } = options;
 
   const performStartRecording = useCallback(
@@ -99,6 +107,10 @@ export const useAudioRecording = (toast, options = {}) => {
 
     audioManagerRef.current.setCallbacks({
       onStateChange: ({ isRecording, isProcessing, isStreaming, micCaptureStatus }) => {
+        if (isRecording || isProcessing) {
+          setWasPlaced(false);
+          if (placedTimerRef.current) clearTimeout(placedTimerRef.current);
+        }
         if (!isRecording) {
           window.electronAPI?.unregisterCancelHotkey?.();
           // Resume media the instant recording ends, not after transcription.
@@ -139,13 +151,49 @@ export const useAudioRecording = (toast, options = {}) => {
         if (error?.title !== "Paste Error") {
           window.electronAPI?.hideDictationPreview?.();
         }
+        if (error?.code === "INSUFFICIENT_CREDITS") {
+          window.electronAPI?.notifyLimitReached?.({
+            availableCredits: error.available_credits,
+            requiredCredits: error.required_credits,
+          });
+          if (getSettings().pauseMediaOnDictation) {
+            window.electronAPI?.resumeMediaPlayback?.();
+          }
+          return;
+        }
         const title = getRecordingErrorTitle(error, t);
         const description = getRecordingErrorDescription(error, t);
+        const recovery = getRecordingRecoveryAction(error?.code);
+        const recoveryAction = recovery
+          ? createElement(
+              "button",
+              {
+                type: "button",
+                className:
+                  "rounded-md border border-current/20 px-2.5 py-1 text-xs font-semibold transition-colors hover:bg-white/10",
+                onClick: () => {
+                  if (recovery === "auth") {
+                    void signInWithSocial("google");
+                  } else if (recovery === "billing") {
+                    void window.electronAPI?.openVoiceLabBilling?.("dictate");
+                  } else if (recovery === "local") {
+                    const settings = useSettingsStore.getState();
+                    settings.setTranscriptionMode("local");
+                    settings.setUseLocalWhisper(true);
+                  } else if (recovery === "retry") {
+                    void performStartRecording();
+                  }
+                },
+              },
+              getRecordingRecoveryActionLabel(recovery)
+            )
+          : undefined;
         toast({
           title,
           description,
           variant: "destructive",
           duration: error.code === "AUTH_EXPIRED" ? 8000 : undefined,
+          action: recoveryAction,
         });
         if (getSettings().pauseMediaOnDictation) {
           window.electronAPI?.resumeMediaPlayback?.();
@@ -207,24 +255,15 @@ export const useAudioRecording = (toast, options = {}) => {
           audioManagerRef.current.saveTranscription(result.text, result.rawText ?? result.text, {
             clientTranscriptionId: result.clientTranscriptionId,
           });
+          setWasPlaced(true);
+          if (placedTimerRef.current) clearTimeout(placedTimerRef.current);
+          placedTimerRef.current = setTimeout(() => setWasPlaced(false), 1400);
 
           if (result.source === "openai" && getSettings().useLocalWhisper) {
             toast({
               title: t("hooks.audioRecording.fallback.title"),
               description: t("hooks.audioRecording.fallback.description"),
               variant: "default",
-            });
-          }
-
-          // Cloud usage: limit reached after this transcription
-          if (result.source === "openwhispr" && result.limitReached) {
-            // Notify control panel to show UpgradePrompt dialog
-            window.electronAPI?.notifyLimitReached?.({
-              wordsUsed: result.wordsUsed,
-              limit:
-                result.wordsRemaining !== undefined
-                  ? result.wordsUsed + result.wordsRemaining
-                  : 2000,
             });
           }
 
@@ -330,6 +369,7 @@ export const useAudioRecording = (toast, options = {}) => {
       disposeStart?.();
       disposeStop?.();
       disposeNoAudio?.();
+      if (placedTimerRef.current) clearTimeout(placedTimerRef.current);
       if (audioManagerRef.current) {
         audioManagerRef.current.cleanup();
       }
@@ -373,6 +413,7 @@ export const useAudioRecording = (toast, options = {}) => {
     micCaptureStatus,
     transcript,
     partialTranscript,
+    wasPlaced,
     startRecording: performStartRecording,
     stopRecording: performStopRecording,
     cancelRecording,

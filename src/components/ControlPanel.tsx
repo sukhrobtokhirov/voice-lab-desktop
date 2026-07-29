@@ -11,7 +11,7 @@ import {
   PanelLeftOpen,
   PanelLeftClose,
 } from "lucide-react";
-import UpgradePrompt from "./UpgradePrompt";
+import UpgradePrompt, { type CreditShortage } from "./UpgradePrompt";
 import PostMigrationOnboarding from "./PostMigrationOnboarding";
 import { ConfirmDialog, AlertDialog } from "./ui/dialog";
 import { useDialogs } from "../hooks/useDialogs";
@@ -40,6 +40,7 @@ import ControlPanelSidebar, { type ControlPanelView } from "./ControlPanelSideba
 import MeetingRecordingMount from "./MeetingRecordingMount";
 import MeetingRecordingPill from "./notes/MeetingRecordingPill";
 import WindowControls from "./WindowControls";
+import ConnectionStatus from "./ConnectionStatus";
 
 import { getCachedPlatform } from "../utils/platform";
 import { isAccessibilitySkipped } from "../utils/permissions";
@@ -78,6 +79,17 @@ const IntegrationsView = React.lazy(() => import("./IntegrationsView"));
 const ChatView = React.lazy(() => import("./chat/ChatView"));
 const CommandSearch = React.lazy(() => import("./CommandSearch"));
 
+function PanelLoadingFallback() {
+  return (
+    <div className="flex min-h-48 w-full items-center justify-center" role="status" aria-label="Loading">
+      <div className="flex items-center gap-3 rounded-full border border-border/60 bg-card/80 px-4 py-2 text-sm text-muted-foreground shadow-sm">
+        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#e55347]" />
+        Loading…
+      </div>
+    </div>
+  );
+}
+
 interface ControlPanelProps {
   /** Open the settings modal at this section on mount (e.g. after onboarding). */
   initialSettingsSection?: string;
@@ -90,8 +102,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   const [showSettings, setShowSettings] = useState(!!initialSettingsSection);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [showPostMigration, setShowPostMigration] = useState(false);
-  const [limitData, setLimitData] = useState<{ wordsUsed: number; limit: number } | null>(null);
-  const hasShownUpgradePrompt = useRef(false);
+  const [creditShortage, setCreditShortage] = useState<CreditShortage | null>(null);
   const [settingsSection, setSettingsSection] = useState<string | undefined>(
     initialSettingsSection
   );
@@ -254,38 +265,21 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   }, [updateError, toast, t]);
 
   useEffect(() => {
-    const dispose = window.electronAPI?.onLimitReached?.(
-      (data: { wordsUsed: number; limit: number }) => {
-        if (!hasShownUpgradePrompt.current) {
-          hasShownUpgradePrompt.current = true;
-          setLimitData(data);
-          setShowUpgradePrompt(true);
-        } else {
-          toast({
-            title: t("controlPanel.limit.weeklyTitle"),
-            description: t("controlPanel.limit.weeklyDescription"),
-            duration: 5000,
-          });
-        }
-      }
-    );
-
-    return () => {
-      dispose?.();
-    };
-  }, [toast, t]);
-
-  useEffect(() => {
-    if (!usage?.isPastDue || !usage.hasLoaded) return;
-    if (sessionStorage.getItem("pastDueNotified")) return;
-    sessionStorage.setItem("pastDueNotified", "true");
-    toast({
-      title: t("controlPanel.billing.pastDueTitle"),
-      description: t("controlPanel.billing.pastDueDescription"),
-      variant: "destructive",
-      duration: 8000,
+    const dispose = window.electronAPI?.onLimitReached?.((data: unknown) => {
+      const shortage = (data ?? {}) as {
+        availableCredits?: string | number | null;
+        requiredCredits?: string | number | null;
+        available_credits?: string | number | null;
+        required_credits?: string | number | null;
+      };
+      setCreditShortage({
+        availableCredits: shortage.availableCredits ?? shortage.available_credits,
+        requiredCredits: shortage.requiredCredits ?? shortage.required_credits,
+      });
+      setShowUpgradePrompt(true);
     });
-  }, [usage?.isPastDue, usage?.hasLoaded, toast, t]);
+    return () => dispose?.();
+  }, []);
 
   useEffect(() => {
     if (!WORKSPACES_ENABLED) return;
@@ -773,6 +767,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
 
   return (
     <div className="h-screen bg-background flex flex-col">
+      <ConnectionStatus />
       <MeetingRecordingMount />
       <MeetingRecordingPill
         activeView={activeView}
@@ -803,8 +798,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       <UpgradePrompt
         open={showUpgradePrompt}
         onOpenChange={setShowUpgradePrompt}
-        wordsUsed={limitData?.wordsUsed}
-        limit={limitData?.limit}
+        shortage={creditShortage}
       />
 
       <PostMigrationOnboarding
@@ -814,7 +808,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       />
 
       {showSettings && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<PanelLoadingFallback />}>
           <SettingsModal
             open={showSettings}
             onOpenChange={(open) => {
@@ -827,7 +821,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       )}
 
       {showReferrals && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<PanelLoadingFallback />}>
           <ReferralModal open={showReferrals} onOpenChange={setShowReferrals} />
         </Suspense>
       )}
@@ -844,7 +838,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       )}
 
       {showSearch && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<PanelLoadingFallback />}>
           <CommandSearch
             open={showSearch}
             onOpenChange={setShowSearch}
@@ -889,19 +883,11 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               setSettingsSection(undefined);
               setShowSettings(true);
             }}
-            onOpenReferrals={() => setShowReferrals(true)}
-            onUpgrade={() => {
-              setSettingsSection("plansBilling");
-              setShowSettings(true);
-            }}
-            isOverLimit={usage?.isOverLimit ?? false}
             userName={user?.name}
             userEmail={user?.email}
             userImage={user?.image}
             isSignedIn={isSignedIn}
             authLoaded={authLoaded}
-            isProUser={!!(usage?.isSubscribed || usage?.isTrial)}
-            usageLoaded={usage?.hasLoaded ?? false}
             updateAction={
               !updateStatus.isDevelopment &&
               (updateStatus.updateAvailable ||
@@ -950,38 +936,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
             )}
           </div>
           <div className="flex-1 overflow-y-auto pt-1">
-            {usage?.isPastDue && activeView === "home" && (
-              <div className="max-w-3xl mx-auto w-full mb-3">
-                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3">
-                  <div className="flex items-start gap-3">
-                    <div className="shrink-0 w-8 h-8 rounded-md bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
-                      <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-amber-900 dark:text-amber-200 mb-0.5">
-                        {t("controlPanel.billing.pastDueTitle")}
-                      </p>
-                      <p className="text-xs text-amber-700 dark:text-amber-300/80 mb-2">
-                        {t("controlPanel.billing.bannerDescription", {
-                          limit: usage.limit.toLocaleString(),
-                        })}
-                      </p>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => {
-                          setSettingsSection("account");
-                          setShowSettings(true);
-                        }}
-                      >
-                        {t("controlPanel.billing.updatePayment")}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
             {(gpuAccelAvailable.transcription || gpuAccelAvailable.intelligence) &&
               activeView === "home" &&
               !gpuBannerDismissed && (
@@ -1051,12 +1005,12 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               />
             )}
             {activeView === "chat" && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<PanelLoadingFallback />}>
                 <ChatView />
               </Suspense>
             )}
             {activeView === "personal-notes" && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<PanelLoadingFallback />}>
                 <PersonalNotesView
                   onOpenSettings={(section) => {
                     setSettingsSection(section);
@@ -1069,12 +1023,12 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               </Suspense>
             )}
             {activeView === "dictionary" && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<PanelLoadingFallback />}>
                 <DictionaryView />
               </Suspense>
             )}
             {activeView === "upload" && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<PanelLoadingFallback />}>
                 <UploadAudioView
                   onNoteCreated={(noteId, folderId) => {
                     setActiveNoteId(noteId);
@@ -1089,11 +1043,11 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               </Suspense>
             )}
             {activeView === "integrations" && (
-              <Suspense fallback={null}>
+              <Suspense fallback={<PanelLoadingFallback />}>
                 <IntegrationsView
-                  isPaid={!!(usage?.isSubscribed || usage?.isTrial)}
+                  isPaid={!!(usage?.isSubscribed)}
                   onUpgrade={() => {
-                    setSettingsSection("plansBilling");
+                    setSettingsSection("account");
                     setShowSettings(true);
                   }}
                 />

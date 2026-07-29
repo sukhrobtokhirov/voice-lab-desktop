@@ -1,148 +1,137 @@
-import { useEffect, useRef } from "react";
-import { useTranslation } from "react-i18next";
-import { useUsage } from "../hooks/useUsage";
-import { useToast } from "./ui/useToast";
-import { Badge } from "./ui/badge";
-import { Progress } from "./ui/progress";
 import { Button } from "./ui/button";
-import { useSettingsStore } from "../stores/settingsStore";
+import { Badge } from "./ui/badge";
+import { Skeleton } from "./ui/skeleton";
+import { useUsage } from "../hooks/useUsage";
+import { useTranslation } from "react-i18next";
 
-export default function UsageDisplay() {
-  const { t } = useTranslation();
+function formatCredits(value: string) {
+  const number = Number(value);
+  return Number.isFinite(number)
+    ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(number)
+    : value;
+}
+
+function formatUpdatedAt(value: string | null, language: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat(language, {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+export default function UsageDisplay({ compact = false }: { compact?: boolean }) {
+  const { t, i18n } = useTranslation();
   const usage = useUsage();
-  const { toast } = useToast();
-  const hasShownApproachingToast = useRef(false);
-
-  // One-time toast when approaching limit (>80%)
-  useEffect(() => {
-    if (usage?.isApproachingLimit && !hasShownApproachingToast.current) {
-      hasShownApproachingToast.current = true;
-      toast({
-        title: t("usage.approachingLimit"),
-        description: t("usage.approachingLimitDescription", {
-          wordsUsed: usage.wordsUsed.toLocaleString(),
-          limit: usage.limit.toLocaleString(),
-        }),
-        duration: 6000,
-      });
-    }
-  }, [usage?.isApproachingLimit, usage?.wordsUsed, usage?.limit, toast, t]);
-
   if (!usage) return null;
+  const updatedAt = formatUpdatedAt(usage.updatedAt, i18n.language);
 
-  // Pro plan or trial — minimal display
-  if (usage.isSubscribed) {
+  if (!usage.hasLoaded || usage.isLoading) {
     return (
-      <div className="bg-card border border-border rounded-xl p-4 space-y-3">
+      <div
+        className={
+          compact
+            ? "rounded-xl border border-[#e6ddd1] bg-white/55 p-3 dark:border-white/10 dark:bg-white/4"
+            : "rounded-xl border border-border bg-card p-4"
+        }
+        aria-label={t("common.loading", { defaultValue: "Loading wallet" })}
+      >
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-foreground">{t("usage.yourPlan")}</span>
-          {usage.isTrial ? (
-            <Badge variant="outline" className="text-primary border-primary/30">
-              {t("usage.trial", { days: usage.trialDaysLeft, count: usage.trialDaysLeft })}
-            </Badge>
-          ) : (
-            <Badge variant="success">
-              {usage.plan === "business" ? t("usage.business") : t("usage.pro")}
-            </Badge>
-          )}
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-5 w-12 rounded-full" />
         </div>
-        <p className="text-sm text-muted-foreground">
-          {usage.isTrial ? t("usage.unlimitedTrial") : t("usage.unlimited")}
-        </p>
-        {!usage.isTrial && (
-          <Button variant="outline" size="sm" onClick={() => usage.openBillingPortal()}>
-            {t("usage.manageSubscription")}
-          </Button>
-        )}
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Skeleton className="h-10 rounded-lg" />
+          <Skeleton className="h-10 rounded-lg" />
+        </div>
       </div>
     );
   }
 
-  // Free plan
-  const percentage = usage.limit > 0 ? Math.min(100, (usage.wordsUsed / usage.limit) * 100) : 0;
-  const progressColor =
-    percentage >= 100
-      ? "[&>div]:bg-destructive"
-      : percentage >= 80
-        ? "[&>div]:bg-warning"
-        : "[&>div]:bg-primary";
-
   return (
-    <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-foreground">{t("usage.weeklyUsage")}</span>
-        {usage.isOverLimit ? (
-          <Badge variant="warning">{t("usage.limitReached")}</Badge>
-        ) : (
-          <Badge variant="outline">{t("usage.free")}</Badge>
-        )}
-      </div>
-
-      <div className="space-y-1.5">
-        <Progress
-          value={percentage}
-          className={`h-2 transition-colors duration-500 ${progressColor}`}
-        />
-        <div className="flex items-center justify-between">
-          <span className="text-sm tabular-nums text-muted-foreground">
-            {usage.wordsUsed.toLocaleString()} / {usage.limit.toLocaleString()}
-          </span>
-          {usage.isApproachingLimit && (
-            <span className="text-xs text-warning">
-              {t("usage.wordsRemaining", {
-                count: usage.wordsRemaining,
-                remaining: usage.wordsRemaining.toLocaleString(),
+    <div
+      className={
+        compact
+          ? "space-y-3 rounded-xl border border-[#e6ddd1] bg-white/55 p-3 dark:border-white/10 dark:bg-white/4"
+          : "space-y-4 rounded-xl border border-border bg-card p-4"
+      }
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            {t("desktop.wallet.title", { defaultValue: "AI Credit wallet" })}
+          </p>
+          {!compact && (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t("desktop.wallet.shared", {
+                defaultValue: "One balance across VoiceLab products",
               })}
-            </span>
-          )}
-          {!usage.isApproachingLimit && !usage.isOverLimit && (
-            <span className="text-xs text-muted-foreground">{t("usage.rollingLimit")}</span>
+            </p>
           )}
         </div>
+        <Badge variant="outline" className="capitalize">
+          {usage.plan}
+        </Badge>
       </div>
 
-      {usage.isOverLimit ? (
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            className="bg-primary hover:bg-primary/90"
-            onClick={() => usage.openCheckout()}
-          >
-            {t("usage.upgradeToPro")}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              const s = useSettingsStore.getState();
-              s.setTranscriptionMode("providers");
-              s.setCloudTranscriptionMode("byok");
-              window.location.reload();
-            }}
-          >
-            {t("usage.useYourOwnKey")}
+      {usage.error ? (
+        <div className="space-y-2">
+          <p className="text-sm text-destructive">
+            {t("desktop.wallet.unavailable", {
+              defaultValue: "Wallet is temporarily unavailable.",
+            })}
+          </p>
+          <Button size="sm" variant="outline" onClick={() => void usage.refetch()}>
+            {t("common.tryAgain", { defaultValue: "Try again" })}
           </Button>
         </div>
-      ) : usage.isApproachingLimit ? (
+      ) : (
+        <div className={compact ? "grid grid-cols-2 gap-2" : "grid grid-cols-3 gap-3"}>
+          {!compact && (
+            <CreditValue
+              label={t("desktop.wallet.balance", { defaultValue: "Balance" })}
+              value={usage.balanceCredits}
+            />
+          )}
+          <CreditValue
+            label={t("desktop.wallet.available", { defaultValue: "Available" })}
+            value={usage.availableCredits}
+          />
+          <CreditValue
+            label={t("desktop.wallet.reserved", { defaultValue: "Reserved" })}
+            value={usage.reservedCredits}
+          />
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">
+          {updatedAt
+            ? t("desktop.wallet.updated", {
+                defaultValue: "Updated {{time}}",
+                time: updatedAt,
+              })
+            : t("desktop.wallet.live", { defaultValue: "Live balance" })}
+        </p>
         <Button
           size="sm"
-          className="bg-primary hover:bg-primary/90"
-          onClick={() => usage.openCheckout()}
+          variant={compact ? "ghost" : "default"}
+          className={compact ? "h-7 px-2 text-xs text-[#d64d42] hover:text-[#b83e35]" : ""}
+          onClick={() => void usage.openBillingPortal()}
         >
-          {t("usage.upgradeToPro")}
+          {t("desktop.wallet.manage", { defaultValue: "Manage billing" })}
         </Button>
-      ) : (
-        <a
-          href="#"
-          className="text-primary hover:text-primary/80 text-sm inline-block"
-          onClick={(e) => {
-            e.preventDefault();
-            usage.openCheckout();
-          }}
-        >
-          {t("usage.upgradeUnlimited")}
-        </a>
-      )}
+      </div>
+    </div>
+  );
+}
+
+function CreditValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-base font-semibold tabular-nums">{formatCredits(value)}</p>
     </div>
   );
 }

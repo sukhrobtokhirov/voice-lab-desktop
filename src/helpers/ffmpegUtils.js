@@ -508,6 +508,38 @@ async function prepareAishaSttAudio(input, options = {}) {
   }
 }
 
+function getAudioDurationSeconds(inputPath) {
+  return new Promise((resolve, reject) => {
+    const processHandle = spawn(getFFmpegPath(), [
+      "-hide_banner",
+      "-i",
+      inputPath,
+    ]);
+    let stderr = "";
+    processHandle.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+      if (stderr.length > 64 * 1024) stderr = stderr.slice(-64 * 1024);
+    });
+    processHandle.on("error", reject);
+    processHandle.on("close", () => {
+      const match = stderr.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+      if (!match) {
+        reject(new Error("Audio duration could not be measured"));
+        return;
+      }
+      const duration =
+        Number(match[1]) * 3600
+        + Number(match[2]) * 60
+        + Number(match[3]);
+      if (!Number.isFinite(duration) || duration <= 0) {
+        reject(new Error("Audio duration is invalid"));
+        return;
+      }
+      resolve(duration);
+    });
+  });
+}
+
 module.exports = {
   getFFmpegPath,
   isWavFormat,
@@ -519,5 +551,6 @@ module.exports = {
   mergeAudioSegments,
   detectAudioContainer,
   prepareAishaSttAudio,
+  getAudioDurationSeconds,
   clearCache,
 };

@@ -1,283 +1,165 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "./useAuth";
-import { CACHE_CONFIG } from "../config/constants";
-import { withSessionRefresh } from "../lib/auth";
 
-interface UsageData {
-  wordsUsed: number;
-  wordsRemaining: number;
-  limit: number;
+export interface CreditWalletData {
+  balanceCredits: string;
+  reservedCredits: string;
+  availableCredits: string;
   plan: string;
-  status: string;
-  isSubscribed: boolean;
-  isTrial: boolean;
-  trialDaysLeft: number | null;
-  currentPeriodEnd: string | null;
-  billingInterval: "monthly" | "annual" | null;
-  resetAt: string;
+  estimatedCredits: string | null;
+  chargedCredits: string | null;
+  limits: Record<string, unknown>;
+  topUpUrl: string | null;
+  updatedAt: string | null;
+  supportedLanguages: string[];
+  autoDetectionSupported: boolean;
 }
 
-interface UseUsageResult {
-  plan: string;
+interface UseUsageResult extends CreditWalletData {
   status: string;
-  isPastDue: boolean;
-  wordsUsed: number;
-  wordsRemaining: number;
-  limit: number;
   isSubscribed: boolean;
-  isTrial: boolean;
-  trialDaysLeft: number | null;
-  currentPeriodEnd: string | null;
-  billingInterval: "monthly" | "annual" | null;
   isOverLimit: boolean;
-  isApproachingLimit: boolean;
-  resetAt: string | null;
   isLoading: boolean;
   hasLoaded: boolean;
   error: string | null;
+  errorCode: string | null;
   checkoutLoading: boolean;
   refetch: () => Promise<void>;
-  openCheckout: (opts?: {
-    plan?: "monthly" | "annual";
-    tier?: "pro" | "business";
-  }) => Promise<{ success: boolean; error?: string }>;
+  openCheckout: () => Promise<{ success: boolean; error?: string }>;
   openBillingPortal: () => Promise<{ success: boolean; error?: string }>;
-  switchPlan: (opts: {
-    plan: "monthly" | "annual";
-    tier: "pro" | "business";
-  }) => Promise<{ success: boolean; alreadyOnPlan?: boolean; error?: string }>;
-  previewSwitchPlan: (opts: { plan: "monthly" | "annual"; tier: "pro" | "business" }) => Promise<{
-    success: boolean;
-    immediateAmount?: number;
-    currency?: string;
-    currentPriceAmount?: number;
-    currentInterval?: string;
-    newPriceAmount?: number;
-    newInterval?: string;
-    nextBillingDate?: string;
-    alreadyOnPlan?: boolean;
-    error?: string;
-  }>;
 }
 
-const USAGE_CACHE_TTL = CACHE_CONFIG.API_KEY_TTL; // 1 hour
+const EMPTY: CreditWalletData = {
+  balanceCredits: "0",
+  reservedCredits: "0",
+  availableCredits: "0",
+  plan: "free",
+  estimatedCredits: null,
+  chargedCredits: null,
+  limits: {},
+  topUpUrl: null,
+  updatedAt: null,
+  supportedLanguages: [],
+  autoDetectionSupported: false,
+};
 
 export function useUsage(): UseUsageResult | null {
   const { isSignedIn, isLoaded } = useAuth();
-  const [data, setData] = useState<UsageData | null>(null);
+  const [data, setData] = useState<CreditWalletData>(EMPTY);
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const checkoutInFlightRef = useRef(false);
-  const lastFetchRef = useRef<number>(0);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const inFlight = useRef<Promise<void> | null>(null);
+  const billingWindowPending = useRef(false);
 
   const fetchUsage = useCallback(async () => {
-    if (!window.electronAPI?.cloudUsage) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      await withSessionRefresh(async () => {
-        const result = await window.electronAPI.cloudUsage();
-        if (result.success) {
-          setData({
-            wordsUsed: result.wordsUsed ?? 0,
-            wordsRemaining: result.wordsRemaining ?? 0,
-            limit: result.limit ?? 2000,
-            plan: result.plan ?? "free",
-            status: result.status ?? "active",
-            isSubscribed: result.isSubscribed ?? false,
-            isTrial: result.isTrial ?? false,
-            trialDaysLeft: result.trialDaysLeft ?? null,
-            currentPeriodEnd: result.currentPeriodEnd ?? null,
-            billingInterval: result.billingInterval ?? null,
-            resetAt: result.resetAt ?? "rolling",
-          });
-          lastFetchRef.current = Date.now();
-          localStorage.setItem("isSubscribed", String(result.isSubscribed ?? false));
-        } else {
-          const error: any = new Error(result.error || "Failed to fetch usage");
-          error.code = result.code;
-          throw error;
+    if (inFlight.current) return inFlight.current;
+    const task = (async () => {
+      setIsLoading(true);
+      setError(null);
+      setErrorCode(null);
+      try {
+        const result = await window.electronAPI.cloudUsage?.();
+        if (!result?.success) {
+          setError(result?.error || "Unable to load AI Credit wallet.");
+          setErrorCode(result?.code || "WALLET_UNAVAILABLE");
+          return;
         }
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch usage");
-    } finally {
-      setIsLoading(false);
-      setHasLoaded(true);
-    }
+        const response = result as typeof result & {
+          supported_languages?: string[];
+          supportedLanguages?: string[];
+          auto_detection_supported?: boolean;
+          autoDetectionSupported?: boolean;
+        };
+        const limits = (result.limits ?? {}) as Record<string, unknown>;
+        setData({
+          balanceCredits: String(result.balanceCredits ?? "0"),
+          reservedCredits: String(result.reservedCredits ?? "0"),
+          availableCredits: String(result.availableCredits ?? "0"),
+          plan: result.plan ?? "free",
+          estimatedCredits:
+            result.estimatedCredits == null ? null : String(result.estimatedCredits),
+          chargedCredits: result.chargedCredits == null ? null : String(result.chargedCredits),
+          limits,
+          topUpUrl: result.topUpUrl ?? null,
+          updatedAt: result.updatedAt ?? null,
+          supportedLanguages:
+            response.supportedLanguages ??
+            response.supported_languages ??
+            (Array.isArray(limits.supported_languages)
+              ? (limits.supported_languages as string[])
+              : []),
+          autoDetectionSupported: Boolean(
+            response.autoDetectionSupported ??
+              response.auto_detection_supported ??
+              limits.auto_detection_supported
+          ),
+        });
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Unable to load AI Credit wallet.");
+        setErrorCode("WALLET_UNAVAILABLE");
+      } finally {
+        setIsLoading(false);
+        setHasLoaded(true);
+      }
+    })();
+    inFlight.current = task.finally(() => {
+      inFlight.current = null;
+    });
+    return inFlight.current;
   }, []);
-
-  const pendingRefetchRef = useRef(false);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) {
-      lastFetchRef.current = 0;
-      setData(null);
+      setData(EMPTY);
+      setIsLoading(false);
       return;
     }
-
-    const shouldFetch = Date.now() - lastFetchRef.current > USAGE_CACHE_TTL;
-    if (shouldFetch) {
-      fetchUsage();
-    } else {
-      setIsLoading(false);
-      setHasLoaded(true);
-    }
-
-    const handleFocus = () => {
-      if (pendingRefetchRef.current) {
-        pendingRefetchRef.current = false;
-        lastFetchRef.current = 0;
-        fetchUsage();
-      }
+    void fetchUsage();
+    const changed = () => void fetchUsage();
+    const refreshAfterBilling = () => {
+      if (!billingWindowPending.current) return;
+      billingWindowPending.current = false;
+      void fetchUsage();
     };
-    const handleUsageChanged = () => {
-      lastFetchRef.current = 0;
-      fetchUsage();
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") refreshAfterBilling();
     };
-    const handleUpgradeSuccess = async () => {
-      lastFetchRef.current = 0;
-      await fetchUsage();
-      // Retry if webhook hasn't updated DB yet
-      for (let i = 0; i < 3; i++) {
-        const result = await window.electronAPI.cloudUsage();
-        if (result.success && result.isSubscribed) break;
-        await new Promise((r) => setTimeout(r, 2000 * (i + 1)));
-        lastFetchRef.current = 0;
-        await fetchUsage();
-      }
-    };
-    window.addEventListener("focus", handleFocus);
-    window.addEventListener("usage-changed", handleUsageChanged);
-    window.addEventListener("upgrade-success", handleUpgradeSuccess);
+    window.addEventListener("usage-changed", changed);
+    window.addEventListener("focus", refreshAfterBilling);
+    document.addEventListener("visibilitychange", handleVisibility);
     return () => {
-      window.removeEventListener("focus", handleFocus);
-      window.removeEventListener("usage-changed", handleUsageChanged);
-      window.removeEventListener("upgrade-success", handleUpgradeSuccess);
+      window.removeEventListener("usage-changed", changed);
+      window.removeEventListener("focus", refreshAfterBilling);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [isLoaded, isSignedIn, fetchUsage]);
 
-  const openCheckout = useCallback(
-    async (opts?: {
-      plan?: "monthly" | "annual";
-      tier?: "pro" | "business";
-    }): Promise<{ success: boolean; error?: string }> => {
-      if (checkoutInFlightRef.current)
-        return { success: false, error: "Checkout already in progress" };
-      if (!window.electronAPI?.cloudCheckout || !window.electronAPI?.openExternal) {
-        return { success: false, error: "App not ready" };
-      }
-      checkoutInFlightRef.current = true;
-      setCheckoutLoading(true);
-      try {
-        const result = await window.electronAPI.cloudCheckout(opts);
-        if (result.success && result.url) {
-          pendingRefetchRef.current = true;
-          await window.electronAPI.openExternal(result.url);
-          return { success: true };
-        }
-        return { success: false, error: result.error || "Failed to start checkout" };
-      } finally {
-        checkoutInFlightRef.current = false;
-        setCheckoutLoading(false);
-      }
-    },
-    []
-  );
-
-  const openBillingPortal = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
-    if (checkoutInFlightRef.current) return { success: false, error: "Already loading" };
-    if (!window.electronAPI?.cloudBillingPortal || !window.electronAPI?.openExternal) {
-      return { success: false, error: "App not ready" };
+  const openBilling = useCallback(async () => {
+    if (!window.electronAPI.openVoiceLabBilling) {
+      return { success: false, error: "Billing is unavailable." };
     }
-    checkoutInFlightRef.current = true;
-    setCheckoutLoading(true);
-    try {
-      const result = await window.electronAPI.cloudBillingPortal();
-      if (result.success && result.url) {
-        pendingRefetchRef.current = true;
-        await window.electronAPI.openExternal(result.url);
-        return { success: true };
-      }
-      return { success: false, error: result.error || "Failed to open billing portal" };
-    } finally {
-      checkoutInFlightRef.current = false;
-      setCheckoutLoading(false);
-    }
+    const result = await window.electronAPI.openVoiceLabBilling("dictate");
+    if (result?.success) billingWindowPending.current = true;
+    return result;
   }, []);
 
-  const switchPlan = useCallback(
-    async (opts: {
-      plan: "monthly" | "annual";
-      tier: "pro" | "business";
-    }): Promise<{ success: boolean; alreadyOnPlan?: boolean; error?: string }> => {
-      if (checkoutInFlightRef.current) return { success: false, error: "Already loading" };
-      if (!window.electronAPI?.cloudSwitchPlan) {
-        return { success: false, error: "App not ready" };
-      }
-      checkoutInFlightRef.current = true;
-      setCheckoutLoading(true);
-      try {
-        const result = await window.electronAPI.cloudSwitchPlan(opts);
-        if (result.success) {
-          await fetchUsage();
-        }
-        return result;
-      } finally {
-        checkoutInFlightRef.current = false;
-        setCheckoutLoading(false);
-      }
-    },
-    [fetchUsage]
-  );
-
-  const previewSwitchPlan = useCallback(
-    async (opts: { plan: "monthly" | "annual"; tier: "pro" | "business" }) => {
-      if (!window.electronAPI?.cloudPreviewSwitch) {
-        return { success: false as const, error: "App not ready" };
-      }
-      return window.electronAPI.cloudPreviewSwitch(opts);
-    },
-    []
-  );
-
   if (!isSignedIn) return null;
-
-  const wordsUsed = data?.wordsUsed ?? 0;
-  const limit = data?.limit ?? 2000;
-  const isSubscribed = data?.isSubscribed ?? false;
-  const status = data?.status ?? "active";
-  const isPastDue = (data?.plan === "pro" || data?.plan === "business") && status === "past_due";
-  const isOverLimit = !isSubscribed && limit > 0 && wordsUsed >= limit;
-  const isApproachingLimit = !isSubscribed && limit > 0 && wordsUsed >= limit * 0.8 && !isOverLimit;
+  const available = Number(data.availableCredits);
 
   return {
-    plan: data?.plan ?? "free",
-    status,
-    isPastDue,
-    wordsUsed,
-    wordsRemaining: data?.wordsRemaining ?? (limit > 0 ? limit - wordsUsed : -1),
-    limit,
-    isSubscribed,
-    isTrial: data?.isTrial ?? false,
-    trialDaysLeft: data?.trialDaysLeft ?? null,
-    currentPeriodEnd: data?.currentPeriodEnd ?? null,
-    billingInterval: data?.billingInterval ?? null,
-    isOverLimit,
-    isApproachingLimit,
-    resetAt: data?.resetAt ?? null,
+    ...data,
+    status: errorCode ? "unavailable" : "active",
+    isSubscribed: data.plan !== "free",
+    isOverLimit: Number.isFinite(available) && available <= 0,
     isLoading,
     hasLoaded,
     error,
-    checkoutLoading,
+    errorCode,
+    checkoutLoading: false,
     refetch: fetchUsage,
-    openCheckout,
-    openBillingPortal,
-    switchPlan,
-    previewSwitchPlan,
+    openCheckout: openBilling,
+    openBillingPortal: openBilling,
   };
 }
