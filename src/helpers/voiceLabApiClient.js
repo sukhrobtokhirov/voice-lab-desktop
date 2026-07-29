@@ -7,6 +7,7 @@ const STATUS_CODE = { 400: "INVALID_REQUEST", 401: "AUTH_EXPIRED", 402: "INSUFFI
 
 function normalizeErrorCode(status, body) {
   const serverCode = String(body?.code || body?.error_code || "").toUpperCase();
+  if (serverCode.startsWith("SYNC_")) return serverCode;
   if (status === 403) return "ENTITLEMENT_REQUIRED";
   if (status === 409) return serverCode === "DESKTOP_DEVICE_LIMIT" ? "DEVICE_LIMIT" : "IDEMPOTENCY_CONFLICT";
   if (status === 413) return "AUDIO_LIMIT_EXCEEDED";
@@ -281,8 +282,11 @@ class VoiceLabApiClient {
     return result;
   }
 
-  async getSyncBootstrap() {
-    return this.authenticatedFetch("/api/v1/desktop/sync/bootstrap/", {
+  async getSyncBootstrap(snapshotCursor = null) {
+    const query = new URLSearchParams();
+    if (snapshotCursor) query.set("snapshot_cursor", snapshotCursor);
+    const suffix = query.size > 0 ? `?${query}` : "";
+    return this.authenticatedFetch(`/api/v1/desktop/sync/bootstrap/${suffix}`, {
       method: "GET",
       timeoutMs: 20_000,
     });

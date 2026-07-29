@@ -1,4 +1,4 @@
-const { app, screen, BrowserWindow, shell, dialog } = require("electron");
+const { app, screen, BrowserWindow, dialog } = require("electron");
 const debugLogger = require("./debugLogger");
 const HotkeyManager = require("./hotkeyManager");
 const { isGlobeLikeHotkey } = HotkeyManager;
@@ -7,6 +7,11 @@ const MenuManager = require("./menuManager");
 const DevServerManager = require("./devServerManager");
 const dockManager = require("./dockManager");
 const { i18nMain } = require("./i18nMain");
+const {
+  hardenWindow,
+  isAllowedExternalUrl,
+  openExternalUrl: openValidatedExternalUrl,
+} = require("./windowSecurity");
 const { DEV_SERVER_PORT } = DevServerManager;
 const {
   MAIN_WINDOW_CONFIG,
@@ -69,6 +74,7 @@ class WindowManager {
       ...MAIN_WINDOW_CONFIG,
       ...position,
     });
+    hardenWindow(this.mainWindow);
 
     this.setMainWindowInteractivity(false);
     this.registerMainWindowEvents();
@@ -612,7 +618,19 @@ class WindowManager {
   }
 
   openExternalUrl(url, showError = true) {
-    shell.openExternal(url).catch((error) => {
+    if (!isAllowedExternalUrl(url)) {
+      if (showError) {
+        dialog.showErrorBox(
+          i18nMain.t("dialog.openLink.title"),
+          i18nMain.t("dialog.openLink.message", {
+            url: "Blocked unsafe URL",
+            error: "Only HTTPS and mailto links are allowed",
+          })
+        );
+      }
+      return;
+    }
+    openValidatedExternalUrl(url).catch((error) => {
       if (showError) {
         dialog.showErrorBox(
           i18nMain.t("dialog.openLink.title"),
@@ -636,34 +654,7 @@ class WindowManager {
     }
 
     this.controlPanelWindow = new BrowserWindow(CONTROL_PANEL_CONFIG);
-
-    this.controlPanelWindow.webContents.on("will-navigate", (event, url) => {
-      const appUrl = DevServerManager.getAppUrl(true);
-      const controlPanelUrl = appUrl.startsWith("http") ? appUrl : `file://${appUrl}`;
-
-      if (
-        url.startsWith(controlPanelUrl) ||
-        url.startsWith("file://") ||
-        url.startsWith("devtools://")
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      this.openExternalUrl(url);
-    });
-
-    this.controlPanelWindow.webContents.setWindowOpenHandler(({ url }) => {
-      this.openExternalUrl(url);
-      return { action: "deny" };
-    });
-
-    this.controlPanelWindow.webContents.on("did-create-window", (childWindow, details) => {
-      childWindow.close();
-      if (details.url && !details.url.startsWith("devtools://")) {
-        this.openExternalUrl(details.url, false);
-      }
-    });
+    hardenWindow(this.controlPanelWindow);
 
     const visibilityTimer = setTimeout(() => {
       if (!this.controlPanelWindow || this.controlPanelWindow.isDestroyed()) {
@@ -756,6 +747,7 @@ class WindowManager {
     }
 
     this.agentWindow = new BrowserWindow(AGENT_OVERLAY_CONFIG);
+    hardenWindow(this.agentWindow);
 
     this.agentWindow.once("ready-to-show", () => {
       WindowPositionUtil.setupAlwaysOnTop(this.agentWindow);
@@ -834,6 +826,7 @@ class WindowManager {
     }
 
     this.transcriptionPreviewWindow = new BrowserWindow(TRANSCRIPTION_PREVIEW_CONFIG);
+    hardenWindow(this.transcriptionPreviewWindow);
 
     this.transcriptionPreviewWindow.on("closed", () => {
       this.transcriptionPreviewWindow = null;
@@ -1193,6 +1186,7 @@ class WindowManager {
       ...NOTIFICATION_WINDOW_CONFIG,
       ...position,
     });
+    hardenWindow(this.notificationWindow);
 
     // Keep the prompt visible to the user but out of screen shares and recordings.
     this.notificationWindow.setContentProtection(true);
@@ -1290,6 +1284,7 @@ class WindowManager {
       ...NOTIFICATION_WINDOW_CONFIG,
       ...position,
     });
+    hardenWindow(this.updateNotificationWindow);
 
     WindowPositionUtil.setupAlwaysOnTop(this.updateNotificationWindow);
 

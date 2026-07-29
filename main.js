@@ -818,28 +818,6 @@ async function startApp() {
     cliBridge = null;
   });
 
-  // Electron's file:// renderer sends Origin: null, which Better Auth's
-  // trustedOrigins check rejects. Spoof Origin to the request's own URL so
-  // calls to OpenWhispr's auth and API hosts are treated as same-origin.
-  session.defaultSession.webRequest.onBeforeSendHeaders(
-    {
-      urls: [
-        "https://auth.openwhispr.com/*",
-        "https://api.openwhispr.com/*",
-        "http://localhost:3000/*",
-        "http://127.0.0.1:3000/*",
-      ],
-    },
-    (details, callback) => {
-      try {
-        details.requestHeaders["Origin"] = new URL(details.url).origin;
-      } catch {
-        // malformed URL — leave Origin as-is
-      }
-      callback({ requestHeaders: details.requestHeaders });
-    }
-  );
-
   windowManager.setActivationModeCache(environmentManager.getActivationMode());
   windowManager.setFloatingIconAutoHide(environmentManager.getFloatingIconAutoHide());
   windowManager.setPanelStartPosition(environmentManager.getPanelStartPosition());
@@ -1683,6 +1661,13 @@ if (gotSingleInstanceLock) {
   app.on("before-quit", (event) => {
     if (isShuttingDown) return;
     isShuttingDown = true;
+    try {
+      databaseManager?.sealAtRest?.();
+    } catch (error) {
+      debugLogger.error("Failed to seal local data at rest", {
+        error: error?.message,
+      });
+    }
     if (updateManager && updateManager.isQuittingForUpdate) {
       // Quit must proceed for the installer to run, so no preventDefault;
       // sidecar shutdown is best-effort (the reaper cleans up orphans on relaunch).

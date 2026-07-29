@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -3096,10 +3097,29 @@ case "system":
                           version: updateInfo.version,
                         })}
                       </p>
-                      <div
-                        className="text-xs text-muted-foreground [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:space-y-1 [&_li]:pl-1 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_a]:text-link [&_a]:underline"
-                        dangerouslySetInnerHTML={{ __html: updateInfo.releaseNotes }}
-                      />
+                      <div className="text-xs text-muted-foreground [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:space-y-1 [&_li]:pl-1 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_a]:text-link [&_a]:underline">
+                        <ReactMarkdown
+                          skipHtml
+                          components={{
+                            a: ({ href, children }) => {
+                              const safeHref =
+                                typeof href === "string" &&
+                                (href.startsWith("https://") || href.startsWith("mailto:"))
+                                  ? href
+                                  : undefined;
+                              return safeHref ? (
+                                <a href={safeHref} target="_blank" rel="noreferrer noopener">
+                                  {children}
+                                </a>
+                              ) : (
+                                <span>{children}</span>
+                              );
+                            },
+                          }}
+                        >
+                          {updateInfo.releaseNotes}
+                        </ReactMarkdown>
+                      </div>
                     </div>
                   )}
                 </SettingsPanelRow>

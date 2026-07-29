@@ -17,7 +17,13 @@ export class CloudApiError extends Error {
   }
 }
 
-async function cloudRequest<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
+type WorkspaceApiMethod = "GET" | "POST" | "PATCH" | "DELETE";
+
+async function cloudRequest<T = unknown>(
+  method: WorkspaceApiMethod,
+  path: string,
+  body?: unknown
+): Promise<T> {
   if (
     ["/api/dictionary/", "/api/snippets/", "/api/notes/", "/api/transcriptions/"].some(
       (prefix) => path.startsWith(prefix)
@@ -29,7 +35,7 @@ async function cloudRequest<T = unknown>(method: string, path: string, body?: un
       "LEGACY_SYNC_DISABLED"
     );
   }
-  const result = (await window.electronAPI?.cloudApiRequest?.({
+  const result = (await window.electronAPI?.workspaceApiRequest?.({
     method,
     path,
     body,

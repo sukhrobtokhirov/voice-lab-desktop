@@ -1,4 +1,5 @@
 const { autoUpdater } = require("electron-updater");
+const { publicUpdateInfo } = require("./helpers/releaseNotes");
 
 class UpdateManager {
   constructor() {
@@ -78,19 +79,15 @@ class UpdateManager {
       "update-available": (info) => {
         this.updateAvailable = true;
         if (info) {
-          this.lastUpdateInfo = {
-            version: info.version,
-            releaseDate: info.releaseDate,
-            releaseNotes: info.releaseNotes,
-            files: info.files,
-          };
+          this.lastUpdateInfo = publicUpdateInfo(info);
         }
-        this.notifyRenderers("update-available", info);
+        const publicInfo = publicUpdateInfo(info);
+        this.notifyRenderers("update-available", publicInfo);
         const nPrefs = this.windowManager?.notificationPrefs || {};
         const notifAllowed =
           nPrefs.notificationsEnabled !== false && nPrefs.notifyUpdates !== false;
         if (this.windowManager && info && !this._suppressNotification && notifAllowed) {
-          this.windowManager.showUpdateNotification(info).catch((err) => {
+          this.windowManager.showUpdateNotification(publicInfo).catch((err) => {
             console.error("Failed to show update notification:", err);
           });
         }
@@ -122,14 +119,9 @@ class UpdateManager {
         this.updateDownloaded = true;
         this.isDownloading = false;
         if (info) {
-          this.lastUpdateInfo = {
-            version: info.version,
-            releaseDate: info.releaseDate,
-            releaseNotes: info.releaseNotes,
-            files: info.files,
-          };
+          this.lastUpdateInfo = publicUpdateInfo(info);
         }
-        this.notifyRenderers("update-downloaded", info);
+        this.notifyRenderers("update-downloaded", publicUpdateInfo(info));
       },
     };
 
@@ -180,8 +172,7 @@ class UpdateManager {
           updateAvailable: true,
           version: result.updateInfo.version,
           releaseDate: result.updateInfo.releaseDate,
-          files: result.updateInfo.files,
-          releaseNotes: result.updateInfo.releaseNotes,
+          releaseNotes: publicUpdateInfo(result.updateInfo)?.releaseNotes || "",
         };
       } else {
         console.log("✅ Already on latest version");

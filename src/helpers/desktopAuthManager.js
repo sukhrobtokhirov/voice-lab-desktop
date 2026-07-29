@@ -529,49 +529,12 @@ class DesktopAuthManager extends EventEmitter {
     return session.accessToken;
   }
 
-  async adoptSession(payload) {
-    const accessToken = payload?.access_token || payload?.access;
-    const refreshToken = payload?.refresh_token || payload?.refresh || "";
-    if (typeof accessToken !== "string" || accessToken.length < 16) {
-      throw new DesktopAuthError("AUTH_TOKEN_RESPONSE_INVALID", "Invalid login response");
-    }
-    let user = normalizedUser(payload);
-    if (!user) user = await this._fetchValidUser(accessToken);
-    if (!user) throw new DesktopAuthError("AUTH_USER_RESPONSE_INVALID", "Authenticated user is missing");
-    const now = Date.now();
-    if (!payload?.session_id || !refreshToken) {
-      throw new DesktopAuthError(
-        "AUTH_SESSION_TYPE_REJECTED",
-        "Only scoped VoiceLab desktop sessions can be adopted"
-      );
-    }
-    const existingSession = tokenStore.getSession();
-    if (existingSession && existingSession.sessionId !== payload.session_id) {
-      await this._revokeCurrentSession();
-    }
-    tokenStore.saveSession({
-      kind: "desktop-v2",
-      accessToken,
-      accessExpiresAt: now + finiteSeconds(payload.expires_in, 900) * 1000,
-      refreshToken,
-      refreshExpiresAt: refreshToken
-        ? now + finiteSeconds(payload.refresh_expires_in, 30 * 24 * 60 * 60) * 1000
-        : null,
-      sessionId: payload?.session_id || null,
-      user,
-    });
-    this._setStatus("authenticated", { user });
-    return this.getPublicStatus();
-  }
-
   async deleteAccount() {
-    const accessToken = await this.getValidAccessToken();
-    await this._request("/api/auth/delete-account/", {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    await this.logout();
-    return { success: true };
+    const webBase = String(
+      process.env.VOICELAB_WEB_URL || process.env.AUTH_URL || "https://voicelab.uz"
+    ).replace(/\/+$/, "");
+    await shell.openExternal(`${webBase}/app/settings?section=account`, { activate: true });
+    return { success: true, openedBrowser: true };
   }
 
   async logout() {

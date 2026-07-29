@@ -99,20 +99,6 @@ export function getCachedUser(): VoiceLabUser | null {
   return cachedUser;
 }
 
-function extractTokens(payload: Record<string, unknown>) {
-  const access =
-    (payload.access_token as string) ||
-    (payload.access as string) ||
-    (payload.accessToken as string) ||
-    "";
-  const refresh =
-    (payload.refresh_token as string) ||
-    (payload.refresh as string) ||
-    (payload.refreshToken as string) ||
-    "";
-  return { access, refresh };
-}
-
 function normalizeUser(payload: unknown): VoiceLabUser | null {
   if (!payload || typeof payload !== "object") return null;
   const raw = payload as Record<string, unknown>;
@@ -130,42 +116,6 @@ function normalizeUser(payload: unknown): VoiceLabUser | null {
     name: String(userObj.full_name ?? userObj.name ?? userObj.username ?? email),
     image: (userObj.avatar as string) || (userObj.image as string) || null,
   };
-}
-
-async function persistSession(
-  access: string,
-  refresh?: string,
-  user?: VoiceLabUser | null,
-  metadata: Record<string, unknown> = {}
-) {
-  if (!access) return;
-  if (!window.electronAPI?.authAdoptSession) {
-    throw new Error("Secure desktop session storage is unavailable");
-  }
-  await window.electronAPI.authAdoptSession({
-    access_token: access,
-    refresh_token: refresh || "",
-    expires_in: Number(metadata.expires_in) || undefined,
-    refresh_expires_in: Number(metadata.refresh_expires_in) || undefined,
-    session_id: typeof metadata.session_id === "string" ? metadata.session_id : undefined,
-    user: user || undefined,
-  });
-}
-
-async function apiFetch(path: string, init: RequestInit = {}, accessToken?: string) {
-  const headers = new Headers(init.headers || {});
-  if (!headers.has("Content-Type") && init.body && typeof init.body === "string") {
-    headers.set("Content-Type", "application/json");
-  }
-  headers.set("x-voicelab-source", "desktop");
-  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
-
-  const response = await fetch(`${API_URL.replace(/\/+$/, "")}${path}`, {
-    ...init,
-    headers,
-  });
-  const data = await response.json().catch(() => ({}));
-  return { response, data: data as Record<string, unknown> };
 }
 
 export async function refreshAccessToken(): Promise<boolean> {
@@ -187,39 +137,13 @@ export async function signInWithPassword(
   email: string,
   password: string
 ): Promise<{ error?: Error; user?: VoiceLabUser | null }> {
-  const identity = email.trim();
-  const { response, data } = await apiFetch(
-    "/api/auth/login/",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        username_or_email: identity,
-        email: identity.includes("@") ? identity : undefined,
-        username: identity.includes("@") ? undefined : identity,
-        password,
-      }),
-    },
-    ""
-  );
-
-  if (!response.ok) {
-    return {
-      error: new Error(
-        String(data.error || data.detail || data.message || "Invalid credentials")
-      ),
-    };
+  void email;
+  void password;
+  const status = await window.electronAPI?.authStartBrowser?.();
+  if (status?.status === "error") {
+    return { error: new Error(status.errorCode || "Unable to open secure browser sign-in") };
   }
-
-  const tokens = extractTokens(data);
-  if (!tokens.access) {
-    return { error: new Error("Login succeeded but no access token was returned") };
-  }
-
-  const responseUser = normalizeUser(data);
-  await persistSession(tokens.access, tokens.refresh, responseUser, data);
-  updateLastSignInTime();
-  const user = (await fetchSession()) || responseUser;
-  return { user };
+  return { user: null };
 }
 
 export async function signUpWithPassword(input: {
@@ -227,42 +151,12 @@ export async function signUpWithPassword(input: {
   password: string;
   name: string;
 }): Promise<{ error?: Error; requiresVerification?: boolean; user?: VoiceLabUser | null }> {
-  const identity = input.email.trim();
-  const { response, data } = await apiFetch(
-    "/api/auth/register/",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        username_or_email: identity,
-        email: identity,
-        full_name: input.name,
-        name: input.name,
-        password: input.password,
-      }),
-    },
-    ""
-  );
-
-  if (!response.ok) {
-    return {
-      error: new Error(
-        String(data.error || data.detail || data.message || "Failed to create account")
-      ),
-    };
+  void input;
+  const status = await window.electronAPI?.authStartBrowser?.();
+  if (status?.status === "error") {
+    return { error: new Error(status.errorCode || "Unable to open secure browser registration") };
   }
-
-  const tokens = extractTokens(data);
-  const requiresVerification = Boolean(data.requiresVerification || data.requires_verification);
-
-  if (tokens.access) {
-    const responseUser = normalizeUser(data);
-    await persistSession(tokens.access, tokens.refresh, responseUser, data);
-    updateLastSignInTime();
-    const user = await fetchSession();
-    return { user, requiresVerification };
-  }
-
-  return { requiresVerification: requiresVerification || true };
+  return { requiresVerification: false, user: null };
 }
 
 /** Compatibility flag — VoiceLab auth is always “configured” via API_URL defaults. */
@@ -274,7 +168,6 @@ export async function deleteAccount(): Promise<{ error?: Error }> {
       throw new Error("Secure account deletion is unavailable");
     }
     await window.electronAPI.authDeleteAccount();
-    markSignedOutState();
     return {};
   } catch (error) {
     return { error: error instanceof Error ? error : new Error("Failed to delete account") };
