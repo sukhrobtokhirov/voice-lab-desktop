@@ -1,0 +1,12 @@
+{
+  "extends": "./electron-builder.json",
+  "appId": "uz.voicelab.desktop.staging",
+  "productName": "VoiceLab Staging",
+  "extraMetadata": {
+    "voicelabChannel": "staging"
+  },
+  "protocols": {
+    "name": "VoiceLab Staging Protocol",
+    "schemes": ["voicelab-staging"]
+  }
+}

@@ -141,6 +141,8 @@ class TrayManager {
       this.tray = new Tray(trayIcon);
 
       if (process.platform === "darwin") {
+        trayIcon.setTemplateImage(true);
+        this.tray.setImage(trayIcon);
         this.tray.setIgnoreDoubleClickEvents(true);
       }
 
@@ -159,20 +161,20 @@ class TrayManager {
 
     if (platform === "darwin") {
       if (isDevelopment) {
-        candidatePaths.push(path.join(__dirname, "..", "assets", "iconTemplate@3x.png"));
+        candidatePaths.push(path.join(__dirname, "..", "assets", "iconTemplate.png"));
       } else {
         candidatePaths.push(
-          path.join(process.resourcesPath, "src", "assets", "iconTemplate@3x.png"),
-          path.join(process.resourcesPath, "assets", "iconTemplate@3x.png"),
+          path.join(process.resourcesPath, "src", "assets", "iconTemplate.png"),
+          path.join(process.resourcesPath, "assets", "iconTemplate.png"),
           path.join(
             process.resourcesPath,
             "app.asar.unpacked",
             "src",
             "assets",
-            "iconTemplate@3x.png"
+            "iconTemplate.png"
           ),
-          path.join(__dirname, "..", "..", "src", "assets", "iconTemplate@3x.png"),
-          path.join(app.getAppPath(), "src", "assets", "iconTemplate@3x.png")
+          path.join(__dirname, "..", "..", "src", "assets", "iconTemplate.png"),
+          path.join(app.getAppPath(), "src", "assets", "iconTemplate.png")
         );
       }
     } else {

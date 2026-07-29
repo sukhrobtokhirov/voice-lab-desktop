@@ -2,6 +2,9 @@
   "appId": "uz.voicelab.desktop",
   "afterPack": "scripts/afterPack.js",
   "productName": "VoiceLab",
+  "extraMetadata": {
+    "voicelabChannel": "production"
+  },
   "protocols": {
     "name": "VoiceLab Protocol",
     "schemes": ["voicelab"]
@@ -94,7 +97,6 @@
     "src/workers/**/*"
   ],
   "extraResources": [
-    ".env",
     "src/assets/**/*",
     {
       "from": "resources/bin/",

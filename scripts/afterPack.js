@@ -276,26 +276,80 @@ function verifyUnpackedBinaries(context) {
 // Main hook
 // ---------------------------------------------------------------------------
 
-/** Never ship a shared AISHA_API_KEY — users bring their own via onboarding. */
-function stripPackagedAishaApiKey(context) {
-  const envPath = path.join(resolveResourcesDir(context), ".env");
-  if (!fs.existsSync(envPath)) return;
-  try {
-    const next = fs
-      .readFileSync(envPath, "utf8")
-      .replace(/^AISHA_API_KEY\s*=\s*.*$/m, "AISHA_API_KEY=");
-    fs.writeFileSync(envPath, next, "utf8");
-    console.log("  afterPack: cleared AISHA_API_KEY from packaged Resources/.env");
-  } catch (err) {
-    console.warn("  afterPack: could not strip AISHA_API_KEY:", err?.message || err);
+const SHARED_SECRET_KEYS = [
+  "AISHA_API_KEY",
+  "OPENAI_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "GEMINI_API_KEY",
+  "GOOGLE_API_KEY",
+];
+
+function hasNonEmptySecretAssignment(contents) {
+  return SHARED_SECRET_KEYS.some((key) => {
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const envAssignment = new RegExp(
+      `(?:^|\\r?\\n)\\s*${escaped}\\s*=\\s*(?:"[^"\\r\\n]+"|'[^'\\r\\n]+'|[^\\s#][^\\r\\n]*)`,
+      "m"
+    );
+    const jsonAssignment = new RegExp(`"${escaped}"\\s*:\\s*"[^"\\r\\n]+"`);
+    return envAssignment.test(contents) || jsonAssignment.test(contents);
+  });
+}
+
+function assertSourceEnvironmentIsSecretFree(context) {
+  const sourceEnv = path.join(context.packager.projectDir, ".env");
+  if (!fs.existsSync(sourceEnv)) return;
+  const contents = fs.readFileSync(sourceEnv, "utf8");
+  if (hasNonEmptySecretAssignment(contents)) {
+    throw new Error(
+      "afterPack: release blocked because the source .env contains a shared API credential"
+    );
   }
 }
 
+function assertPackagedResourcesAreSecretFree(context) {
+  const resourcesDir = resolveResourcesDir(context);
+  const files = collectFiles(resourcesDir);
+
+  for (const filePath of files) {
+    const basename = path.basename(filePath).toLowerCase();
+    if (basename === ".env" || basename.startsWith(".env.")) {
+      throw new Error(
+        `afterPack: release blocked because an environment file was packaged at ${path.relative(
+          resourcesDir,
+          filePath
+        )}`
+      );
+    }
+
+    const extension = path.extname(basename);
+    if (
+      ![".json", ".txt", ".yaml", ".yml", ".config", ".ini"].includes(extension) ||
+      fs.statSync(filePath).size > 2 * 1024 * 1024
+    ) {
+      continue;
+    }
+
+    const contents = fs.readFileSync(filePath, "utf8");
+    if (hasNonEmptySecretAssignment(contents)) {
+      throw new Error(
+        `afterPack: release blocked because a packaged configuration contains a shared credential at ${path.relative(
+          resourcesDir,
+          filePath
+        )}`
+      );
+    }
+  }
+
+  console.log("  afterPack: verified packaged resources contain no environment files or shared credentials");
+}
+
 exports.default = async function (context) {
+  assertSourceEnvironmentIsSecretFree(context);
   stripOnnxruntimeBinaries(context);
   wrapLinuxBinary(context);
   verifyMeetingAecHelper(context);
   verifyUnpackedBinaries(context);
   registerMacResourceBinariesForSigning(context);
-  stripPackagedAishaApiKey(context);
+  assertPackagedResourcesAreSecretFree(context);
 };

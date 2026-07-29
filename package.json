@@ -29,6 +29,8 @@
     "dev:renderer": "cd src && vite",
     "prebuild": "npm run compile:native",
     "build": "cd src && vite build && cd .. && electron-builder",
+    "build:staging": "npm run build:renderer && electron-builder --config electron-builder.staging.json",
+    "build:development": "npm run build:renderer && electron-builder --config electron-builder.development.json",
     "postinstall": "electron-builder install-app-deps",
     "build:renderer": "cd src && vite build",
     "compile:mac-icon": "node scripts/compile-macos-icon.js",

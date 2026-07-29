@@ -1,0 +1,12 @@
+{
+  "extends": "./electron-builder.json",
+  "appId": "uz.voicelab.desktop.development",
+  "productName": "VoiceLab Development",
+  "extraMetadata": {
+    "voicelabChannel": "development"
+  },
+  "protocols": {
+    "name": "VoiceLab Development Protocol",
+    "schemes": ["voicelab-dev"]
+  }
+}
