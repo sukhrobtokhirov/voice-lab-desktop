@@ -72,11 +72,19 @@ function publicEntry(row) {
 function normalizeTranscriptSource(value) {
   const source = String(value || "").trim().toLowerCase();
   if (source === "local" || source.startsWith("local-")) return "local";
-  if (source === "byok") return "byok";
-  if (!source || ["aisha", "voicelab", "voicelab-cloud", "openwhispr"].includes(source)) {
-    return null;
-  }
-  return "byok";
+  const explicitByokProviders = new Set([
+    "byok",
+    "openai",
+    "groq",
+    "mistral",
+    "xai",
+    "tinfoil",
+    "corti",
+    "custom",
+    "deepgram",
+    "assemblyai",
+  ]);
+  return explicitByokProviders.has(source) ? "byok" : null;
 }
 
 class DesktopSyncStore {
@@ -308,6 +316,12 @@ class DesktopSyncStore {
   }
 
   bindAccount(bootstrap) {
+    if (
+      Number(bootstrap?.snapshot_contract_version) === 2
+      && bootstrap?.snapshot_complete !== true
+    ) {
+      throw new Error("Refusing to replace local collections from a partial sync snapshot");
+    }
     const accountId = String(bootstrap?.account_id || "").trim();
     const deviceId = String(bootstrap?.device_id || "").trim();
     if (!accountId || !deviceId) throw new Error("Sync bootstrap is missing account or device");

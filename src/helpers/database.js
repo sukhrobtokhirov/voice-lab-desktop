@@ -5,6 +5,7 @@ const { randomUUID } = require("crypto");
 const debugLogger = require("./debugLogger");
 const { buildNoteSearchQuery } = require("./noteSearch");
 const { app } = require("electron");
+const { LocalDataEnvelope } = require("./localDataEnvelope");
 
 // Server-enforced trigger cap (openwhispr-api); enforced here so one oversized
 // trigger can't 400 the whole sync batch.
@@ -13,6 +14,8 @@ const MAX_SNIPPET_TRIGGER_LENGTH = 100;
 class DatabaseManager {
   constructor() {
     this.db = null;
+    this.dbPath = null;
+    this.dataEnvelope = null;
     this.initDatabase();
   }
 
@@ -22,8 +25,20 @@ class DatabaseManager {
         process.env.NODE_ENV === "development" ? "transcriptions-dev.db" : "transcriptions.db";
 
       const dbPath = path.join(app.getPath("userData"), dbFileName);
+      this.dbPath = dbPath;
+      this.dataEnvelope = new LocalDataEnvelope(dbPath);
+      this.dataEnvelope.restore();
+      fs.mkdirSync(path.dirname(dbPath), { recursive: true, mode: 0o700 });
+      if (fs.existsSync(dbPath)) {
+        try {
+          fs.chmodSync(dbPath, 0o600);
+        } catch {}
+      }
 
       this.db = new Database(dbPath);
+      try {
+        fs.chmodSync(dbPath, 0o600);
+      } catch {}
       this.db.pragma("foreign_keys = ON");
       this.db.pragma("journal_mode = WAL");
 
@@ -2363,16 +2378,17 @@ class DatabaseManager {
         }
         this.db = null;
       }
-      const dbPath = path.join(
-        app.getPath("userData"),
-        process.env.NODE_ENV === "development" ? "transcriptions-dev.db" : "transcriptions.db"
-      );
-      if (fs.existsSync(dbPath)) {
-        fs.unlinkSync(dbPath);
-      }
+      this.dataEnvelope?.destroy();
     } catch (error) {
       debugLogger.error("Error deleting database file", { error: error.message }, "database");
     }
+  }
+
+  sealAtRest() {
+    if (!this.dataEnvelope || !this.db) return { sealed: false };
+    const result = this.dataEnvelope.seal(this.db);
+    this.db = null;
+    return result;
   }
   getAgentConversationsWithPreview(limit = 50, offset = 0, includeArchived = false) {
     try {

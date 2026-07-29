@@ -123,6 +123,11 @@ function encrypt(plaintext) {
   throw new Error("no encryption backend available");
 }
 
+function encryptBuffer(value) {
+  if (!Buffer.isBuffer(value)) throw new TypeError("encryptBuffer expects a Buffer");
+  return encrypt(value.toString("base64"));
+}
+
 function decrypt(blob) {
   _ensureInit();
   if (mode === "keychain" && blob.length > IV_LEN + TAG_LEN) {
@@ -147,4 +152,8 @@ function decrypt(blob) {
   throw new Error("decryption failed: no backend available");
 }
 
-module.exports = { encrypt, decrypt, isAvailable };
+function decryptBuffer(blob) {
+  return Buffer.from(decrypt(blob).value, "base64");
+}
+
+module.exports = { encrypt, encryptBuffer, decrypt, decryptBuffer, isAvailable };
