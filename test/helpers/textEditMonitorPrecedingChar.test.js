@@ -11,13 +11,20 @@ test("getPrecedingChar resolves to unknown for missing pid", async () => {
 });
 
 test("getPrecedingChar returns unknown when the AX read fails or hangs", async () => {
-  const m = new TextEditMonitor();
-  // Non-darwin short-circuits without shelling out; darwin errors out on an
-  // unmapped PID. Both paths must resolve quickly with state "unknown".
-  const start = Date.now();
+  let invocation = null;
+  const m = new TextEditMonitor({
+    platform: "darwin",
+    execFileImpl(command, args, options, callback) {
+      invocation = { command, args, options };
+      queueMicrotask(() => callback(new Error("AX read timed out"), ""));
+    },
+  });
   const result = await m.getPrecedingChar(99999999, 1500);
+
   assert.equal(result.state, "unknown");
-  assert.ok(Date.now() - start < 3000);
+  assert.equal(invocation.command, "osascript");
+  assert.deepEqual(invocation.args.slice(0, 1), ["-e"]);
+  assert.equal(invocation.options.timeout, 1500);
 });
 
 test("activateTargetPid resolves false when no target PID was captured", async () => {
@@ -27,15 +34,31 @@ test("activateTargetPid resolves false when no target PID was captured", async (
 });
 
 test("activateTargetPid resolves false for an unmapped PID", async () => {
-  const m = new TextEditMonitor();
-  // Non-darwin short-circuits; darwin can't make a non-existent PID frontmost,
-  // so the confirm poll times out. Both resolve quickly to false rather than
-  // reporting a target that was never frontmost as active.
+  const delays = [];
+  const m = new TextEditMonitor({
+    platform: "darwin",
+    sleepImpl: async (delayMs) => {
+      delays.push(delayMs);
+    },
+  });
   m.lastTargetPid = 99999999;
-  const start = Date.now();
+  let activationPid = null;
+  let frontmostReads = 0;
+  m._activateApp = async (pid) => {
+    activationPid = pid;
+  };
+  m._readFrontmostPid = async () => {
+    frontmostReads += 1;
+    return null;
+  };
+
   const result = await m.activateTargetPid();
+
   assert.equal(result, false);
-  assert.ok(Date.now() - start < 3000);
+  assert.equal(activationPid, 99999999);
+  assert.equal(frontmostReads, delays.length + 1);
+  assert.ok(delays.length > 0);
+  assert.ok(delays.every((delayMs) => delayMs > 0));
 });
 
 const darwinOnly = { skip: process.platform !== "darwin" };

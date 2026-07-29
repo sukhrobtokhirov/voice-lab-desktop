@@ -73,8 +73,15 @@ const MACOS_AX_SCRIPT_BY_PID = (pid) =>
   `end tell`;
 
 class TextEditMonitor extends EventEmitter {
-  constructor() {
+  constructor({
+    execFileImpl = execFile,
+    platform = process.platform,
+    sleepImpl = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
+  } = {}) {
     super();
+    this._execFile = execFileImpl;
+    this._platform = platform;
+    this._sleep = sleepImpl;
     this.process = null;
     this.currentOriginalText = null;
     this.timeout = null;
@@ -199,13 +206,13 @@ class TextEditMonitor extends EventEmitter {
    * target frontmost, the macOS analogue of Linux's `xdotool windowactivate --sync`.
    */
   async activateTargetPid() {
-    if (process.platform !== "darwin" || !this.lastTargetPid) return false;
+    if (this._platform !== "darwin" || !this.lastTargetPid) return false;
     const pid = this.lastTargetPid;
     if ((await this._readFrontmostPid()) === pid) return true;
 
     await this._activateApp(pid);
     for (let i = 0; i < ACTIVATE_CONFIRM_RETRIES; i++) {
-      await new Promise((resolve) => setTimeout(resolve, ACTIVATE_CONFIRM_DELAY_MS));
+      await this._sleep(ACTIVATE_CONFIRM_DELAY_MS);
       if ((await this._readFrontmostPid()) === pid) {
         debugLogger.debug("[TextEditMonitor] Activated target PID", { pid });
         return true;
@@ -223,12 +230,12 @@ class TextEditMonitor extends EventEmitter {
    */
   getPrecedingChar(pid, timeoutMs = 400) {
     return new Promise((resolve) => {
-      if (process.platform !== "darwin" || !pid) {
+      if (this._platform !== "darwin" || !pid) {
         resolve({ state: "unknown" });
         return;
       }
       const script = MACOS_AX_PRECEDING_CHAR_SCRIPT(pid);
-      execFile("osascript", ["-e", script], { timeout: timeoutMs }, (err, stdout) => {
+      this._execFile("osascript", ["-e", script], { timeout: timeoutMs }, (err, stdout) => {
         if (err) {
           resolve({ state: "unknown" });
           return;
