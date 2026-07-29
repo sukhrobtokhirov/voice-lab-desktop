@@ -81,6 +81,11 @@ function createSearchDatabase() {
 
   const manager = Object.create(DatabaseManager.prototype);
   manager.db = sqlite;
+  manager.localDataProtection = {
+    reveal(_table, _identity, _field, value) {
+      return value;
+    },
+  };
   return { manager, sqlite };
 }
 

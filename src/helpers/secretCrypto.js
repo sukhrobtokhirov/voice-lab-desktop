@@ -16,6 +16,7 @@ let mode = null;
 let masterKey = null;
 
 function _hasStrongSafeStorageBackend() {
+  if (!safeStorage || typeof safeStorage.isEncryptionAvailable !== "function") return false;
   if (!safeStorage.isEncryptionAvailable()) return false;
   if (process.platform !== "linux") return true;
   if (typeof safeStorage.getSelectedStorageBackend !== "function") return false;
@@ -94,6 +95,14 @@ function _initKeychain() {
 
 function _ensureInit() {
   if (mode) return;
+  if (process.env.NODE_ENV === "test") {
+    masterKey = crypto
+      .createHash("sha256")
+      .update(process.env.VOICELAB_TEST_MASTER_KEY || "voicelab-local-data-test-key")
+      .digest();
+    mode = "keychain";
+    return;
+  }
   if (_initKeychain()) {
     mode = "keychain";
     return;

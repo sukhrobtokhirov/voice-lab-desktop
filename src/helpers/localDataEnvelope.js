@@ -55,6 +55,10 @@ class LocalDataEnvelope {
     return { sealed: true };
   }
 
+  retire() {
+    fs.rmSync(this.envelopePath, { force: true });
+  }
+
   destroy() {
     for (const target of [
       this.databasePath,

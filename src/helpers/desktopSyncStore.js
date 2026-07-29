@@ -91,8 +91,119 @@ class DesktopSyncStore {
   constructor(databaseManager) {
     this.databaseManager = databaseManager;
     this.db = databaseManager.db;
+    this.protection = databaseManager.localDataProtection;
     this.db.pragma("foreign_keys = ON");
     this.init();
+  }
+
+  dictionaryIdentity(accountId, id) {
+    return `${accountId}:${id}`;
+  }
+
+  dictionaryIndex(accountId, language, displayForm) {
+    return this.protection.index(
+      "desktop_dictionary_entries:normalized_key",
+      `${String(language || DEFAULT_LANGUAGE)}\0${normalizeKey(displayForm)}`
+    );
+  }
+
+  protectDictionaryField(accountId, id, field, value) {
+    return this.protection.protect(
+      "desktop_dictionary_entries",
+      this.dictionaryIdentity(accountId, id),
+      field,
+      value
+    );
+  }
+
+  decodeDictionaryRow(row) {
+    if (!row) return row;
+    const decoded = { ...row };
+    for (const field of ["display_form", "replacement", "pronunciation", "context"]) {
+      if (decoded[field] !== null && decoded[field] !== undefined) {
+        decoded[field] = this.protection.reveal(
+          "desktop_dictionary_entries",
+          this.dictionaryIdentity(row.account_id, row.id),
+          field,
+          decoded[field]
+        );
+      }
+    }
+    decoded.normalized_key = normalizeKey(decoded.display_form);
+    return decoded;
+  }
+
+  transcriptIdentity(accountId, id) {
+    return `${accountId}:${id}`;
+  }
+
+  protectTranscriptField(accountId, id, field, value) {
+    return this.protection.protect(
+      "desktop_synced_transcripts",
+      this.transcriptIdentity(accountId, id),
+      field,
+      value
+    );
+  }
+
+  decodeTranscriptRow(row) {
+    if (!row) return row;
+    const decoded = { ...row };
+    for (const field of ["title", "text", "metadata_json"]) {
+      if (decoded[field] !== null && decoded[field] !== undefined) {
+        decoded[field] = this.protection.reveal(
+          "desktop_synced_transcripts",
+          this.transcriptIdentity(row.account_id, row.id),
+          field,
+          decoded[field]
+        );
+      }
+    }
+    return decoded;
+  }
+
+  protectOutboxPayload(accountId, mutationId, value) {
+    return this.protection.protect(
+      "sync_outbox",
+      `${accountId}:${mutationId}`,
+      "payload_json",
+      value
+    );
+  }
+
+  decodeOutboxPayload(row) {
+    return this.protection.reveal(
+      "sync_outbox",
+      `${row.account_id}:${row.mutation_id}`,
+      "payload_json",
+      row.payload_json
+    );
+  }
+
+  toPublicEntry(row) {
+    return publicEntry(this.decodeDictionaryRow(row));
+  }
+
+  dictionaryTombstoneValues(accountId, id, language = DEFAULT_LANGUAGE) {
+    return {
+      normalizedKey: this.protection.index(
+        "desktop_dictionary_entries:tombstone",
+        `${accountId}:${id}`
+      ),
+      displayForm: this.protectDictionaryField(accountId, id, "display_form", ""),
+      replacement: this.protectDictionaryField(accountId, id, "replacement", null),
+      pronunciation: this.protectDictionaryField(accountId, id, "pronunciation", null),
+      context: this.protectDictionaryField(accountId, id, "context", null),
+      language,
+    };
+  }
+
+  transcriptTombstoneValues(accountId, id) {
+    return {
+      title: this.protectTranscriptField(accountId, id, "title", ""),
+      text: this.protectTranscriptField(accountId, id, "text", ""),
+      metadata: this.protectTranscriptField(accountId, id, "metadata_json", "{}"),
+    };
   }
 
   addColumnIfMissing(table, column, definition) {
@@ -298,6 +409,7 @@ class DesktopSyncStore {
       CREATE INDEX IF NOT EXISTS idx_synced_transcripts_account
         ON desktop_synced_transcripts(account_id, deleted_at, updated_at);
     `);
+    this.protection.migrateSync();
   }
 
   nextOutboxSequence(accountId) {
@@ -503,9 +615,13 @@ class DesktopSyncStore {
   rebaseOutboxCollection(accountId, collection, rows, localLinks = new Map()) {
     for (const row of rows) {
       let recordId = row.record_id;
-      const payload = safeJson(row.payload_json, {});
+      const payload = safeJson(this.decodeOutboxPayload(row), {});
       if (collection === "dictionary" && row.operation === "upsert") {
-        const normalized = normalizeKey(payload.display_form);
+        const normalized = this.dictionaryIndex(
+          accountId,
+          payload.language || DEFAULT_LANGUAGE,
+          payload.display_form
+        );
         const canonical = this.db.prepare(`
           SELECT id FROM desktop_dictionary_entries
           WHERE account_id = ? AND language = ? AND normalized_key = ?
@@ -547,14 +663,25 @@ class DesktopSyncStore {
         const sourceCreatedAt =
           payload.source_created_at
           || payload.created_at
-          || safeJson(previous?.metadata_json, {})?.created_at
+          || safeJson(
+            previous ? this.decodeTranscriptRow(previous).metadata_json : null,
+            {}
+          )?.created_at
           || previous?.source_created_at;
         if (sourceCreatedAt && !payload.source_created_at) {
           payload.source_created_at = sourceCreatedAt;
           this.db.prepare(`
             UPDATE sync_outbox SET payload_json = ?
             WHERE account_id = ? AND mutation_id = ?
-          `).run(JSON.stringify(payload), accountId, row.mutation_id);
+          `).run(
+            this.protectOutboxPayload(
+              accountId,
+              row.mutation_id,
+              JSON.stringify(payload)
+            ),
+            accountId,
+            row.mutation_id
+          );
         }
         this.db.prepare(`
           INSERT INTO desktop_synced_transcripts (
@@ -582,12 +709,27 @@ class DesktopSyncStore {
           accountId,
           recordId,
           previous?.local_transcription_id || null,
-          cleanDisplayForm(payload.title).slice(0, 240),
-          cleanTranscriptText(payload.text),
+          this.protectTranscriptField(
+            accountId,
+            recordId,
+            "title",
+            cleanDisplayForm(payload.title).slice(0, 240)
+          ),
+          this.protectTranscriptField(
+            accountId,
+            recordId,
+            "text",
+            cleanTranscriptText(payload.text)
+          ),
           payload.language || DEFAULT_LANGUAGE,
           normalizeTranscriptSource(payload.source) || "local",
           sourceCreatedAt || null,
-          JSON.stringify(payload.metadata || {}),
+          this.protectTranscriptField(
+            accountId,
+            recordId,
+            "metadata_json",
+            JSON.stringify(payload.metadata || {})
+          ),
           previous?.origin || "local",
           localVersion,
           row.mutation_id
@@ -600,8 +742,10 @@ class DesktopSyncStore {
           );
         }
         if (current) {
+          const tombstone = this.transcriptTombstoneValues(accountId, recordId);
           this.db.prepare(`
             UPDATE desktop_synced_transcripts SET
+              title = ?, text = ?, metadata_json = ?,
               deleted_at = CURRENT_TIMESTAMP,
               version = ?,
               sync_status = 'saved_local',
@@ -609,7 +753,15 @@ class DesktopSyncStore {
               snapshot_seen = 1,
               updated_at = CURRENT_TIMESTAMP
             WHERE account_id = ? AND id = ?
-          `).run(localVersion, row.mutation_id, accountId, recordId);
+          `).run(
+            tombstone.title,
+            tombstone.text,
+            tombstone.metadata,
+            localVersion,
+            row.mutation_id,
+            accountId,
+            recordId
+          );
         }
       } else if (collection === "dictionary" && row.operation === "upsert") {
         const displayForm = cleanDisplayForm(payload.display_form);
@@ -634,28 +786,63 @@ class DesktopSyncStore {
         `).run(
           accountId,
           recordId,
-          normalizeKey(displayForm),
-          displayForm,
+          this.dictionaryIndex(
+            accountId,
+            payload.language || DEFAULT_LANGUAGE,
+            displayForm
+          ),
+          this.protectDictionaryField(accountId, recordId, "display_form", displayForm),
           payload.language || DEFAULT_LANGUAGE,
-          payload.replacement || null,
-          payload.pronunciation || null,
-          payload.context || null,
+          this.protectDictionaryField(
+            accountId,
+            recordId,
+            "replacement",
+            payload.replacement || null
+          ),
+          this.protectDictionaryField(
+            accountId,
+            recordId,
+            "pronunciation",
+            payload.pronunciation || null
+          ),
+          this.protectDictionaryField(
+            accountId,
+            recordId,
+            "context",
+            payload.context || null
+          ),
           payload.source === "learned" ? "learned" : "manual",
           localVersion,
           row.mutation_id
         );
       } else if (collection === "dictionary" && row.operation === "delete") {
         if (current) {
+          const tombstone = this.dictionaryTombstoneValues(
+            accountId,
+            recordId,
+            current.language
+          );
           this.db.prepare(`
             UPDATE desktop_dictionary_entries SET
-              deleted_at = CURRENT_TIMESTAMP,
+              normalized_key = ?, display_form = ?, replacement = ?,
+              pronunciation = ?, context = ?, deleted_at = CURRENT_TIMESTAMP,
               version = ?,
               sync_status = 'saved_local',
               current_mutation_id = ?,
               snapshot_seen = 1,
               updated_at = CURRENT_TIMESTAMP
             WHERE account_id = ? AND id = ?
-          `).run(localVersion, row.mutation_id, accountId, recordId);
+          `).run(
+            tombstone.normalizedKey,
+            tombstone.displayForm,
+            tombstone.replacement,
+            tombstone.pronunciation,
+            tombstone.context,
+            localVersion,
+            row.mutation_id,
+            accountId,
+            recordId
+          );
         }
       } else if (collection === "preference" && row.operation === "upsert") {
         this.db.prepare(`
@@ -710,10 +897,10 @@ class DesktopSyncStore {
     const ownership = this.legacyOwner();
     if (ownership?.owner_account_id && ownership.owner_account_id !== accountId) return [];
     return this.db.prepare(`
-      SELECT id, word, COALESCE(source, 'manual') AS source,
+      SELECT id, client_dict_id, word, COALESCE(source, 'manual') AS source,
              COALESCE(updated_at, created_at, CURRENT_TIMESTAMP) AS updated_at
       FROM custom_dictionary WHERE deleted_at IS NULL ORDER BY id
-    `).all();
+    `).all().map((row) => this.databaseManager._decodeDictionaryRow(row));
   }
 
   legacyPublicEntry(row) {
@@ -754,16 +941,22 @@ class DesktopSyncStore {
     const rows = this.db.prepare(`
       SELECT * FROM desktop_dictionary_entries
       WHERE account_id = ? AND deleted_at IS NULL
-      ORDER BY display_form COLLATE NOCASE
     `).all(account.account_id);
+    const clearRows = rows
+      .map((row) => this.decodeDictionaryRow(row))
+      .sort((left, right) =>
+        left.display_form.localeCompare(right.display_form, undefined, {
+          sensitivity: "base",
+        })
+      );
     const preferences = Object.fromEntries(this.db.prepare(`
       SELECT preference_key, value_json FROM portable_preferences
       WHERE account_id = ? AND deleted_at IS NULL
     `).all(account.account_id).map((row) => [row.preference_key, safeJson(row.value_json)]));
     return {
       accountId: account.account_id,
-      entries: rows.map(publicEntry),
-      vocabulary: rows.map((row) => row.display_form),
+      entries: clearRows.map(publicEntry),
+      vocabulary: clearRows.map((row) => row.display_form),
       legacyCount: legacy.length,
       legacyAttachDecision: account.legacy_attach_decision,
       requiresLegacyDecision: legacy.length > 0 && !account.legacy_attach_decision,
@@ -795,7 +988,11 @@ class DesktopSyncStore {
       recordId,
       operation,
       Number(baseVersion || 0),
-      JSON.stringify(payload || {}),
+      this.protectOutboxPayload(
+        account.account_id,
+        mutationId,
+        JSON.stringify(payload || {})
+      ),
       Number(localVersion || 0),
       mutationId,
       this.nextOutboxSequence(account.account_id)
@@ -838,28 +1035,29 @@ class DesktopSyncStore {
   }
 
   queueDictionaryMutation(account, entry, operation, baseVersion) {
+    const clearEntry = this.decodeDictionaryRow(entry);
     const payload = operation === "delete" ? {} : {
-      display_form: entry.display_form,
-      language: entry.language,
-      replacement: entry.replacement,
-      pronunciation: entry.pronunciation,
-      context: entry.context,
-      source: entry.source,
+      display_form: clearEntry.display_form,
+      language: clearEntry.language,
+      replacement: clearEntry.replacement,
+      pronunciation: clearEntry.pronunciation,
+      context: clearEntry.context,
+      source: clearEntry.source,
     };
     const mutationId = this.queueOutbox(
       account,
       "dictionary",
-      entry.id,
+      clearEntry.id,
       operation,
       baseVersion,
       payload,
-      entry.version
+      clearEntry.version
     );
     this.db.prepare(`
       UPDATE desktop_dictionary_entries
       SET current_mutation_id = ?, sync_status = 'saved_local', last_error_code = NULL
       WHERE id = ? AND account_id = ?
-    `).run(mutationId, entry.id, account.account_id);
+    `).run(mutationId, clearEntry.id, account.account_id);
     return mutationId;
   }
 
@@ -879,8 +1077,12 @@ class DesktopSyncStore {
     const existing = this.db.prepare(`
       SELECT * FROM desktop_dictionary_entries
       WHERE account_id = ? AND language = ? AND normalized_key = ? AND deleted_at IS NULL
-    `).get(account.account_id, language, normalizedKey);
-    if (existing) return { entry: publicEntry(existing), duplicate: true };
+    `).get(
+      account.account_id,
+      language,
+      this.dictionaryIndex(account.account_id, language, displayForm)
+    );
+    if (existing) return { entry: this.toPublicEntry(existing), duplicate: true };
     const id = randomUUID();
     const transaction = this.db.transaction(() => {
       this.db.prepare(`
@@ -891,12 +1093,27 @@ class DesktopSyncStore {
       `).run(
         id,
         account.account_id,
-        normalizedKey,
-        displayForm,
+        this.dictionaryIndex(account.account_id, language, displayForm),
+        this.protectDictionaryField(account.account_id, id, "display_form", displayForm),
         language,
-        input?.replacement || null,
-        input?.pronunciation || null,
-        input?.context || null,
+        this.protectDictionaryField(
+          account.account_id,
+          id,
+          "replacement",
+          input?.replacement || null
+        ),
+        this.protectDictionaryField(
+          account.account_id,
+          id,
+          "pronunciation",
+          input?.pronunciation || null
+        ),
+        this.protectDictionaryField(
+          account.account_id,
+          id,
+          "context",
+          input?.context || null
+        ),
         input?.source === "learned" ? "learned" : "manual"
       );
       const row = this.db.prepare(
@@ -908,7 +1125,7 @@ class DesktopSyncStore {
     const row = this.db.prepare(
       "SELECT * FROM desktop_dictionary_entries WHERE account_id = ? AND id = ?"
     ).get(account.account_id, id);
-    return { entry: publicEntry(row), duplicate: false };
+    return { entry: this.toPublicEntry(row), duplicate: false };
   }
 
   updateEntry(id, input) {
@@ -920,15 +1137,23 @@ class DesktopSyncStore {
         throw new Error("Dictionary entry not found");
       }
       if (!Number.isInteger(legacyId) || !displayForm) throw new Error("Invalid dictionary entry");
-      this.db.prepare(`UPDATE custom_dictionary SET word = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND deleted_at IS NULL`).run(displayForm, legacyId);
+      const legacy = this.legacyRows(account.account_id).find((row) => row.id === legacyId);
+      this.db.prepare(`UPDATE custom_dictionary SET word = ?, word_hmac = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND deleted_at IS NULL`).run(
+        this.databaseManager._protectDictionaryWord(
+          this.databaseManager._dictionaryIdentity(legacy),
+          displayForm
+        ),
+        this.databaseManager._dictionaryIndex(displayForm),
+        legacyId
+      );
       return this.legacyPublicEntry(this.legacyRows(account.account_id).find((row) => row.id === legacyId));
     }
     const account = this.activeAccount();
     if (!account) throw new Error("No active sync account");
-    const current = this.db.prepare(
+    const current = this.decodeDictionaryRow(this.db.prepare(
       "SELECT * FROM desktop_dictionary_entries WHERE account_id = ? AND id = ?"
-    ).get(account.account_id, id);
+    ).get(account.account_id, id));
     if (!current || current.deleted_at) throw new Error("Dictionary entry not found");
     const displayForm = cleanDisplayForm(input?.displayForm ?? current.display_form);
     const language = cleanDisplayForm(input?.language ?? current.language) || DEFAULT_LANGUAGE;
@@ -942,12 +1167,27 @@ class DesktopSyncStore {
           updated_at = CURRENT_TIMESTAMP, deleted_at = NULL
         WHERE account_id = ? AND id = ?
       `).run(
-        normalizedKey,
-        displayForm,
+        this.dictionaryIndex(account.account_id, language, displayForm),
+        this.protectDictionaryField(account.account_id, id, "display_form", displayForm),
         language,
-        input?.replacement ?? current.replacement,
-        input?.pronunciation ?? current.pronunciation,
-        input?.context ?? current.context,
+        this.protectDictionaryField(
+          account.account_id,
+          id,
+          "replacement",
+          input?.replacement ?? current.replacement
+        ),
+        this.protectDictionaryField(
+          account.account_id,
+          id,
+          "pronunciation",
+          input?.pronunciation ?? current.pronunciation
+        ),
+        this.protectDictionaryField(
+          account.account_id,
+          id,
+          "context",
+          input?.context ?? current.context
+        ),
         input?.source ?? current.source,
         nextVersion,
         account.account_id,
@@ -959,7 +1199,7 @@ class DesktopSyncStore {
       this.queueDictionaryMutation(account, row, "upsert", Number(current.version));
     });
     transaction();
-    return publicEntry(this.db.prepare(
+    return this.toPublicEntry(this.db.prepare(
       "SELECT * FROM desktop_dictionary_entries WHERE account_id = ? AND id = ?"
     ).get(account.account_id, id));
   }
@@ -978,12 +1218,26 @@ class DesktopSyncStore {
     ).get(account.account_id, id);
     if (!current || current.deleted_at) return false;
     const transaction = this.db.transaction(() => {
+      const tombstone = this.dictionaryTombstoneValues(
+        account.account_id,
+        id,
+        current.language
+      );
       this.db.prepare(`
         UPDATE desktop_dictionary_entries
-        SET deleted_at = CURRENT_TIMESTAMP, version = version + 1,
+        SET normalized_key = ?, display_form = ?, replacement = ?,
+            pronunciation = ?, context = ?, deleted_at = CURRENT_TIMESTAMP, version = version + 1,
             updated_at = CURRENT_TIMESTAMP, sync_status = 'saved_local'
         WHERE account_id = ? AND id = ?
-      `).run(account.account_id, id);
+      `).run(
+        tombstone.normalizedKey,
+        tombstone.displayForm,
+        tombstone.replacement,
+        tombstone.pronunciation,
+        tombstone.context,
+        account.account_id,
+        id
+      );
       const row = this.db.prepare(
         "SELECT * FROM desktop_dictionary_entries WHERE account_id = ? AND id = ?"
       ).get(account.account_id, id);
@@ -1000,7 +1254,16 @@ class DesktopSyncStore {
     for (const value of Array.isArray(words) ? words : []) {
       const displayForm = cleanDisplayForm(value);
       const key = normalizeKey(displayForm);
-      if (key) desired.set(`${DEFAULT_LANGUAGE}:${key}`, displayForm);
+      if (key) {
+        desired.set(
+          `${DEFAULT_LANGUAGE}:${this.dictionaryIndex(
+            account.account_id,
+            DEFAULT_LANGUAGE,
+            displayForm
+          )}`,
+          displayForm
+        );
+      }
     }
     const current = this.db.prepare(`
       SELECT * FROM desktop_dictionary_entries WHERE account_id = ? AND deleted_at IS NULL
@@ -1055,7 +1318,7 @@ class DesktopSyncStore {
     const existing = this.db.prepare(`
       SELECT * FROM desktop_synced_transcripts WHERE account_id = ? AND id = ?
     `).get(account.account_id, recordId);
-    if (existing) return existing;
+    if (existing) return this.decodeTranscriptRow(existing);
     const sourceDateCandidate =
       options.sourceCreatedAt
       || transcription.timestamp
@@ -1090,12 +1353,17 @@ class DesktopSyncStore {
         account.account_id,
         recordId,
         transcription.id,
-        title,
-        text,
+        this.protectTranscriptField(account.account_id, recordId, "title", title),
+        this.protectTranscriptField(account.account_id, recordId, "text", text),
         cleanDisplayForm(options.language || "und") || "und",
         source,
         sourceCreatedAtIso,
-        JSON.stringify(metadata)
+        this.protectTranscriptField(
+          account.account_id,
+          recordId,
+          "metadata_json",
+          JSON.stringify(metadata)
+        )
       );
       const mutationId = this.queueOutbox(account, "transcript", recordId, "upsert", 0, {
         title,
@@ -1118,18 +1386,18 @@ class DesktopSyncStore {
       );
     });
     transaction();
-    return this.db.prepare(`
+    return this.decodeTranscriptRow(this.db.prepare(`
       SELECT * FROM desktop_synced_transcripts WHERE account_id = ? AND id = ?
-    `).get(account.account_id, recordId);
+    `).get(account.account_id, recordId));
   }
 
   updateLocalTranscript(localTranscriptionId, transcription) {
     const account = this.activeAccount();
     if (!account || !this.collectionEnabled(account, "transcript")) return null;
-    const current = this.db.prepare(`
+    const current = this.decodeTranscriptRow(this.db.prepare(`
       SELECT * FROM desktop_synced_transcripts
       WHERE account_id = ? AND local_transcription_id = ? AND deleted_at IS NULL
-    `).get(account.account_id, localTranscriptionId);
+    `).get(account.account_id, localTranscriptionId));
     if (!current) return null;
     const text = cleanTranscriptText(transcription?.text);
     if (!text || text === current.text) return current;
@@ -1140,7 +1408,12 @@ class DesktopSyncStore {
         UPDATE desktop_synced_transcripts
         SET text = ?, version = ?, sync_status = 'saved_local', updated_at = CURRENT_TIMESTAMP
         WHERE account_id = ? AND id = ?
-      `).run(text, version, account.account_id, current.id);
+      `).run(
+        this.protectTranscriptField(account.account_id, current.id, "text", text),
+        version,
+        account.account_id,
+        current.id
+      );
       const mutationId = this.queueOutbox(account, "transcript", current.id, "upsert", Number(current.version), {
         title: current.title,
         text,
@@ -1166,12 +1439,21 @@ class DesktopSyncStore {
     if (!current) return false;
     const version = Number(current.version) + 1;
     const transaction = this.db.transaction(() => {
+      const tombstone = this.transcriptTombstoneValues(account.account_id, current.id);
       this.db.prepare(`
         UPDATE desktop_synced_transcripts
-        SET deleted_at = CURRENT_TIMESTAMP, version = ?, sync_status = 'saved_local',
+        SET title = ?, text = ?, metadata_json = ?,
+            deleted_at = CURRENT_TIMESTAMP, version = ?, sync_status = 'saved_local',
             updated_at = CURRENT_TIMESTAMP
         WHERE account_id = ? AND id = ?
-      `).run(version, account.account_id, current.id);
+      `).run(
+        tombstone.title,
+        tombstone.text,
+        tombstone.metadata,
+        version,
+        account.account_id,
+        current.id
+      );
       if (this.collectionEnabled(account, "transcript")) {
         const mutationId = this.queueOutbox(account, "transcript", current.id, "delete", Number(current.version), {}, version);
         this.db.prepare(`UPDATE desktop_synced_transcripts SET current_mutation_id = ?
@@ -1228,7 +1510,7 @@ class DesktopSyncStore {
           record_id: row.record_id,
           operation: row.operation,
           base_version: Number(row.base_version),
-          payload: safeJson(row.payload_json, {}),
+          payload: safeJson(this.decodeOutboxPayload(row), {}),
         }],
       },
     };
@@ -1241,21 +1523,63 @@ class DesktopSyncStore {
         WHERE account_id = ? AND id = ?`).get(accountId, oldId);
       const target = this.db.prepare(`SELECT * FROM desktop_dictionary_entries
         WHERE account_id = ? AND id = ?`).get(accountId, newId);
+      const clearSource = this.decodeDictionaryRow(source);
       if (source && !target) {
-        this.db.prepare(`UPDATE desktop_dictionary_entries SET id = ?
-          WHERE account_id = ? AND id = ?`).run(newId, accountId, oldId);
+        this.db.prepare(`UPDATE desktop_dictionary_entries SET
+          id = ?, normalized_key = ?, display_form = ?, replacement = ?,
+          pronunciation = ?, context = ?
+          WHERE account_id = ? AND id = ?`).run(
+          newId,
+          this.dictionaryIndex(accountId, clearSource.language, clearSource.display_form),
+          this.protectDictionaryField(
+            accountId,
+            newId,
+            "display_form",
+            clearSource.display_form
+          ),
+          this.protectDictionaryField(
+            accountId,
+            newId,
+            "replacement",
+            clearSource.replacement
+          ),
+          this.protectDictionaryField(
+            accountId,
+            newId,
+            "pronunciation",
+            clearSource.pronunciation
+          ),
+          this.protectDictionaryField(accountId, newId, "context", clearSource.context),
+          accountId,
+          oldId
+        );
       } else if (source && target) {
         this.db.prepare(`UPDATE desktop_dictionary_entries SET
           normalized_key = ?, display_form = ?, language = ?, replacement = ?,
           pronunciation = ?, context = ?, source = ?, version = ?, deleted_at = ?,
           sync_status = ?, current_mutation_id = ?, last_error_code = ?, updated_at = CURRENT_TIMESTAMP
           WHERE account_id = ? AND id = ?`).run(
-          source.normalized_key,
-          source.display_form,
-          source.language,
-          source.replacement,
-          source.pronunciation,
-          source.context,
+          this.dictionaryIndex(accountId, clearSource.language, clearSource.display_form),
+          this.protectDictionaryField(
+            accountId,
+            newId,
+            "display_form",
+            clearSource.display_form
+          ),
+          clearSource.language,
+          this.protectDictionaryField(
+            accountId,
+            newId,
+            "replacement",
+            clearSource.replacement
+          ),
+          this.protectDictionaryField(
+            accountId,
+            newId,
+            "pronunciation",
+            clearSource.pronunciation
+          ),
+          this.protectDictionaryField(accountId, newId, "context", clearSource.context),
           source.source,
           source.version,
           source.deleted_at,
@@ -1272,10 +1596,28 @@ class DesktopSyncStore {
       this.db.prepare(`UPDATE portable_preferences SET record_id = ?
         WHERE account_id = ? AND record_id = ?`).run(newId, accountId, oldId);
     } else if (collection === "transcript") {
+      const source = this.db.prepare(`SELECT * FROM desktop_synced_transcripts
+        WHERE account_id = ? AND id = ?`).get(accountId, oldId);
       const target = this.db.prepare(`SELECT id FROM desktop_synced_transcripts
         WHERE account_id = ? AND id = ?`).get(accountId, newId);
-      if (!target) this.db.prepare(`UPDATE desktop_synced_transcripts SET id = ?
-        WHERE account_id = ? AND id = ?`).run(newId, accountId, oldId);
+      if (!target && source) {
+        const clear = this.decodeTranscriptRow(source);
+        this.db.prepare(`UPDATE desktop_synced_transcripts SET
+          id = ?, title = ?, text = ?, metadata_json = ?
+          WHERE account_id = ? AND id = ?`).run(
+          newId,
+          this.protectTranscriptField(accountId, newId, "title", clear.title),
+          this.protectTranscriptField(accountId, newId, "text", clear.text),
+          this.protectTranscriptField(
+            accountId,
+            newId,
+            "metadata_json",
+            clear.metadata_json
+          ),
+          accountId,
+          oldId
+        );
+      }
       else this.db.prepare("DELETE FROM desktop_synced_transcripts WHERE account_id = ? AND id = ?")
         .run(accountId, oldId);
       this.databaseManager.remapSyncedTranscriptMirror?.(accountId, oldId, newId);
@@ -1344,7 +1686,11 @@ class DesktopSyncStore {
           canonicalId,
           outbox.operation,
           serverVersion,
-          outbox.payload_json,
+          this.protectOutboxPayload(
+            expectedAccountId,
+            nextMutationId,
+            this.decodeOutboxPayload(outbox)
+          ),
           outbox.expected_local_version,
           nextMutationId,
           this.nextOutboxSequence(expectedAccountId)
@@ -1510,10 +1856,28 @@ class DesktopSyncStore {
       return;
     }
     if (change.operation === "delete") {
-      if (local) this.db.prepare(`UPDATE desktop_dictionary_entries
-        SET deleted_at = CURRENT_TIMESTAMP, version = ?, sync_status = 'synced',
+      if (local) {
+        const tombstone = this.dictionaryTombstoneValues(
+          accountId,
+          id,
+          local.language
+        );
+        this.db.prepare(`UPDATE desktop_dictionary_entries
+        SET normalized_key = ?, display_form = ?, replacement = ?,
+            pronunciation = ?, context = ?, deleted_at = CURRENT_TIMESTAMP,
+            version = ?, sync_status = 'synced',
             snapshot_seen = 1, updated_at = CURRENT_TIMESTAMP
-        WHERE account_id = ? AND id = ?`).run(serverVersion, accountId, id);
+        WHERE account_id = ? AND id = ?`).run(
+          tombstone.normalizedKey,
+          tombstone.displayForm,
+          tombstone.replacement,
+          tombstone.pronunciation,
+          tombstone.context,
+          serverVersion,
+          accountId,
+          id
+        );
+      }
       return;
     }
     if (local && Number(local.version) > serverVersion) return;
@@ -1543,12 +1907,31 @@ class DesktopSyncStore {
     `).run(
       id,
       accountId,
-      normalizeKey(displayForm),
-      displayForm,
+      this.dictionaryIndex(
+        accountId,
+        payload.language || DEFAULT_LANGUAGE,
+        displayForm
+      ),
+      this.protectDictionaryField(accountId, id, "display_form", displayForm),
       payload.language || DEFAULT_LANGUAGE,
-      payload.replacement || null,
-      payload.pronunciation || null,
-      payload.context || null,
+      this.protectDictionaryField(
+        accountId,
+        id,
+        "replacement",
+        payload.replacement || null
+      ),
+      this.protectDictionaryField(
+        accountId,
+        id,
+        "pronunciation",
+        payload.pronunciation || null
+      ),
+      this.protectDictionaryField(
+        accountId,
+        id,
+        "context",
+        payload.context || null
+      ),
       payload.source === "learned" ? "learned" : "manual",
       serverVersion
     );
@@ -1614,12 +1997,24 @@ class DesktopSyncStore {
       accountId,
       id,
       mirror?.id ?? current?.local_transcription_id ?? null,
-      cleanDisplayForm(payload.title).slice(0, 240),
-      text,
+      this.protectTranscriptField(
+        accountId,
+        id,
+        "title",
+        cleanDisplayForm(payload.title).slice(0, 240)
+      ),
+      this.protectTranscriptField(accountId, id, "text", text),
       cleanDisplayForm(payload.language || DEFAULT_LANGUAGE) || DEFAULT_LANGUAGE,
       source,
       payload.source_created_at || null,
-      JSON.stringify(payload.metadata && typeof payload.metadata === "object" ? payload.metadata : {}),
+      this.protectTranscriptField(
+        accountId,
+        id,
+        "metadata_json",
+        JSON.stringify(
+          payload.metadata && typeof payload.metadata === "object" ? payload.metadata : {}
+        )
+      ),
       current?.origin || "remote",
       version
     );

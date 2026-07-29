@@ -112,11 +112,7 @@ export function processBatchQueue(
   const run = ++runId;
   useBatchQueueStore.setState({ isProcessing: true });
 
-  const snapshotApiKey = transcribeOpts.transcription.getApiKey();
-  const transcription: FileTranscriptionConfig = {
-    ...transcribeOpts.transcription,
-    getApiKey: () => snapshotApiKey,
-  };
+  const transcription: FileTranscriptionConfig = { ...transcribeOpts.transcription };
 
   // Run-scoped writer: a cancelled run's late IPC results must not touch items.
   const updateItem = (id: string, updates: Partial<QueueItem>) => {

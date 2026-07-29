@@ -6,6 +6,11 @@ const debugLogger = require("./debugLogger");
 const { buildNoteSearchQuery } = require("./noteSearch");
 const { app } = require("electron");
 const { LocalDataEnvelope } = require("./localDataEnvelope");
+const { LocalDataCrypto } = require("./localDataCrypto");
+const {
+  LocalDataProtection,
+  normalizeDictionaryValue,
+} = require("./localDataProtection");
 
 // Server-enforced trigger cap (openwhispr-api); enforced here so one oversized
 // trigger can't 400 the whole sync batch.
@@ -16,6 +21,8 @@ class DatabaseManager {
     this.db = null;
     this.dbPath = null;
     this.dataEnvelope = null;
+    this.localDataCrypto = null;
+    this.localDataProtection = null;
     this.initDatabase();
   }
 
@@ -41,6 +48,7 @@ class DatabaseManager {
       } catch {}
       this.db.pragma("foreign_keys = ON");
       this.db.pragma("journal_mode = WAL");
+      this.db.pragma("secure_delete = ON");
 
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS transcriptions (
@@ -681,6 +689,15 @@ class DatabaseManager {
         "CREATE INDEX IF NOT EXISTS idx_snippets_pending_sync ON snippets(sync_status) WHERE sync_status = 'pending'"
       );
 
+      this.localDataCrypto = LocalDataCrypto.forUserDataPath(app.getPath("userData"));
+      this.localDataProtection = new LocalDataProtection(
+        this.db,
+        this.localDataCrypto,
+        dbPath
+      );
+      this.localDataProtection.migrateCore();
+      this.dataEnvelope.retire?.();
+
       return true;
     } catch (error) {
       debugLogger.error("Database initialization failed", { error: error.message }, "database");
@@ -694,6 +711,81 @@ class DatabaseManager {
       this.desktopSyncStore = new DesktopSyncStore(this);
     }
     return this.desktopSyncStore;
+  }
+
+  _transcriptionIdentity(row) {
+    return row?.client_transcription_id || `legacy:${row?.id}`;
+  }
+
+  _decodeTranscription(row) {
+    if (!row) return row;
+    const identity = this._transcriptionIdentity(row);
+    const decoded = { ...row };
+    for (const field of ["text", "raw_text", "error_message"]) {
+      if (decoded[field] !== null && decoded[field] !== undefined) {
+        decoded[field] = this.localDataProtection.reveal(
+          "transcriptions",
+          identity,
+          field,
+          decoded[field]
+        );
+      }
+    }
+    return decoded;
+  }
+
+  _protectTranscriptionField(identity, field, value) {
+    return this.localDataProtection.protect("transcriptions", identity, field, value);
+  }
+
+  _dictionaryIdentity(row) {
+    return row?.client_dict_id || `legacy:${row?.id}`;
+  }
+
+  _decodeDictionaryRow(row) {
+    if (!row) return row;
+    return {
+      ...row,
+      word: this.localDataProtection.reveal(
+        "custom_dictionary",
+        this._dictionaryIdentity(row),
+        "word",
+        row.word
+      ),
+    };
+  }
+
+  _dictionaryIndex(word) {
+    return this.localDataProtection.index(
+      "custom_dictionary:word",
+      normalizeDictionaryValue(word)
+    );
+  }
+
+  _protectDictionaryWord(identity, word) {
+    return this.localDataProtection.protect(
+      "custom_dictionary",
+      identity,
+      "word",
+      word
+    );
+  }
+
+  _decodeNote(row) {
+    if (!row) return row;
+    const identity = row.client_note_id || `legacy:${row.id}`;
+    const decoded = { ...row };
+    for (const field of ["transcript", "source_file", "participants"]) {
+      if (decoded[field] !== null && decoded[field] !== undefined) {
+        decoded[field] = this.localDataProtection.reveal(
+          "notes",
+          identity,
+          field,
+          decoded[field]
+        );
+      }
+    }
+    return decoded;
   }
 
   saveTranscription(
@@ -715,17 +807,21 @@ class DatabaseManager {
         "INSERT INTO transcriptions (text, raw_text, status, error_message, error_code, route_kind, client_transcription_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
       );
       const result = stmt.run(
-        text,
-        rawText,
+        this._protectTranscriptionField(clientTranscriptionId, "text", text),
+        this._protectTranscriptionField(clientTranscriptionId, "raw_text", rawText),
         status,
-        errorMessage,
+        this._protectTranscriptionField(
+          clientTranscriptionId,
+          "error_message",
+          errorMessage
+        ),
         errorCode,
         routeKind,
         clientTranscriptionId
       );
 
       const fetchStmt = this.db.prepare("SELECT * FROM transcriptions WHERE id = ?");
-      const transcription = fetchStmt.get(result.lastInsertRowid);
+      const transcription = this._decodeTranscription(fetchStmt.get(result.lastInsertRowid));
 
       return { id: result.lastInsertRowid, success: true, transcription };
     } catch (error) {
@@ -748,7 +844,7 @@ class DatabaseManager {
         `SELECT * FROM transcriptions WHERE deleted_at IS NULL${statusFilter}${accountFilter} ORDER BY timestamp DESC LIMIT ?`
       );
       const transcriptions = accountId ? stmt.all(accountId, limit) : stmt.all(limit);
-      return transcriptions;
+      return transcriptions.map((row) => this._decodeTranscription(row));
     } catch (error) {
       debugLogger.error("Error getting transcriptions", { error: error.message }, "database");
       throw error;
@@ -760,13 +856,29 @@ class DatabaseManager {
       if (!this.db) {
         throw new Error("Database not initialized");
       }
+      const cloudRows = this.db
+        .prepare(
+          "SELECT id, client_transcription_id FROM transcriptions WHERE cloud_id IS NOT NULL AND deleted_at IS NULL"
+        )
+        .all();
       const tombstone = this.db.prepare(
-        "UPDATE transcriptions SET deleted_at = datetime('now'), sync_status = 'pending' WHERE cloud_id IS NOT NULL AND deleted_at IS NULL"
+        `UPDATE transcriptions SET text = ?, raw_text = ?, error_message = ?,
+         deleted_at = datetime('now'), sync_status = 'pending' WHERE id = ?`
       );
       const hardDelete = this.db.prepare("DELETE FROM transcriptions WHERE cloud_id IS NULL");
-      const clearAll = this.db.transaction(
-        () => tombstone.run().changes + hardDelete.run().changes
-      );
+      const clearAll = this.db.transaction(() => {
+        let changed = hardDelete.run().changes;
+        for (const row of cloudRows) {
+          const identity = this._transcriptionIdentity(row);
+          changed += tombstone.run(
+            this._protectTranscriptionField(identity, "text", ""),
+            this._protectTranscriptionField(identity, "raw_text", null),
+            this._protectTranscriptionField(identity, "error_message", null),
+            row.id
+          ).changes;
+        }
+        return changed;
+      });
       return { cleared: clearAll(), success: true };
     } catch (error) {
       debugLogger.error("Error clearing transcriptions", { error: error.message }, "database");
@@ -780,15 +892,27 @@ class DatabaseManager {
         throw new Error("Database not initialized");
       }
       const row = this.db
-        .prepare("SELECT cloud_id, deleted_at FROM transcriptions WHERE id = ?")
+        .prepare(
+          "SELECT id, client_transcription_id, cloud_id, deleted_at FROM transcriptions WHERE id = ?"
+        )
         .get(id);
       if (!row || row.deleted_at) return { success: false, id };
       const stmt = row.cloud_id
         ? this.db.prepare(
-            "UPDATE transcriptions SET deleted_at = datetime('now'), sync_status = 'pending' WHERE id = ? AND deleted_at IS NULL"
+            `UPDATE transcriptions SET text = ?, raw_text = ?, error_message = ?,
+             deleted_at = datetime('now'), sync_status = 'pending'
+             WHERE id = ? AND deleted_at IS NULL`
           )
         : this.db.prepare("DELETE FROM transcriptions WHERE id = ?");
-      const result = stmt.run(id);
+      const identity = this._transcriptionIdentity(row);
+      const result = row.cloud_id
+        ? stmt.run(
+            this._protectTranscriptionField(identity, "text", ""),
+            this._protectTranscriptionField(identity, "raw_text", null),
+            this._protectTranscriptionField(identity, "error_message", null),
+            id
+          )
+        : stmt.run(id);
       return { success: result.changes > 0, id };
     } catch (error) {
       debugLogger.error("Error deleting transcription", { error: error.message }, "database");
@@ -813,8 +937,17 @@ class DatabaseManager {
   updateTranscriptionText(id, text, rawText) {
     try {
       if (!this.db) throw new Error("Database not initialized");
+      const row = this.db
+        .prepare("SELECT id, client_transcription_id FROM transcriptions WHERE id = ?")
+        .get(id);
+      if (!row) return { success: false };
+      const identity = this._transcriptionIdentity(row);
       const stmt = this.db.prepare("UPDATE transcriptions SET text = ?, raw_text = ? WHERE id = ?");
-      stmt.run(text, rawText, id);
+      stmt.run(
+        this._protectTranscriptionField(identity, "text", text),
+        this._protectTranscriptionField(identity, "raw_text", rawText),
+        id
+      );
       return { success: true };
     } catch (error) {
       debugLogger.error("Error updating transcription text", { error: error.message }, "database");
@@ -825,10 +958,23 @@ class DatabaseManager {
   updateTranscriptionStatus(id, status, errorMessage = null, errorCode = null) {
     try {
       if (!this.db) throw new Error("Database not initialized");
+      const row = this.db
+        .prepare("SELECT id, client_transcription_id FROM transcriptions WHERE id = ?")
+        .get(id);
+      if (!row) return { success: false };
       const stmt = this.db.prepare(
         "UPDATE transcriptions SET status = ?, error_message = ?, error_code = ? WHERE id = ?"
       );
-      stmt.run(status, errorMessage, errorCode, id);
+      stmt.run(
+        status,
+        this._protectTranscriptionField(
+          this._transcriptionIdentity(row),
+          "error_message",
+          errorMessage
+        ),
+        errorCode,
+        id
+      );
       return { success: true };
     } catch (error) {
       debugLogger.error(
@@ -849,7 +995,9 @@ class DatabaseManager {
             "SELECT * FROM transcriptions WHERE id = ? AND (sync_account_id IS NULL OR sync_account_id = ?)"
           )
         : this.db.prepare("SELECT * FROM transcriptions WHERE id = ? AND sync_account_id IS NULL");
-      return (accountId ? stmt.get(id, accountId) : stmt.get(id)) || null;
+      return this._decodeTranscription(
+        (accountId ? stmt.get(id, accountId) : stmt.get(id)) || null
+      );
     } catch (error) {
       debugLogger.error("Error getting transcription by id", { error: error.message }, "database");
       throw error;
@@ -880,9 +1028,11 @@ class DatabaseManager {
         throw new Error("Database not initialized");
       }
       const rows = this.db
-        .prepare("SELECT word FROM custom_dictionary WHERE deleted_at IS NULL ORDER BY id ASC")
+        .prepare(
+          "SELECT id, client_dict_id, word FROM custom_dictionary WHERE deleted_at IS NULL ORDER BY id ASC"
+        )
         .all();
-      return rows.map((row) => row.word);
+      return rows.map((row) => this._decodeDictionaryRow(row).word);
     } catch (error) {
       debugLogger.error("Error getting dictionary", { error: error.message }, "database");
       throw error;
@@ -910,31 +1060,36 @@ class DatabaseManager {
       const incomingLower = new Set(incomingByLower.keys());
 
       const existingRows = this.db
-        .prepare("SELECT id, word, source, deleted_at FROM custom_dictionary")
-        .all();
+        .prepare(
+          "SELECT id, word, word_hmac, source, deleted_at, client_dict_id, cloud_id FROM custom_dictionary"
+        )
+        .all()
+        .map((row) => this._decodeDictionaryRow(row));
       const existingByLower = new Map(existingRows.map((r) => [r.word.toLowerCase(), r]));
 
       const tombstone = this.db.prepare(
-        "UPDATE custom_dictionary SET deleted_at = datetime('now'), updated_at = datetime('now'), sync_status = 'pending' WHERE id = ? AND deleted_at IS NULL"
+        `UPDATE custom_dictionary SET word = ?, word_hmac = ?,
+         deleted_at = datetime('now'), updated_at = datetime('now'), sync_status = 'pending'
+         WHERE id = ? AND deleted_at IS NULL`
       );
       const hardDelete = this.db.prepare(
         "DELETE FROM custom_dictionary WHERE id = ? AND cloud_id IS NULL"
       );
       const restore = this.db.prepare(
-        "UPDATE custom_dictionary SET deleted_at = NULL, source = CASE WHEN source = 'learned' AND ? = 'manual' THEN 'manual' ELSE source END, word = ?, updated_at = datetime('now'), sync_status = 'pending' WHERE id = ?"
+        "UPDATE custom_dictionary SET deleted_at = NULL, source = CASE WHEN source = 'learned' AND ? = 'manual' THEN 'manual' ELSE source END, word = ?, word_hmac = ?, updated_at = datetime('now'), sync_status = 'pending' WHERE id = ?"
       );
       const promoteSource = this.db.prepare(
-        "UPDATE custom_dictionary SET word = ?, source = 'manual', updated_at = datetime('now'), sync_status = 'pending' WHERE id = ? AND source = 'learned'"
+        "UPDATE custom_dictionary SET word = ?, word_hmac = ?, source = 'manual', updated_at = datetime('now'), sync_status = 'pending' WHERE id = ? AND source = 'learned'"
       );
       // Updates word casing on an active row (guarded on word != ? so an
       // unchanged row stays untouched and keeps its sync_status).
       const updateWord = this.db.prepare(
-        "UPDATE custom_dictionary SET word = ?, updated_at = datetime('now'), sync_status = 'pending' WHERE id = ? AND word != ?"
+        "UPDATE custom_dictionary SET word = ?, word_hmac = ?, updated_at = datetime('now'), sync_status = 'pending' WHERE id = ?"
       );
       // INSERT OR IGNORE in case a legacy case-variant row collides on the
       // case-sensitive UNIQUE(word) that existingByLower didn't catch.
       const insert = this.db.prepare(
-        "INSERT OR IGNORE INTO custom_dictionary (word, source, client_dict_id, sync_status, updated_at) VALUES (?, ?, ?, 'pending', datetime('now'))"
+        "INSERT OR IGNORE INTO custom_dictionary (word, word_hmac, source, client_dict_id, sync_status, updated_at) VALUES (?, ?, ?, ?, 'pending', datetime('now'))"
       );
 
       this.db.transaction(() => {
@@ -944,21 +1099,51 @@ class DatabaseManager {
           // Removed word: hard-delete if never synced (no cloud_id), else
           // tombstone so the next push tells the server about the deletion.
           const hardResult = hardDelete.run(existing.id);
-          if (hardResult.changes === 0) tombstone.run(existing.id);
+          if (hardResult.changes === 0) {
+            tombstone.run(
+              this._protectDictionaryWord(this._dictionaryIdentity(existing), ""),
+              this.localDataProtection.index(
+                "custom_dictionary:tombstone",
+                this._dictionaryIdentity(existing)
+              ),
+              existing.id
+            );
+          }
         }
         for (const word of cleaned) {
           const existing = existingByLower.get(word.toLowerCase());
           if (existing) {
             if (existing.deleted_at) {
-              restore.run(sourceForNewWords, word, existing.id);
+              restore.run(
+                sourceForNewWords,
+                this._protectDictionaryWord(this._dictionaryIdentity(existing), word),
+                this._dictionaryIndex(word),
+                existing.id
+              );
             } else if (sourceForNewWords === "manual" && existing.source === "learned") {
-              promoteSource.run(word, existing.id);
+              promoteSource.run(
+                this._protectDictionaryWord(this._dictionaryIdentity(existing), word),
+                this._dictionaryIndex(word),
+                existing.id
+              );
             } else {
-              updateWord.run(word, existing.id, word);
+              if (existing.word !== word) {
+                updateWord.run(
+                  this._protectDictionaryWord(this._dictionaryIdentity(existing), word),
+                  this._dictionaryIndex(word),
+                  existing.id
+                );
+              }
             }
             continue;
           }
-          insert.run(word, sourceForNewWords, randomUUID());
+          const clientId = randomUUID();
+          insert.run(
+            this._protectDictionaryWord(clientId, word),
+            this._dictionaryIndex(word),
+            sourceForNewWords,
+            clientId
+          );
         }
       })();
 
@@ -976,7 +1161,8 @@ class DatabaseManager {
         .prepare(
           "SELECT * FROM custom_dictionary WHERE sync_status = 'pending' AND deleted_at IS NULL"
         )
-        .all();
+        .all()
+        .map((row) => this._decodeDictionaryRow(row));
     } catch (error) {
       debugLogger.error("Error getting pending dictionary", { error: error.message }, "database");
       throw error;
@@ -990,7 +1176,8 @@ class DatabaseManager {
         .prepare(
           "SELECT * FROM custom_dictionary WHERE deleted_at IS NOT NULL AND cloud_id IS NOT NULL AND sync_status = 'pending'"
         )
-        .all();
+        .all()
+        .map((row) => this._decodeDictionaryRow(row));
     } catch (error) {
       debugLogger.error(
         "Error getting pending dictionary deletes",
@@ -1020,9 +1207,11 @@ class DatabaseManager {
     try {
       if (!this.db) throw new Error("Database not initialized");
       return (
-        this.db
+        this._decodeDictionaryRow(
+          this.db
           .prepare("SELECT * FROM custom_dictionary WHERE client_dict_id = ?")
           .get(clientDictId) || null
+        )
       );
     } catch (error) {
       debugLogger.error(
@@ -1070,11 +1259,12 @@ class DatabaseManager {
         this.db
           .prepare("SELECT * FROM custom_dictionary WHERE cloud_id = ? LIMIT 1")
           .get(cloudEntry.id);
-      const existing =
+      const existingRaw =
         byCloud ||
         this.db
-          .prepare("SELECT * FROM custom_dictionary WHERE lower(word) = lower(?) LIMIT 1")
-          .get(word);
+          .prepare("SELECT * FROM custom_dictionary WHERE word_hmac = ? LIMIT 1")
+          .get(this._dictionaryIndex(word));
+      const existing = this._decodeDictionaryRow(existingRaw);
 
       if (existing) {
         // Manual is sticky — a pull never demotes a local manual row to learned.
@@ -1083,24 +1273,44 @@ class DatabaseManager {
         this.db
           .prepare(
             `UPDATE custom_dictionary
-             SET cloud_id = ?, client_dict_id = ?, word = ?, source = ?,
+             SET cloud_id = ?, client_dict_id = ?, word = ?, word_hmac = ?, source = ?,
                  sync_status = 'synced', deleted_at = NULL, updated_at = ?
              WHERE id = ?`
           )
-          .run(cloudEntry.id, clientDictId, word, mergedSource, updatedAt, existing.id);
-        return this.db.prepare("SELECT * FROM custom_dictionary WHERE id = ?").get(existing.id);
+          .run(
+            cloudEntry.id,
+            clientDictId,
+            this._protectDictionaryWord(clientDictId, word),
+            this._dictionaryIndex(word),
+            mergedSource,
+            updatedAt,
+            existing.id
+          );
+        return this._decodeDictionaryRow(
+          this.db.prepare("SELECT * FROM custom_dictionary WHERE id = ?").get(existing.id)
+        );
       }
 
       this.db
         .prepare(
           `INSERT INTO custom_dictionary
-             (word, source, client_dict_id, cloud_id, sync_status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, 'synced', ?, ?)`
+             (word, word_hmac, source, client_dict_id, cloud_id, sync_status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, 'synced', ?, ?)`
         )
-        .run(word, incomingSource, clientDictId, cloudEntry.id, createdAt, updatedAt);
-      return this.db
-        .prepare("SELECT * FROM custom_dictionary WHERE client_dict_id = ?")
-        .get(clientDictId);
+        .run(
+          this._protectDictionaryWord(clientDictId, word),
+          this._dictionaryIndex(word),
+          incomingSource,
+          clientDictId,
+          cloudEntry.id,
+          createdAt,
+          updatedAt
+        );
+      return this._decodeDictionaryRow(
+        this.db
+          .prepare("SELECT * FROM custom_dictionary WHERE client_dict_id = ?")
+          .get(clientDictId)
+      );
     } catch (error) {
       debugLogger.error(
         "Error upserting dictionary entry from cloud",
@@ -1483,14 +1693,21 @@ class DatabaseManager {
         title,
         content,
         noteType,
-        sourceFile,
+        sourceFile === null
+          ? null
+          : this.localDataProtection.protect(
+              "notes",
+              clientNoteId,
+              "source_file",
+              sourceFile
+            ),
         audioDuration,
         folderId,
         clientNoteId
       );
 
       const fetchStmt = this.db.prepare("SELECT * FROM notes WHERE id = ?");
-      const note = fetchStmt.get(result.lastInsertRowid);
+      const note = this._decodeNote(fetchStmt.get(result.lastInsertRowid));
 
       return { success: true, note };
     } catch (error) {
@@ -1505,7 +1722,7 @@ class DatabaseManager {
         throw new Error("Database not initialized");
       }
       const stmt = this.db.prepare("SELECT * FROM notes WHERE id = ?");
-      return stmt.get(id) || null;
+      return this._decodeNote(stmt.get(id) || null);
     } catch (error) {
       debugLogger.error("Error getting note", { error: error.message }, "notes");
       throw error;
@@ -1520,7 +1737,7 @@ class DatabaseManager {
       const stmt = this.db.prepare(
         "SELECT * FROM notes WHERE cloud_id = ? AND deleted_at IS NULL LIMIT 1"
       );
-      return stmt.get(cloudId) || null;
+      return this._decodeNote(stmt.get(cloudId) || null);
     } catch (error) {
       debugLogger.error("Error getting note by cloud_id", { error: error.message }, "notes");
       throw error;
@@ -1545,7 +1762,7 @@ class DatabaseManager {
       const where = `WHERE ${conditions.join(" AND ")}`;
       const stmt = this.db.prepare(`SELECT * FROM notes ${where} ORDER BY updated_at DESC LIMIT ?`);
       params.push(limit);
-      return stmt.all(...params);
+      return stmt.all(...params).map((row) => this._decodeNote(row));
     } catch (error) {
       debugLogger.error("Error getting notes", { error: error.message }, "notes");
       throw error;
@@ -1563,6 +1780,7 @@ class DatabaseManager {
         "enhanced_at_content_hash",
         "folder_id",
         "transcript",
+        "source_file",
         "calendar_event_id",
         "participants",
         "diarization_enabled",
@@ -1574,10 +1792,24 @@ class DatabaseManager {
       ];
       const fields = [];
       const values = [];
+      const current = this.db
+        .prepare("SELECT id, client_note_id FROM notes WHERE id = ?")
+        .get(id);
+      if (!current) return { success: false };
+      const noteIdentity = current.client_note_id || `legacy:${current.id}`;
       for (const [key, value] of Object.entries(updates)) {
         if (allowedFields.includes(key) && value !== undefined) {
           fields.push(`${key} = ?`);
-          values.push(value);
+          values.push(
+            ["transcript", "source_file", "participants"].includes(key) && value !== null
+              ? this.localDataProtection.protect(
+                  "notes",
+                  noteIdentity,
+                  key,
+                  value
+                )
+              : value
+          );
         }
       }
       if (fields.length === 0) return { success: false };
@@ -1591,7 +1823,7 @@ class DatabaseManager {
       const stmt = this.db.prepare(`UPDATE notes SET ${fields.join(", ")} WHERE id = ?`);
       stmt.run(...values);
       const fetchStmt = this.db.prepare("SELECT * FROM notes WHERE id = ?");
-      const note = fetchStmt.get(id);
+      const note = this._decodeNote(fetchStmt.get(id));
       return { success: true, note };
     } catch (error) {
       debugLogger.error("Error updating note", { error: error.message }, "notes");
@@ -2200,7 +2432,8 @@ class DatabaseManager {
         LIMIT ?
       `
         )
-        .all(ftsQuery, limit);
+        .all(ftsQuery, limit)
+        .map((row) => this._decodeNote(row));
     } catch (error) {
       debugLogger.error("Error searching notes", { error: error.message }, "database");
       throw error;
@@ -2236,9 +2469,13 @@ class DatabaseManager {
       if (!this.db) throw new Error("Database not initialized");
       const base = "SELECT * FROM notes WHERE calendar_event_id = ? AND deleted_at IS NULL";
       if (excludeNoteId) {
-        return this.db.prepare(`${base} AND id != ? LIMIT 1`).get(eventId, excludeNoteId) || null;
+        return (
+          this._decodeNote(
+            this.db.prepare(`${base} AND id != ? LIMIT 1`).get(eventId, excludeNoteId)
+          ) || null
+        );
       }
-      return this.db.prepare(`${base} LIMIT 1`).get(eventId) || null;
+      return this._decodeNote(this.db.prepare(`${base} LIMIT 1`).get(eventId)) || null;
     } catch (error) {
       debugLogger.error(
         "Error getting note by calendar event id",
@@ -2361,7 +2598,7 @@ class DatabaseManager {
     try {
       if (!this.db) throw new Error("Database not initialized");
       this.db.prepare("UPDATE notes SET cloud_id = ? WHERE id = ?").run(cloudId, id);
-      return this.db.prepare("SELECT * FROM notes WHERE id = ?").get(id);
+      return this._decodeNote(this.db.prepare("SELECT * FROM notes WHERE id = ?").get(id));
     } catch (error) {
       debugLogger.error("Error updating note cloud_id", { error: error.message }, "database");
       throw error;
@@ -2379,16 +2616,96 @@ class DatabaseManager {
         this.db = null;
       }
       this.dataEnvelope?.destroy();
+      this.localDataCrypto?.destroyKeyring();
     } catch (error) {
       debugLogger.error("Error deleting database file", { error: error.message }, "database");
     }
   }
 
   sealAtRest() {
-    if (!this.dataEnvelope || !this.db) return { sealed: false };
-    const result = this.dataEnvelope.seal(this.db);
+    if (!this.db) return { sealed: false };
+    this.localDataProtection?.secureCheckpoint();
+    this.db.close();
     this.db = null;
-    return result;
+    return { sealed: true, fieldEncrypted: true };
+  }
+
+  async createPrivacyBackup(destination) {
+    if (!this.localDataProtection || !this.db) throw new Error("Database not initialized");
+    return this.localDataProtection.createBackup(destination);
+  }
+
+  verifyPrivacyBackup(destination) {
+    if (!this.localDataProtection) throw new Error("Database not initialized");
+    return this.localDataProtection.verifyBackup(destination);
+  }
+
+  rotateSensitiveDataKey() {
+    if (!this.localDataProtection || !this.db) throw new Error("Database not initialized");
+    const version = this.localDataProtection.rotateKeyAndReencrypt();
+    this.localDataProtection.secureCheckpoint();
+    return {
+      success: true,
+      keyVersion: version,
+      retainedKeyVersions: this.localDataCrypto.retainedVersions(),
+    };
+  }
+
+  finalizeSensitiveDataKeyRotation(additionalActiveVersions = []) {
+    if (!this.localDataProtection || !this.localDataCrypto) {
+      throw new Error("Database not initialized");
+    }
+    const active = this.localDataProtection.activeFieldKeyVersions();
+    for (const version of additionalActiveVersions) active.add(Number(version));
+    this.localDataCrypto.pruneKeys(active);
+    return { retainedKeyVersions: this.localDataCrypto.retainedVersions() };
+  }
+
+  purgeSensitiveData({
+    transcriptionRetentionDays = null,
+    syncedTranscriptRetentionDays = null,
+  } = {}) {
+    if (!this.db) throw new Error("Database not initialized");
+    const normalizeDays = (value) => {
+      if (value === null || value === undefined) return null;
+      const days = Number(value);
+      if (!Number.isInteger(days) || days < 0 || days > 3650) {
+        throw new TypeError("Retention days must be an integer between 0 and 3650");
+      }
+      return days;
+    };
+    const transcriptionDays = normalizeDays(transcriptionRetentionDays);
+    const syncedDays = normalizeDays(syncedTranscriptRetentionDays);
+    const result = this.db.transaction(() => {
+      let transcriptions = 0;
+      let syncedTranscripts = 0;
+      if (transcriptionDays !== null) {
+        transcriptions = this.db
+          .prepare(
+            `DELETE FROM transcriptions
+             WHERE datetime(COALESCE(created_at, timestamp)) <
+                   datetime('now', '-' || ? || ' days')`
+          )
+          .run(transcriptionDays).changes;
+      }
+      const hasSyncedTable = this.db
+        .prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'desktop_synced_transcripts'"
+        )
+        .get();
+      if (syncedDays !== null && hasSyncedTable) {
+        syncedTranscripts = this.db
+          .prepare(
+            `DELETE FROM desktop_synced_transcripts
+             WHERE datetime(COALESCE(source_created_at, created_at)) <
+                   datetime('now', '-' || ? || ' days')`
+          )
+          .run(syncedDays).changes;
+      }
+      return { transcriptions, syncedTranscripts };
+    })();
+    this.localDataProtection.secureCheckpoint();
+    return { success: true, ...result };
   }
   getAgentConversationsWithPreview(limit = 50, offset = 0, includeArchived = false) {
     try {
@@ -2727,7 +3044,8 @@ class DatabaseManager {
       if (!this.db) throw new Error("Database not initialized");
       return this.db
         .prepare("SELECT * FROM notes WHERE sync_status = 'pending' AND deleted_at IS NULL")
-        .all();
+        .all()
+        .map((row) => this._decodeNote(row));
     } catch (error) {
       debugLogger.error("Error getting pending notes", { error: error.message }, "database");
       throw error;
@@ -2741,7 +3059,8 @@ class DatabaseManager {
         .prepare(
           "SELECT * FROM notes WHERE deleted_at IS NOT NULL AND cloud_id IS NOT NULL AND sync_status = 'pending'"
         )
-        .all();
+        .all()
+        .map((row) => this._decodeNote(row));
     } catch (error) {
       debugLogger.error("Error getting pending note deletes", { error: error.message }, "database");
       throw error;
@@ -2752,7 +3071,9 @@ class DatabaseManager {
     try {
       if (!this.db) throw new Error("Database not initialized");
       return (
-        this.db.prepare("SELECT * FROM notes WHERE client_note_id = ?").get(clientNoteId) || null
+        this._decodeNote(
+          this.db.prepare("SELECT * FROM notes WHERE client_note_id = ?").get(clientNoteId)
+        ) || null
       );
     } catch (error) {
       debugLogger.error("Error getting note by client id", { error: error.message }, "database");
@@ -2807,20 +3128,43 @@ class DatabaseManager {
         cloudNote.enhancement_prompt || null,
         cloudNote.enhanced_at_content_hash || null,
         cloudNote.note_type || "personal",
-        cloudNote.source_file || null,
+        cloudNote.source_file
+          ? this.localDataProtection.protect(
+              "notes",
+              cloudNote.client_note_id,
+              "source_file",
+              cloudNote.source_file
+            )
+          : null,
         cloudNote.audio_duration_seconds || null,
-        cloudNote.transcript || null,
+        cloudNote.transcript
+          ? this.localDataProtection.protect(
+              "notes",
+              cloudNote.client_note_id,
+              "transcript",
+              cloudNote.transcript
+            )
+          : null,
         localFolderId,
-        cloudNote.participants || null,
+        cloudNote.participants
+          ? this.localDataProtection.protect(
+              "notes",
+              cloudNote.client_note_id,
+              "participants",
+              cloudNote.participants
+            )
+          : null,
         cloudNote.calendar_event_id || null,
         cloudNote.diarization_enabled ?? null,
         cloudNote.expected_speaker_count ?? null,
         cloudNote.created_at,
         cloudNote.updated_at
       );
-      return this.db
-        .prepare("SELECT * FROM notes WHERE client_note_id = ?")
-        .get(cloudNote.client_note_id);
+      return this._decodeNote(
+        this.db
+          .prepare("SELECT * FROM notes WHERE client_note_id = ?")
+          .get(cloudNote.client_note_id)
+      );
     } catch (error) {
       debugLogger.error("Error upserting note from cloud", { error: error.message }, "database");
       throw error;
@@ -3132,7 +3476,8 @@ class DatabaseManager {
         .prepare(
           "SELECT * FROM transcriptions WHERE sync_status = 'pending' AND deleted_at IS NULL"
         )
-        .all();
+        .all()
+        .map((row) => this._decodeTranscription(row));
     } catch (error) {
       debugLogger.error(
         "Error getting pending transcriptions",
@@ -3150,7 +3495,8 @@ class DatabaseManager {
         .prepare(
           "SELECT * FROM transcriptions WHERE deleted_at IS NOT NULL AND cloud_id IS NOT NULL AND sync_status = 'pending'"
         )
-        .all();
+        .all()
+        .map((row) => this._decodeTranscription(row));
     } catch (error) {
       debugLogger.error(
         "Error getting pending transcription deletes",
@@ -3176,9 +3522,11 @@ class DatabaseManager {
     try {
       if (!this.db) throw new Error("Database not initialized");
       return (
-        this.db
-          .prepare("SELECT * FROM transcriptions WHERE client_transcription_id = ?")
-          .get(clientId) || null
+        this._decodeTranscription(
+          this.db
+            .prepare("SELECT * FROM transcriptions WHERE client_transcription_id = ?")
+            .get(clientId)
+        ) || null
       );
     } catch (error) {
       debugLogger.error(
@@ -3206,14 +3554,24 @@ class DatabaseManager {
       stmt.run(
         cloudTranscription.client_transcription_id,
         cloudTranscription.id,
-        cloudTranscription.text ?? "",
-        cloudTranscription.raw_text || null,
+        this._protectTranscriptionField(
+          cloudTranscription.client_transcription_id,
+          "text",
+          cloudTranscription.text ?? ""
+        ),
+        this._protectTranscriptionField(
+          cloudTranscription.client_transcription_id,
+          "raw_text",
+          cloudTranscription.raw_text || null
+        ),
         cloudTranscription.status || "completed",
         cloudTranscription.created_at
       );
-      return this.db
-        .prepare("SELECT * FROM transcriptions WHERE client_transcription_id = ?")
-        .get(cloudTranscription.client_transcription_id);
+      return this._decodeTranscription(
+        this.db
+          .prepare("SELECT * FROM transcriptions WHERE client_transcription_id = ?")
+          .get(cloudTranscription.client_transcription_id)
+      );
     } catch (error) {
       debugLogger.error(
         "Error upserting transcription from cloud",
@@ -3269,14 +3627,25 @@ class DatabaseManager {
       SELECT * FROM transcriptions WHERE sync_account_id = ? AND sync_record_id = ?
     `).get(accountId, record.id);
     if (current) {
+      const identity = this._transcriptionIdentity(current);
       this.db.prepare(`
         UPDATE transcriptions SET
           text = ?, raw_text = ?, status = 'completed', cloud_id = ?,
           sync_status = 'synced', sync_version = ?, sync_source = ?,
           deleted_at = NULL
         WHERE id = ? AND sync_account_id = ?
-      `).run(record.text, record.text, record.id, record.version, record.source, current.id, accountId);
-      return this.db.prepare("SELECT * FROM transcriptions WHERE id = ?").get(current.id);
+      `).run(
+        this._protectTranscriptionField(identity, "text", record.text),
+        this._protectTranscriptionField(identity, "raw_text", record.text),
+        record.id,
+        record.version,
+        record.source,
+        current.id,
+        accountId
+      );
+      return this._decodeTranscription(
+        this.db.prepare("SELECT * FROM transcriptions WHERE id = ?").get(current.id)
+      );
     }
     const clientId = randomUUID();
     const result = this.db.prepare(`
@@ -3285,8 +3654,8 @@ class DatabaseManager {
         sync_status, sync_account_id, sync_record_id, sync_version, sync_source
       ) VALUES (?, ?, 'completed', 'desktop-sync', ?, ?, 'synced', ?, ?, ?, ?)
     `).run(
-      record.text,
-      record.text,
+      this._protectTranscriptionField(clientId, "text", record.text),
+      this._protectTranscriptionField(clientId, "raw_text", record.text),
       clientId,
       record.id,
       accountId,
@@ -3294,7 +3663,9 @@ class DatabaseManager {
       record.version,
       record.source
     );
-    return this.db.prepare("SELECT * FROM transcriptions WHERE id = ?").get(result.lastInsertRowid);
+    return this._decodeTranscription(
+      this.db.prepare("SELECT * FROM transcriptions WHERE id = ?").get(result.lastInsertRowid)
+    );
   }
 
   remapSyncedTranscriptMirror(accountId, oldRecordId, newRecordId) {
