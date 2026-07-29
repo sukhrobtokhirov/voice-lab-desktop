@@ -1499,6 +1499,7 @@ class IPCHandlers {
     });
 
     this._handle("db-create-folder", async (event, name) => {
+      require("./markdownMirror").assertSafeFolderName(name);
       const result = this.databaseManager.createFolder(name);
       if (result?.success && result?.folder) {
         setImmediate(() => {
@@ -1531,6 +1532,7 @@ class IPCHandlers {
     });
 
     this._handle("db-rename-folder", async (event, id, name) => {
+      require("./markdownMirror").assertSafeFolderName(name);
       const oldName = this._noteFilesEnabled ? this._getFolderName(id) : null;
       const result = this.databaseManager.renameFolder(id, name);
       if (result?.success && result?.folder) {
