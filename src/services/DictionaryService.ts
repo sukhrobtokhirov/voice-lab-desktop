@@ -55,8 +55,16 @@ async function list(
 }
 
 export const DictionaryService = {
-  batchCreate,
-  update,
-  delete: deleteEntry,
-  list,
+  batchCreate: async (..._args: Parameters<typeof batchCreate>) => {
+    throw new Error("Legacy dictionary sync is disabled; use desktop sync mutations.");
+  },
+  update: async (..._args: Parameters<typeof update>) => {
+    throw new Error("Legacy dictionary sync is disabled; use desktop sync mutations.");
+  },
+  delete: async (..._args: Parameters<typeof deleteEntry>) => {
+    throw new Error("Legacy dictionary sync is disabled; use desktop sync mutations.");
+  },
+  list: async (..._args: Parameters<typeof list>) => {
+    throw new Error("Legacy dictionary sync is disabled; use desktop sync changes.");
+  },
 };

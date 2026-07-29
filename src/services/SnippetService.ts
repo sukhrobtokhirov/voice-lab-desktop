@@ -64,9 +64,19 @@ async function listDelta(
 }
 
 export const SnippetService = {
-  batchCreate,
-  update,
-  delete: deleteEntry,
-  listSnapshot,
-  listDelta,
+  batchCreate: async (..._args: Parameters<typeof batchCreate>) => {
+    throw new Error("Snippet cloud sync is not enabled in desktop sync v1.");
+  },
+  update: async (..._args: Parameters<typeof update>) => {
+    throw new Error("Snippet cloud sync is not enabled in desktop sync v1.");
+  },
+  delete: async (..._args: Parameters<typeof deleteEntry>) => {
+    throw new Error("Snippet cloud sync is not enabled in desktop sync v1.");
+  },
+  listSnapshot: async (..._args: Parameters<typeof listSnapshot>) => {
+    throw new Error("Snippet cloud sync is not enabled in desktop sync v1.");
+  },
+  listDelta: async (..._args: Parameters<typeof listDelta>) => {
+    throw new Error("Snippet cloud sync is not enabled in desktop sync v1.");
+  },
 };

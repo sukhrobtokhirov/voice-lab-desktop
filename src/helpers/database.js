@@ -24,6 +24,7 @@ class DatabaseManager {
       const dbPath = path.join(app.getPath("userData"), dbFileName);
 
       this.db = new Database(dbPath);
+      this.db.pragma("foreign_keys = ON");
       this.db.pragma("journal_mode = WAL");
 
       this.db.exec(`
@@ -570,6 +571,21 @@ class DatabaseManager {
       } catch (err) {
         if (!err.message.includes("duplicate column")) throw err;
       }
+      for (const [column, definition] of [
+        ["sync_account_id", "TEXT"],
+        ["sync_record_id", "TEXT"],
+        ["sync_version", "INTEGER"],
+        ["sync_source", "TEXT"],
+      ]) {
+        try {
+          this.db.exec(`ALTER TABLE transcriptions ADD COLUMN ${column} ${definition}`);
+        } catch (err) {
+          if (!err.message.includes("duplicate column")) throw err;
+        }
+      }
+      this.db.exec(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_transcriptions_sync_identity ON transcriptions(sync_account_id, sync_record_id) WHERE sync_account_id IS NOT NULL AND sync_record_id IS NOT NULL"
+      );
 
       // Sync columns for custom_dictionary
       try {
@@ -657,6 +673,14 @@ class DatabaseManager {
     }
   }
 
+  getDesktopSyncStore() {
+    if (!this.desktopSyncStore) {
+      const DesktopSyncStore = require("./desktopSyncStore");
+      this.desktopSyncStore = new DesktopSyncStore(this);
+    }
+    return this.desktopSyncStore;
+  }
+
   saveTranscription(
     text,
     rawText = null,
@@ -701,10 +725,14 @@ class DatabaseManager {
         throw new Error("Database not initialized");
       }
       const statusFilter = includeDiscarded ? "" : " AND status != 'discarded'";
+      const accountId = this.desktopSyncStore?.activeAccount()?.account_id || null;
+      const accountFilter = accountId
+        ? " AND (sync_account_id IS NULL OR sync_account_id = ?)"
+        : " AND sync_account_id IS NULL";
       const stmt = this.db.prepare(
-        `SELECT * FROM transcriptions WHERE deleted_at IS NULL${statusFilter} ORDER BY timestamp DESC LIMIT ?`
+        `SELECT * FROM transcriptions WHERE deleted_at IS NULL${statusFilter}${accountFilter} ORDER BY timestamp DESC LIMIT ?`
       );
-      const transcriptions = stmt.all(limit);
+      const transcriptions = accountId ? stmt.all(accountId, limit) : stmt.all(limit);
       return transcriptions;
     } catch (error) {
       debugLogger.error("Error getting transcriptions", { error: error.message }, "database");
@@ -800,8 +828,13 @@ class DatabaseManager {
   getTranscriptionById(id) {
     try {
       if (!this.db) throw new Error("Database not initialized");
-      const stmt = this.db.prepare("SELECT * FROM transcriptions WHERE id = ?");
-      return stmt.get(id) || null;
+      const accountId = this.desktopSyncStore?.activeAccount()?.account_id || null;
+      const stmt = accountId
+        ? this.db.prepare(
+            "SELECT * FROM transcriptions WHERE id = ? AND (sync_account_id IS NULL OR sync_account_id = ?)"
+          )
+        : this.db.prepare("SELECT * FROM transcriptions WHERE id = ? AND sync_account_id IS NULL");
+      return (accountId ? stmt.get(id, accountId) : stmt.get(id)) || null;
     } catch (error) {
       debugLogger.error("Error getting transcription by id", { error: error.message }, "database");
       throw error;
@@ -3186,6 +3219,80 @@ class DatabaseManager {
       debugLogger.error("Error marking transcription synced", { error: error.message }, "database");
       throw error;
     }
+  }
+
+  linkLocalTranscriptionToSync(id, accountId, recordId, version, source) {
+    const result = this.db.prepare(`
+      UPDATE transcriptions SET
+        sync_account_id = ?, sync_record_id = ?, sync_version = ?, sync_source = ?,
+        sync_status = 'pending'
+      WHERE id = ? AND (sync_account_id IS NULL OR sync_account_id = ?)
+    `).run(accountId, recordId, version, source, id, accountId);
+    return { success: result.changes > 0 };
+  }
+
+  detachSyncedTranscriptMirror(id, accountId) {
+    const result = this.db.prepare(`
+      UPDATE transcriptions SET
+        sync_account_id = NULL, sync_record_id = NULL, sync_version = NULL,
+        sync_source = NULL, cloud_id = NULL, sync_status = 'pending'
+      WHERE id = ? AND sync_account_id = ?
+    `).run(id, accountId);
+    return { success: result.changes > 0 };
+  }
+
+  deleteSyncedTranscriptMirror(id, accountId) {
+    const result = this.db.prepare(
+      "DELETE FROM transcriptions WHERE id = ? AND sync_account_id = ?"
+    ).run(id, accountId);
+    return { success: result.changes > 0 };
+  }
+
+  upsertSyncedTranscriptMirror(accountId, record) {
+    const current = this.db.prepare(`
+      SELECT * FROM transcriptions WHERE sync_account_id = ? AND sync_record_id = ?
+    `).get(accountId, record.id);
+    if (current) {
+      this.db.prepare(`
+        UPDATE transcriptions SET
+          text = ?, raw_text = ?, status = 'completed', cloud_id = ?,
+          sync_status = 'synced', sync_version = ?, sync_source = ?,
+          deleted_at = NULL
+        WHERE id = ? AND sync_account_id = ?
+      `).run(record.text, record.text, record.id, record.version, record.source, current.id, accountId);
+      return this.db.prepare("SELECT * FROM transcriptions WHERE id = ?").get(current.id);
+    }
+    const clientId = randomUUID();
+    const result = this.db.prepare(`
+      INSERT INTO transcriptions (
+        text, raw_text, status, route_kind, client_transcription_id, cloud_id,
+        sync_status, sync_account_id, sync_record_id, sync_version, sync_source
+      ) VALUES (?, ?, 'completed', 'desktop-sync', ?, ?, 'synced', ?, ?, ?, ?)
+    `).run(
+      record.text,
+      record.text,
+      clientId,
+      record.id,
+      accountId,
+      record.id,
+      record.version,
+      record.source
+    );
+    return this.db.prepare("SELECT * FROM transcriptions WHERE id = ?").get(result.lastInsertRowid);
+  }
+
+  remapSyncedTranscriptMirror(accountId, oldRecordId, newRecordId) {
+    this.db.prepare(`
+      UPDATE transcriptions SET sync_record_id = ?, cloud_id = ?
+      WHERE sync_account_id = ? AND sync_record_id = ?
+    `).run(newRecordId, newRecordId, accountId, oldRecordId);
+  }
+
+  updateSyncedTranscriptVersion(accountId, recordId, version) {
+    this.db.prepare(`
+      UPDATE transcriptions SET sync_version = ?, sync_status = 'synced'
+      WHERE sync_account_id = ? AND sync_record_id = ?
+    `).run(version, accountId, recordId);
   }
 
   getNotesWithUnmappedSpeakers() {

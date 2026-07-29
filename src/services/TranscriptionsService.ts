@@ -67,9 +67,19 @@ async function batchDelete(ids: string[]): Promise<{ deleted: string[] }> {
 export { create, batchCreate, list, deleteTranscription, batchDelete };
 
 export const TranscriptionsService = {
-  create,
-  batchCreate,
-  list,
-  delete: deleteTranscription,
-  batchDelete,
+  create: async (..._args: Parameters<typeof create>) => {
+    throw new Error("Transcript sync requires explicit server opt-in.");
+  },
+  batchCreate: async (..._args: Parameters<typeof batchCreate>) => {
+    throw new Error("Transcript sync requires explicit server opt-in.");
+  },
+  list: async (..._args: Parameters<typeof list>) => {
+    throw new Error("Transcript sync is disabled for desktop sync v1.");
+  },
+  delete: async (..._args: Parameters<typeof deleteTranscription>) => {
+    throw new Error("Transcript sync is disabled for desktop sync v1.");
+  },
+  batchDelete: async (..._args: Parameters<typeof batchDelete>) => {
+    throw new Error("Transcript sync is disabled for desktop sync v1.");
+  },
 };

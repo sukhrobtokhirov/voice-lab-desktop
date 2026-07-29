@@ -27,6 +27,7 @@ import type {
   ChatAgentSettings,
 } from "../hooks/useSettings";
 import type { Snippet } from "../utils/snippets";
+import type { DesktopDictionaryEntry, DesktopDictionaryState } from "../types/electron";
 
 let _ReasoningService: typeof import("../services/ReasoningService").default | null = null;
 
@@ -147,7 +148,6 @@ const BOOLEAN_SETTINGS = new Set([
 ]);
 
 const ARRAY_SETTINGS = new Set([
-  "customDictionary",
   "snippets",
   "gcalAccounts",
   "onboardingUseCases",
@@ -190,36 +190,22 @@ function migratePreferredLanguage() {
 
 migratePreferredLanguage();
 
-// Aisha-only product surface — always VoiceLab Cloud (internal id: openwhispr).
 function deriveTranscriptionMode(
-  _useLocalWhisper: boolean,
-  _cloudTranscriptionMode: string | null,
-  _cloudTranscriptionProvider: string | null
+  useLocalWhisper: boolean,
+  cloudTranscriptionMode: string | null,
+  cloudTranscriptionProvider: string | null
 ): InferenceMode {
-  return "openwhispr";
+  if (useLocalWhisper) return "local";
+  if (cloudTranscriptionMode === "openwhispr") return "openwhispr";
+  if (cloudTranscriptionProvider === "custom") return "self-hosted";
+  return "providers";
 }
 
-/** Force all STT settings to Aisha / VoiceLab Cloud, including stale localStorage. */
-function migrateAishaOnlyStt() {
-  if (!isBrowser) return;
-  const keysToOpenwhispr = [
-    "transcriptionMode",
-    "meetingTranscriptionMode",
-    "uploadTranscriptionMode",
-    "cloudTranscriptionMode",
-    "meetingCloudTranscriptionMode",
-    "uploadCloudTranscriptionMode",
-  ];
-  for (const key of keysToOpenwhispr) {
-    localStorage.setItem(key, "openwhispr");
-  }
-  for (const key of ["useLocalWhisper", "meetingUseLocalWhisper", "uploadUseLocalWhisper"]) {
-    localStorage.setItem(key, "false");
-  }
-  localStorage.setItem("_aishaOnlySttMigrated", "1");
+function readInferenceMode(key: string, fallback: InferenceMode): InferenceMode {
+  const value = readString(key, fallback);
+  return value === "openwhispr" || value === "providers" || value === "local" ||
+    value === "self-hosted" || value === "enterprise" ? value : fallback;
 }
-
-migrateAishaOnlyStt();
 
 function migrateProviderSettings() {
   if (!isBrowser) return;
@@ -599,6 +585,15 @@ export interface SettingsState
   setCleanupCloudBaseUrl: (value: string) => void;
   setCustomDictionary: (words: string[]) => void;
   applyCustomDictionaryFromExternal: (words: string[]) => void;
+  dictionaryEntries: DesktopDictionaryEntry[];
+  dictionaryState: DesktopDictionaryState | null;
+  dictionarySaving: boolean;
+  createDictionaryWords: (words: string[], language?: string) => Promise<number>;
+  updateDictionaryWord: (id: string, displayForm: string) => Promise<void>;
+  deleteDictionaryWord: (id: string) => Promise<void>;
+  clearDictionaryWords: () => Promise<void>;
+  decideLegacyDictionary: (decision: "attach" | "keep_local") => Promise<void>;
+  applyDictionaryState: (state: DesktopDictionaryState) => void;
   setSnippets: (snippets: Snippet[]) => void;
   applySnippetsFromExternal: (snippets: Snippet[]) => void;
   setAssemblyAiStreaming: (value: boolean) => void;
@@ -728,6 +723,9 @@ function createStringSetter(key: string) {
   return (value: string) => {
     if (isBrowser) localStorage.setItem(key, value);
     useSettingsStore.setState({ [key]: value });
+    if (isBrowser && ["preferredLanguage", "uiLanguage", "theme"].includes(key)) {
+      window.dispatchEvent(new Event("voicelab-portable-preference-changed"));
+    }
   };
 }
 
@@ -740,6 +738,17 @@ function createBooleanSetter(key: string) {
   return (value: boolean) => {
     if (isBrowser) localStorage.setItem(key, String(value));
     useSettingsStore.setState({ [key]: value });
+    if (
+      isBrowser &&
+      [
+        "autoPasteEnabled",
+        "useCleanupModel",
+        "audioCuesEnabled",
+        "pauseMediaOnDictation",
+      ].includes(key)
+    ) {
+      window.dispatchEvent(new Event("voicelab-portable-preference-changed"));
+    }
   };
 }
 
@@ -933,14 +942,16 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     "cloudTranscriptionBaseUrl",
     API_ENDPOINTS.TRANSCRIPTION_BASE
   ),
-  // Aisha-only — always VoiceLab Cloud (internal id openwhispr).
-  cloudTranscriptionMode: "openwhispr",
-  useLocalWhisper: false,
+  cloudTranscriptionMode: readString("cloudTranscriptionMode", "openwhispr"),
+  useLocalWhisper: readBoolean("useLocalWhisper", false),
   cleanupCloudMode: readString("cleanupCloudMode", "openwhispr"),
   cleanupCloudBaseUrl: readString("cleanupCloudBaseUrl", API_ENDPOINTS.OPENAI_BASE),
   cortiEnvironment: readString("cortiEnvironment", "us"),
   cortiTenant: readString("cortiTenant", "base"),
-  customDictionary: readStringArray("customDictionary", []),
+  customDictionary: [],
+  dictionaryEntries: [],
+  dictionaryState: null,
+  dictionarySaving: false,
   snippets: (() => {
     try {
       const parsed = JSON.parse(readString("snippets", "[]"));
@@ -1079,7 +1090,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   noteFilesPath: readString("noteFilesPath", ""),
   isSignedIn: readBoolean("isSignedIn", false),
 
-  transcriptionMode: "openwhispr" as InferenceMode,
+  transcriptionMode: readInferenceMode("transcriptionMode", "openwhispr"),
   remoteTranscriptionType: (() => {
     const v = readString("remoteTranscriptionType", "lan");
     return v === "openai-compatible" ? "openai-compatible" : ("lan" as SelfHostedType);
@@ -1100,8 +1111,8 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   })(),
   cleanupRemoteUrl: readString("cleanupRemoteUrl", ""),
 
-  meetingTranscriptionMode: "openwhispr" as InferenceMode,
-  meetingUseLocalWhisper: false,
+  meetingTranscriptionMode: readInferenceMode("meetingTranscriptionMode", "openwhispr"),
+  meetingUseLocalWhisper: readBoolean("meetingUseLocalWhisper", false),
   meetingWhisperModel: readString("meetingWhisperModel", ""),
   meetingLocalTranscriptionProvider: (readString("meetingLocalTranscriptionProvider", "whisper") ===
   "nvidia"
@@ -1111,15 +1122,15 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   meetingCloudTranscriptionProvider: readString("meetingCloudTranscriptionProvider", ""),
   meetingCloudTranscriptionModel: readString("meetingCloudTranscriptionModel", ""),
   meetingCloudTranscriptionBaseUrl: readString("meetingCloudTranscriptionBaseUrl", ""),
-  meetingCloudTranscriptionMode: "openwhispr",
+  meetingCloudTranscriptionMode: readString("meetingCloudTranscriptionMode", "openwhispr"),
   meetingRemoteTranscriptionType: (() => {
     const v = readString("meetingRemoteTranscriptionType", "lan");
     return v === "openai-compatible" ? "openai-compatible" : ("lan" as SelfHostedType);
   })(),
   meetingRemoteTranscriptionUrl: readString("meetingRemoteTranscriptionUrl", ""),
 
-  uploadTranscriptionMode: "openwhispr" as InferenceMode,
-  uploadUseLocalWhisper: false,
+  uploadTranscriptionMode: readInferenceMode("uploadTranscriptionMode", "openwhispr"),
+  uploadUseLocalWhisper: readBoolean("uploadUseLocalWhisper", false),
   uploadWhisperModel: readString("uploadWhisperModel", ""),
   uploadLocalTranscriptionProvider: (readString("uploadLocalTranscriptionProvider", "whisper") ===
   "nvidia"
@@ -1129,7 +1140,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   uploadCloudTranscriptionProvider: readString("uploadCloudTranscriptionProvider", ""),
   uploadCloudTranscriptionModel: readString("uploadCloudTranscriptionModel", ""),
   uploadCloudTranscriptionBaseUrl: readString("uploadCloudTranscriptionBaseUrl", ""),
-  uploadCloudTranscriptionMode: "openwhispr",
+  uploadCloudTranscriptionMode: readString("uploadCloudTranscriptionMode", "openwhispr"),
 
   noteFormattingMode: (() => {
     const v = readString("noteFormattingMode", "openwhispr");
@@ -1248,6 +1259,9 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     );
     if (isBrowser) localStorage.setItem("translationTargets", JSON.stringify(normalized));
     set({ translationTargets: normalized });
+    if (isBrowser) {
+      window.dispatchEvent(new Event("voicelab-portable-preference-changed"));
+    }
   },
 
   chatAgentModel: readString("chatAgentModel", "openai/gpt-oss-120b"),
@@ -1343,11 +1357,18 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setCleanupModel: createStringSetter("cleanupModel"),
 
   setCustomDictionary: (words: string[]) => {
-    if (isBrowser) localStorage.setItem("customDictionary", JSON.stringify(words));
-    set({ customDictionary: words });
+    set({ dictionarySaving: true });
     window.electronAPI
       ?.setDictionary(words)
-      .then(() => {
+      .then(async () => {
+        const state = await window.electronAPI?.getDictionaryState?.();
+        if (state) {
+          set({
+            customDictionary: state.vocabulary,
+            dictionaryEntries: state.entries,
+            dictionaryState: state,
+          });
+        }
         void import("../services/SyncService.js").then(({ syncService }) => {
           if (syncService.canSync()) void syncService.syncDictionaryNow();
         });
@@ -1358,13 +1379,100 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
           { error: (err as Error).message },
           "settings"
         );
-      });
+      })
+      .finally(() => set({ dictionarySaving: false }));
   },
 
-  // For broadcasts from main process — DB is already authoritative, only update UI.
+  applyDictionaryState: (state: DesktopDictionaryState) => {
+    set({
+      customDictionary: state.vocabulary,
+      dictionaryEntries: state.entries,
+      dictionaryState: state,
+    });
+  },
+
+  // Backward-compatible broadcast handling while old windows are still open.
   applyCustomDictionaryFromExternal: (words: string[]) => {
-    if (isBrowser) localStorage.setItem("customDictionary", JSON.stringify(words));
     set({ customDictionary: words });
+  },
+
+  createDictionaryWords: async (words: string[], language = "und") => {
+    set({ dictionarySaving: true });
+    let created = 0;
+    try {
+      for (const displayForm of words) {
+        const result = await window.electronAPI?.createDictionaryEntry?.({
+          displayForm,
+          language,
+          source: "manual",
+        });
+        if (result && !result.duplicate) created += 1;
+        if (result?.state) get().applyDictionaryState(result.state);
+      }
+      void import("../services/SyncService.js").then(({ syncService }) => {
+        if (syncService.canSync()) void syncService.syncDictionaryNow();
+      });
+      return created;
+    } finally {
+      set({ dictionarySaving: false });
+    }
+  },
+
+  updateDictionaryWord: async (id: string, displayForm: string) => {
+    set({ dictionarySaving: true });
+    try {
+      const result = await window.electronAPI?.updateDictionaryEntry?.(id, { displayForm });
+      if (result?.state) get().applyDictionaryState(result.state);
+      void import("../services/SyncService.js").then(({ syncService }) => {
+        if (syncService.canSync()) void syncService.syncDictionaryNow();
+      });
+    } finally {
+      set({ dictionarySaving: false });
+    }
+  },
+
+  deleteDictionaryWord: async (id: string) => {
+    set({ dictionarySaving: true });
+    try {
+      const result = await window.electronAPI?.deleteDictionaryEntry?.(id);
+      if (result?.state) get().applyDictionaryState(result.state);
+      void import("../services/SyncService.js").then(({ syncService }) => {
+        if (syncService.canSync()) void syncService.syncDictionaryNow();
+      });
+    } finally {
+      set({ dictionarySaving: false });
+    }
+  },
+
+  clearDictionaryWords: async () => {
+    const entries = get().dictionaryEntries;
+    set({ dictionarySaving: true });
+    try {
+      for (const entry of entries) {
+        const result = await window.electronAPI?.deleteDictionaryEntry?.(entry.id);
+        if (result?.state) get().applyDictionaryState(result.state);
+      }
+      void import("../services/SyncService.js").then(({ syncService }) => {
+        if (syncService.canSync()) void syncService.syncDictionaryNow();
+      });
+    } finally {
+      set({ dictionarySaving: false });
+    }
+  },
+
+  decideLegacyDictionary: async (decision: "attach" | "keep_local") => {
+    set({ dictionarySaving: true });
+    try {
+      const state = await window.electronAPI?.decideLegacyDictionary?.(decision);
+      if (state) get().applyDictionaryState(state);
+      if (decision === "attach") {
+        void import("../services/SyncService.js").then(({ syncService }) => {
+          if (syncService.canSync()) void syncService.syncDictionaryNow();
+        });
+      }
+    } finally {
+      set({ dictionarySaving: false });
+    }
   },
 
   setSnippets: (snippets: Snippet[]) => {
@@ -1396,6 +1504,9 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     const normalized = normalizeUiLanguage(language);
     if (isBrowser) localStorage.setItem("uiLanguage", normalized);
     set({ uiLanguage: normalized });
+    if (isBrowser) {
+      window.dispatchEvent(new Event("voicelab-portable-preference-changed"));
+    }
     void i18n.changeLanguage(normalized);
     if (isBrowser && window.electronAPI?.setUiLanguage) {
       window.electronAPI.setUiLanguage(normalized).catch((err) => {
@@ -1572,6 +1683,9 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setTheme: (value: "light" | "dark" | "auto") => {
     if (isBrowser) localStorage.setItem("theme", value);
     set({ theme: value });
+    if (isBrowser) {
+      window.dispatchEvent(new Event("voicelab-portable-preference-changed"));
+    }
   },
 
   setCloudBackupEnabled: createBooleanSetter("cloudBackupEnabled"),
@@ -2325,17 +2439,14 @@ export async function initializeSettings(): Promise<void> {
       useSettingsStore.setState({ preferredLanguage: migratedLang });
     }
 
-    // Sync dictionary from SQLite <-> localStorage
+    // SQLite is authoritative. Legacy localStorage is intentionally not imported.
     try {
-      if (window.electronAPI.getDictionary) {
-        const currentDictionary = useSettingsStore.getState().customDictionary;
+      if (window.electronAPI.getDictionaryState) {
+        const dictionaryState = await window.electronAPI.getDictionaryState();
+        useSettingsStore.getState().applyDictionaryState(dictionaryState);
+      } else if (window.electronAPI.getDictionary) {
         const dbWords = await window.electronAPI.getDictionary();
-        if (dbWords.length === 0 && currentDictionary.length > 0) {
-          await window.electronAPI.setDictionary(currentDictionary);
-        } else if (dbWords.length > 0 && currentDictionary.length === 0) {
-          if (isBrowser) localStorage.setItem("customDictionary", JSON.stringify(dbWords));
-          useSettingsStore.setState({ customDictionary: dbWords });
-        }
+        useSettingsStore.setState({ customDictionary: dbWords });
       }
     } catch (err) {
       logger.warn(
@@ -2444,19 +2555,6 @@ export async function initializeSettings(): Promise<void> {
       );
     }
 
-    // Aisha-only STT — coerce any stale in-memory / localStorage modes.
-    migrateAishaOnlyStt();
-    useSettingsStore.setState({
-      useLocalWhisper: false,
-      cloudTranscriptionMode: "openwhispr",
-      transcriptionMode: "openwhispr",
-      meetingUseLocalWhisper: false,
-      meetingCloudTranscriptionMode: "openwhispr",
-      meetingTranscriptionMode: "openwhispr",
-      uploadUseLocalWhisper: false,
-      uploadCloudTranscriptionMode: "openwhispr",
-      uploadTranscriptionMode: "openwhispr",
-    });
 
     ensureAgentNameInDictionary();
   }
