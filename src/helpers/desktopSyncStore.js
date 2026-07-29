@@ -225,6 +225,7 @@ class DesktopSyncStore {
         supported_languages_json TEXT NOT NULL DEFAULT '[]',
         auto_detection_supported INTEGER NOT NULL DEFAULT 0,
         legacy_attach_decision TEXT,
+        legacy_transcript_decision TEXT,
         consent_version INTEGER NOT NULL DEFAULT 0,
         transcripts_enabled_at TEXT,
         last_bootstrap_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -325,9 +326,17 @@ class DesktopSyncStore {
         decision TEXT,
         decided_at TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS legacy_transcript_profile (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+        owner_account_id TEXT,
+        decision TEXT,
+        decided_at TEXT
+      );
     `);
 
     this.addColumnIfMissing("sync_accounts", "transcripts_enabled_at", "TEXT");
+    this.addColumnIfMissing("sync_accounts", "legacy_transcript_decision", "TEXT");
     this.addColumnIfMissing("sync_accounts", "consent_version", "INTEGER NOT NULL DEFAULT 0");
     this.addColumnIfMissing("portable_preferences", "record_id", "TEXT");
     this.addColumnIfMissing("portable_preferences", "snapshot_seen", "INTEGER NOT NULL DEFAULT 1");
@@ -924,6 +933,9 @@ class DesktopSyncStore {
   getState() {
     const account = this.activeAccount();
     const legacy = this.legacyRows(account?.account_id || null);
+    const legacyTranscripts = this.db.prepare(
+      "SELECT COUNT(*) AS count FROM transcriptions WHERE privacy_scope_id = 'device-local' AND deleted_at IS NULL"
+    ).get()?.count || 0;
     if (!account) {
       return {
         accountId: null,
@@ -931,6 +943,8 @@ class DesktopSyncStore {
         vocabulary: legacy.map((row) => row.word),
         legacyCount: legacy.length,
         legacyAttachDecision: null,
+        legacyTranscriptCount: legacyTranscripts,
+        legacyTranscriptDecision: null,
         requiresLegacyDecision: false,
         supportedLanguages: [],
         autoDetectionSupported: false,
@@ -959,7 +973,11 @@ class DesktopSyncStore {
       vocabulary: clearRows.map((row) => row.display_form),
       legacyCount: legacy.length,
       legacyAttachDecision: account.legacy_attach_decision,
-      requiresLegacyDecision: legacy.length > 0 && !account.legacy_attach_decision,
+      legacyTranscriptCount: legacyTranscripts,
+      legacyTranscriptDecision: account.legacy_transcript_decision,
+      requiresLegacyDecision:
+        (legacy.length > 0 && !account.legacy_attach_decision)
+        || (legacyTranscripts > 0 && !account.legacy_transcript_decision),
       supportedLanguages: safeJson(account.supported_languages_json, []),
       autoDetectionSupported: account.auto_detection_supported === 1,
       portablePreferences: preferences,
@@ -1285,6 +1303,15 @@ class DesktopSyncStore {
       throw new Error("Legacy dictionary already belongs to another local account profile");
     }
     const rows = this.legacyRows(account.account_id);
+    const legacyTranscriptOwner = this.db
+      .prepare("SELECT * FROM legacy_transcript_profile WHERE singleton = 1")
+      .get();
+    if (
+      legacyTranscriptOwner?.owner_account_id
+      && legacyTranscriptOwner.owner_account_id !== account.account_id
+    ) {
+      throw new Error("Legacy transcripts already belong to another local account profile");
+    }
     const transaction = this.db.transaction(() => {
       this.db.prepare(`
         INSERT INTO legacy_dictionary_profile (singleton, owner_account_id, decision, decided_at)
@@ -1303,6 +1330,23 @@ class DesktopSyncStore {
       }
       this.db.prepare("UPDATE sync_accounts SET legacy_attach_decision = ? WHERE account_id = ?")
         .run(decision === "attach" ? "attached" : "keep_local", account.account_id);
+      this.db.prepare(`
+        INSERT INTO legacy_transcript_profile (singleton, owner_account_id, decision, decided_at)
+        VALUES (1, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(singleton) DO UPDATE SET
+          owner_account_id = COALESCE(legacy_transcript_profile.owner_account_id, excluded.owner_account_id),
+          decision = excluded.decision,
+          decided_at = CURRENT_TIMESTAMP
+      `).run(account.account_id, decision);
+      if (decision === "attach") {
+        this.db.prepare(`
+          UPDATE transcriptions SET privacy_scope_id = ?
+          WHERE privacy_scope_id = 'device-local' AND deleted_at IS NULL
+        `).run(`account:${account.account_id}`);
+      }
+      this.db.prepare(
+        "UPDATE sync_accounts SET legacy_transcript_decision = ? WHERE account_id = ?"
+      ).run(decision === "attach" ? "attached" : "keep_local", account.account_id);
     });
     transaction();
     return this.getState();

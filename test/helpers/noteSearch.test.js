@@ -54,16 +54,19 @@ function createSearchDatabase() {
   sqlite.exec(`
     CREATE TABLE notes (
       id INTEGER PRIMARY KEY,
+      client_note_id TEXT,
+      privacy_scope_id TEXT DEFAULT 'device-local',
       title TEXT NOT NULL,
       content TEXT NOT NULL,
+      enhanced_content TEXT,
+      enhancement_prompt TEXT,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       deleted_at TEXT
     );
-    CREATE VIRTUAL TABLE notes_fts USING fts5(title, content);
   `);
 
-  const insertNote = sqlite.prepare("INSERT INTO notes (title, content) VALUES (?, ?)");
-  const insertFts = sqlite.prepare(
-    "INSERT INTO notes_fts (rowid, title, content) VALUES (?, ?, ?)"
+  const insertNote = sqlite.prepare(
+    "INSERT INTO notes (client_note_id, title, content) VALUES (?, ?, ?)"
   );
 
   for (const [title, content] of [
@@ -75,8 +78,7 @@ function createSearchDatabase() {
     ["東京駅", "旅行計画"],
     ["OR operation", "literal operator note"],
   ]) {
-    const { lastInsertRowid } = insertNote.run(title, content);
-    insertFts.run(lastInsertRowid, title, content);
+    insertNote.run(`note-${title}`, title, content);
   }
 
   const manager = Object.create(DatabaseManager.prototype);
@@ -86,10 +88,12 @@ function createSearchDatabase() {
       return value;
     },
   };
+  manager._noteIdentity = DatabaseManager.prototype._noteIdentity;
+  manager._decodeNote = DatabaseManager.prototype._decodeNote;
   return { manager, sqlite };
 }
 
-test("DatabaseManager.searchNotes matches Unicode and ASCII prefixes with SQLite FTS5", (t) => {
+test("DatabaseManager.searchNotes matches Unicode and ASCII prefixes without plaintext FTS", (t) => {
   const { manager, sqlite } = createSearchDatabase();
   t.after(() => sqlite.close());
 

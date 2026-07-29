@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { LocalDataCorruptionError } = require("./localDataCrypto");
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const BATCH_SIZE = 200;
 
 function tableExists(db, table) {
@@ -35,8 +35,30 @@ const CORE_DEFINITIONS = [
   },
   {
     table: "notes",
-    fields: ["transcript", "source_file", "participants"],
-    identity: (row) => row.client_note_id || `legacy:${row.id}`,
+    fields: [
+      "title",
+      "content",
+      "enhanced_content",
+      "enhancement_prompt",
+      "enhanced_at_content_hash",
+      "transcript",
+      "source_file",
+      "participants",
+    ],
+    identity: (row) =>
+      `${row.privacy_scope_id || "device-local"}:${row.client_note_id || `legacy:${row.id}`}`,
+  },
+  {
+    table: "agent_conversations",
+    fields: ["title"],
+    identity: (row) =>
+      `${row.privacy_scope_id || "device-local"}:${row.client_conversation_id || `legacy:${row.id}`}`,
+  },
+  {
+    table: "agent_messages",
+    fields: ["content", "metadata"],
+    identity: (row) =>
+      `${row.privacy_scope_id || "device-local"}:${row.client_message_id || `legacy:${row.id}`}`,
   },
   {
     table: "custom_dictionary",

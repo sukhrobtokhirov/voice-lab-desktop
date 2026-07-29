@@ -32,6 +32,8 @@ const {
   normalizeDictionaryValue,
 } = require("../../src/helpers/localDataProtection");
 const AudioStorageManager = require("../../src/helpers/audioStorage");
+const DatabaseManager = require("../../src/helpers/database");
+const DesktopSyncStore = require("../../src/helpers/desktopSyncStore");
 Module._load = originalLoad;
 
 function registry(key = randomBytes(32), indexKey = randomBytes(32), current = 1) {
@@ -61,6 +63,17 @@ function sqliteAdapter(database) {
       if (options.simple && value) return Object.values(value)[0];
       return value;
     },
+    transaction: (callback) => (...args) => {
+      database.exec("BEGIN IMMEDIATE");
+      try {
+        const result = callback(...args);
+        database.exec("COMMIT");
+        return result;
+      } catch (error) {
+        database.exec("ROLLBACK");
+        throw error;
+      }
+    },
   };
 }
 
@@ -77,9 +90,29 @@ function createLegacyDatabase() {
     CREATE TABLE notes (
       id INTEGER PRIMARY KEY,
       client_note_id TEXT,
+      privacy_scope_id TEXT DEFAULT 'device-local',
+      title TEXT,
+      content TEXT,
+      enhanced_content TEXT,
+      enhancement_prompt TEXT,
+      enhanced_at_content_hash TEXT,
       transcript TEXT,
       source_file TEXT,
       participants TEXT
+    );
+    CREATE TABLE agent_conversations (
+      id INTEGER PRIMARY KEY,
+      client_conversation_id TEXT,
+      privacy_scope_id TEXT DEFAULT 'device-local',
+      title TEXT
+    );
+    CREATE TABLE agent_messages (
+      id INTEGER PRIMARY KEY,
+      conversation_id INTEGER,
+      client_message_id TEXT,
+      privacy_scope_id TEXT DEFAULT 'device-local',
+      content TEXT,
+      metadata TEXT
     );
     CREATE TABLE custom_dictionary (
       id INTEGER PRIMARY KEY,
@@ -115,7 +148,13 @@ function createLegacyDatabase() {
     INSERT INTO transcriptions VALUES
       (1, 'tx-1', 'private transcript', 'raw private transcript', 'provider leaked text');
     INSERT INTO notes VALUES
-      (1, 'note-1', '[{"text":"meeting secret"}]', '/private/audio.webm', '[{"email":"a@b.c"}]');
+      (1, 'note-1', 'account:one', 'Private title', 'Private content', 'Enhanced private',
+       'Prompt private', 'hash-private', '[{"text":"meeting secret"}]',
+       '/private/audio.webm', '[{"email":"a@b.c"}]');
+    INSERT INTO agent_conversations VALUES
+      (1, 'conv-1', 'account:one', 'Private conversation');
+    INSERT INTO agent_messages VALUES
+      (1, 1, 'message-1', 'account:one', 'Private agent message', '{"prompt":"private"}');
     INSERT INTO custom_dictionary VALUES
       (1, 'dict-1', 'Oʻzbekiston', NULL);
     INSERT INTO desktop_dictionary_entries VALUES
@@ -150,9 +189,26 @@ test("versioned online migration encrypts sensitive columns and builds HMAC inde
     );
 
     const note = sqlite.prepare("SELECT * FROM notes WHERE id = 1").get();
-    for (const field of ["transcript", "source_file", "participants"]) {
+    for (const field of [
+      "title", "content", "enhanced_content", "enhancement_prompt",
+      "enhanced_at_content_hash", "transcript", "source_file", "participants",
+    ]) {
       assert.match(note[field], /^vlabf:1:/, field);
     }
+    const conversation = sqlite.prepare("SELECT * FROM agent_conversations").get();
+    const message = sqlite.prepare("SELECT * FROM agent_messages").get();
+    assert.match(conversation.title, /^vlabf:1:/);
+    assert.match(message.content, /^vlabf:1:/);
+    assert.match(message.metadata, /^vlabf:1:/);
+    assert.equal(
+      protection.reveal(
+        "agent_messages",
+        "account:one:message-1",
+        "content",
+        message.content
+      ),
+      "Private agent message"
+    );
 
     const dictionary = sqlite.prepare("SELECT * FROM custom_dictionary WHERE id = 1").get();
     assert.match(dictionary.word, /^vlabf:1:/);
@@ -174,7 +230,7 @@ test("versioned online migration encrypts sensitive columns and builds HMAC inde
         "SELECT completed_at FROM local_data_migrations WHERE completed_at IS NOT NULL"
       )
       .all();
-    assert.equal(states.length, 6);
+    assert.equal(states.length, 8);
   } finally {
     sqlite.close();
     fs.rmSync(dir, { recursive: true, force: true });
@@ -325,4 +381,156 @@ test("audio tampering fails closed instead of returning corrupted plaintext", ()
     fs.rmSync(userDataPath, { recursive: true, force: true });
     fs.rmSync(tempPath, { recursive: true, force: true });
   }
+});
+
+for (const checkpoint of [
+  "replacement_authenticated",
+  "journal_persisted",
+  "replacement_promoted",
+  "manifest_persisted",
+  "source_deleted",
+]) {
+  test(`audio overwrite resumes safely after ${checkpoint}`, () => {
+    const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-audio-crash-"));
+    const tempPath = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-audio-temp-"));
+    const crypto = cryptoService();
+    try {
+      const initial = new AudioStorageManager({ userDataPath, tempPath, cryptoService: crypto });
+      assert.equal(initial.saveAudio("record-1", Buffer.from("old audio")).success, true);
+      const crashing = new AudioStorageManager({
+        userDataPath,
+        tempPath,
+        cryptoService: crypto,
+        faultInjector(name) {
+          if (name === checkpoint) throw new Error("simulated crash");
+        },
+      });
+      assert.equal(crashing.saveAudio("record-1", Buffer.from("new audio")).success, false);
+      const recovered = new AudioStorageManager({ userDataPath, tempPath, cryptoService: crypto });
+      const audio = recovered.getAudioBuffer("record-1");
+      assert.ok(
+        audio.equals(Buffer.from("old audio")) || audio.equals(Buffer.from("new audio")),
+        "recovery must preserve a complete authenticated version"
+      );
+      assert.equal(
+        fs.readdirSync(path.join(userDataPath, "audio")).some((name) => name.endsWith(".pending")),
+        false
+      );
+    } finally {
+      fs.rmSync(userDataPath, { recursive: true, force: true });
+      fs.rmSync(tempPath, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const checkpoint of [
+  "replacement_authenticated",
+  "journal_persisted",
+  "replacement_promoted",
+  "manifest_persisted",
+  "source_deleted",
+]) {
+  test(`legacy audio migration resumes safely after ${checkpoint}`, () => {
+    const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-audio-legacy-"));
+    const tempPath = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-audio-temp-"));
+    const crypto = cryptoService();
+    const audioDir = path.join(userDataPath, "audio");
+    fs.mkdirSync(audioDir, { recursive: true });
+    fs.writeFileSync(path.join(audioDir, "record-legacy-42.webm"), Buffer.from("legacy audio"));
+    try {
+      assert.throws(
+        () =>
+          new AudioStorageManager({
+            userDataPath,
+            tempPath,
+            cryptoService: crypto,
+            faultInjector(name) {
+              if (name === checkpoint) throw new Error("simulated crash");
+            },
+          }),
+        /simulated crash/
+      );
+      const recovered = new AudioStorageManager({ userDataPath, tempPath, cryptoService: crypto });
+      assert.deepEqual(recovered.getAudioBuffer("42"), Buffer.from("legacy audio"));
+      const files = fs.readdirSync(audioDir);
+      assert.equal(files.includes("record-legacy-42.webm"), false);
+      assert.equal(files.some((name) => name.endsWith(".pending")), false);
+    } finally {
+      fs.rmSync(userDataPath, { recursive: true, force: true });
+      fs.rmSync(tempPath, { recursive: true, force: true });
+    }
+  });
+}
+
+test("local transcripts stay isolated across account switches and require explicit legacy ownership", () => {
+  const sqlite = new DatabaseSync(":memory:");
+  sqlite.exec(`
+    CREATE TABLE transcriptions (
+      id INTEGER PRIMARY KEY,
+      client_transcription_id TEXT,
+      text TEXT NOT NULL,
+      raw_text TEXT,
+      error_message TEXT,
+      status TEXT DEFAULT 'completed',
+      deleted_at TEXT,
+      timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+      privacy_scope_id TEXT NOT NULL DEFAULT 'device-local'
+    );
+    CREATE TABLE custom_dictionary (
+      id INTEGER PRIMARY KEY,
+      client_dict_id TEXT,
+      word TEXT,
+      source TEXT,
+      updated_at TEXT,
+      created_at TEXT,
+      deleted_at TEXT
+    );
+  `);
+  const db = sqliteAdapter(sqlite);
+  const protection = new LocalDataProtection(db, cryptoService(), path.join(os.tmpdir(), "scope.db"));
+  const manager = Object.create(DatabaseManager.prototype);
+  manager.db = db;
+  manager.localDataProtection = protection;
+  manager.setDictionary = () => ({ success: true });
+  const store = new DesktopSyncStore(manager);
+  manager.desktopSyncStore = store;
+  const insert = sqlite.prepare(`
+    INSERT INTO transcriptions (
+      id, client_transcription_id, text, status, privacy_scope_id
+    ) VALUES (?, ?, ?, 'completed', ?)
+  `);
+  for (const [id, clientId, clear, scope] of [
+    [1, "legacy-1", "legacy", "device-local"],
+    [2, "account-a-1", "account a", "account:account-a"],
+    [3, "account-b-1", "account b", "account:account-b"],
+  ]) {
+    insert.run(
+      id,
+      clientId,
+      protection.protect("transcriptions", clientId, "text", clear),
+      scope
+    );
+  }
+  sqlite.prepare(`
+    INSERT INTO sync_accounts (
+      account_id, device_id, active, dictionary_enabled, preferences_enabled,
+      transcripts_enabled, audio_enabled
+    ) VALUES ('account-a', 'device', 1, 1, 1, 1, 0),
+             ('account-b', 'device', 0, 1, 1, 1, 0)
+  `).run();
+
+  assert.deepEqual(manager.getTranscriptions().map((row) => row.text), ["account a"]);
+  assert.equal(store.getState().requiresLegacyDecision, true);
+  store.decideLegacyAttachment("keep_local");
+  assert.deepEqual(manager.getTranscriptions().map((row) => row.text), ["account a"]);
+
+  store.pause();
+  assert.deepEqual(manager.getTranscriptions().map((row) => row.text), ["legacy"]);
+  sqlite.prepare("UPDATE sync_accounts SET active = CASE WHEN account_id = 'account-b' THEN 1 ELSE 0 END").run();
+  assert.deepEqual(manager.getTranscriptions().map((row) => row.text), ["account b"]);
+  assert.throws(
+    () => store.decideLegacyAttachment("attach"),
+    /another local account profile/
+  );
+  sqlite.close();
 });
