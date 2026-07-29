@@ -103,8 +103,6 @@ class ReasoningService extends BaseReasoningService {
       model: trimmedModel,
       text: config.systemPrompt ? text : wrapCleanupTranscript(text),
       config: {
-        baseUrl: config.baseUrl,
-        lanUrl: config.lanUrl,
         systemPrompt: config.systemPrompt || this.getSystemPrompt(agentName),
         maxTokens: config.maxTokens,
         temperature: config.temperature,
@@ -122,10 +120,7 @@ class ReasoningService extends BaseReasoningService {
     provider: string,
     config: ReasoningConfig & { systemPrompt: string }
   ): AsyncGenerator<string, void, unknown> {
-    const proxy = createMainProcessChatModel(provider, model, {
-      baseUrl: config.baseUrl,
-      lanUrl: config.lanUrl,
-    });
+    const proxy = createMainProcessChatModel(provider, model);
     const controller = new AbortController();
     this.streamAbortController = controller;
     const result = streamText({
@@ -164,10 +159,7 @@ class ReasoningService extends BaseReasoningService {
         baseURL: `http://127.0.0.1:${serverResult.port}/v1`,
       }).chat(model);
     } else {
-      aiModel = createMainProcessChatModel(provider, model, {
-        baseUrl: config.baseUrl,
-        lanUrl: config.lanUrl,
-      });
+      aiModel = createMainProcessChatModel(provider, model);
     }
     logger.logReasoning("AGENT_AI_SDK_STREAM_REQUEST", {
       model,

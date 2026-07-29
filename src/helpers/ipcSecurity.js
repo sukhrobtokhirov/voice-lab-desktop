@@ -6,7 +6,7 @@ const CONTROL_PANEL_ONLY = [
   /^auth-clear-session$/,
   /^(?:check-for-updates|download-update|install-update)$/,
   /^workspace-api-request$/,
-  /^provider-(?:save-credential|list-models|tinfoil-models|transcribe-file)$/,
+  /^provider-(?:save-credential|save-endpoint|list-models|tinfoil-models|transcribe-file)$/,
   /^save-(?:bedrock-(?:region|profile)|azure-(?:endpoint|deployment|api-version)|vertex-(?:project|location))$/,
   /^save-.*(?:key|secret|token|credential)/,
 ];

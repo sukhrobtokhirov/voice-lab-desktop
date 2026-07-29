@@ -31,6 +31,7 @@ interface OpenAICompatiblePanelProps {
   // Providers whose /models is public but whose inference needs a key.
   apiKeyRequired?: boolean;
   getKeyUrl?: string;
+  endpointProvider?: "custom" | "lan" | "openrouter";
 }
 
 export default function OpenAICompatiblePanel({
@@ -46,6 +47,7 @@ export default function OpenAICompatiblePanel({
   lockedBaseUrl = false,
   apiKeyRequired = false,
   getKeyUrl,
+  endpointProvider,
 }: OpenAICompatiblePanelProps) {
   const { t } = useTranslation();
   const [draftBase, setDraftBase] = useState(baseUrl);
@@ -129,8 +131,13 @@ export default function OpenAICompatiblePanel({
         }
 
         const fetchModelOptions = async (base: string): Promise<ModelOption[]> => {
-          const provider = base.includes("openrouter.ai") ? "openrouter" : "custom";
-          const result = await window.electronAPI.providerListModels?.({ provider, baseUrl: base });
+          const provider =
+            endpointProvider ||
+            (base.includes("openrouter.ai") ? "openrouter" : "custom");
+          if (provider === "custom" || provider === "lan") {
+            await window.electronAPI.providerSaveEndpoint?.(provider, base);
+          }
+          const result = await window.electronAPI.providerListModels?.(provider);
           if (!result?.success) throw new Error(result?.error || "Unable to load models");
           return (result.models || [])
             .map((item) => {
@@ -206,7 +213,7 @@ export default function OpenAICompatiblePanel({
         }
       }
     },
-    [baseUrl, apiKey, lockedBaseUrl, setBaseUrl, t]
+    [baseUrl, apiKey, endpointProvider, lockedBaseUrl, setBaseUrl, t]
   );
 
   useEffect(() => {

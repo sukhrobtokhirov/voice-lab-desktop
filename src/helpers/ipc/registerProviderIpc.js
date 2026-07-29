@@ -2,6 +2,7 @@ const {
   parse,
   providerConfigValueSchema,
   providerCredentialSaveSchema,
+  providerEndpointSaveSchema,
   providerFileTranscriptionSchema,
   providerModelListSchema,
   providerReasonSchema,
@@ -29,6 +30,9 @@ function registerProviderIpc({ handle, providerService }) {
   handle("provider-credential-status", () => providerService.credentialStatus());
   handle("provider-save-credential", (_event, value) =>
     providerService.saveCredential(parse(providerCredentialSaveSchema, value))
+  );
+  handle("provider-save-endpoint", (_event, value) =>
+    providerService.saveEndpoint(parse(providerEndpointSaveSchema, value))
   );
   handle("provider-list-models", (_event, value) =>
     providerService.listModels(parse(providerModelListSchema, value))

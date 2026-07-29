@@ -1460,10 +1460,13 @@ openVoiceLabBilling?: (
         credential: string,
         value: string
       ) => Promise<{ success: boolean; configured?: boolean; error?: string }>;
-      providerListModels?: (payload: {
-        provider: "openai" | "openrouter" | "custom" | "lan";
-        baseUrl: string;
-      }) => Promise<{
+      providerSaveEndpoint?: (
+        provider: "custom" | "lan",
+        endpoint: string
+      ) => Promise<{ success: boolean; endpoint?: string; error?: string }>;
+      providerListModels?: (
+        provider: "openai" | "openrouter" | "custom" | "lan"
+      ) => Promise<{
         success: boolean;
         models?: Array<{ id: string; ownedBy?: string; description?: string }>;
         error?: string;

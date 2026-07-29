@@ -183,6 +183,7 @@ export default function InferenceConfigEditor({ scope, onModeChange }: Inference
               {t("reasoning.selfHosted.endpointHelp")}
             </p>
           }
+          endpointProvider="lan"
         />
       )}
 

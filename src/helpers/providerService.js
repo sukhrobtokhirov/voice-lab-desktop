@@ -14,6 +14,11 @@ const { getTinfoilChatModels } = require("./tinfoilCatalog");
 const { resolveAllowedAudioPath } = require("./audioPathPolicy");
 const { formatTimestamp } = require("./speakerMerge");
 const debugLogger = require("./debugLogger");
+const {
+  createPinnedFetch,
+  normalizeApprovedEndpoint,
+  resolveApprovedEndpoint,
+} = require("./providerNetworkPolicy");
 
 const ENDPOINTS = Object.freeze({
   openai: "https://api.openai.com/v1",
@@ -68,7 +73,6 @@ const PROVIDER_CREDENTIAL = Object.freeze({
   tinfoil: "tinfoil",
   corti: "cortiApiKey",
   custom: "cleanupCustom",
-  lan: "cleanupCustom",
   azure: "azureApiKey",
   vertex: "vertexApiKey",
 });
@@ -112,10 +116,12 @@ function audioExtension(mimeType) {
 }
 
 class ProviderService {
-  constructor(environmentManager) {
+  constructor(environmentManager, options = {}) {
     this.environment = environmentManager;
     this.streams = new Map();
     this.tinfoilProviders = new Map();
+    this.lookup = options.lookup;
+    this.createProviderFetch = options.createPinnedFetch || createPinnedFetch;
   }
 
   credentialStatus() {
@@ -149,25 +155,43 @@ class ProviderService {
     return { success: true };
   }
 
+  async saveEndpoint({ provider, endpoint }) {
+    const mode = provider === "lan" ? "lan" : "remote";
+    const approved = await resolveApprovedEndpoint(endpoint, mode, this.lookup);
+    const saver =
+      provider === "lan" ? "saveLanProviderEndpoint" : "saveCustomProviderEndpoint";
+    await this.environment[saver](approved.endpoint);
+    await this.environment.saveAllKeysToEnvFile?.();
+    return { success: true, provider, endpoint: approved.endpoint };
+  }
+
   listTinfoilModels() {
     return getTinfoilChatModels();
   }
 
-  async listModels({ provider, baseUrl }) {
+  async listModels({ provider }) {
     const credentialId =
       provider === "openrouter"
         ? "openrouter"
         : provider === "openai"
           ? "openai"
-          : "cleanupCustom";
+          : provider === "custom"
+            ? "cleanupCustom"
+            : null;
     const apiKey = this._credential(credentialId, {
       optional: provider === "custom" || provider === "lan",
     });
-    const endpoint = joinEndpoint(
-      validatedEndpoint(baseUrl, { allowPrivate: provider === "custom" || provider === "lan" }),
-      "/models"
-    );
-    const response = await fetch(endpoint, {
+    let baseUrl;
+    let providerFetch = fetch;
+    if (provider === "openai") baseUrl = ENDPOINTS.openai;
+    else if (provider === "openrouter") baseUrl = ENDPOINTS.openrouter;
+    else {
+      const binding = this._endpointBinding(provider);
+      baseUrl = binding.endpoint;
+      providerFetch = this.createProviderFetch(baseUrl, binding.mode, { lookup: this.lookup });
+    }
+    const endpoint = joinEndpoint(baseUrl, "/models");
+    const response = await providerFetch(endpoint, {
       method: "GET",
       headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
       signal: AbortSignal.timeout(30_000),
@@ -215,6 +239,24 @@ class ProviderService {
       throw error;
     }
     return value;
+  }
+
+  _endpointBinding(provider) {
+    if (provider === "custom") {
+      const endpoint = normalizeApprovedEndpoint(
+        this.environment.getCustomProviderEndpoint?.(),
+        "remote"
+      );
+      return { endpoint, mode: "remote" };
+    }
+    if (provider === "lan") {
+      const endpoint = normalizeApprovedEndpoint(
+        this.environment.getLanProviderEndpoint?.(),
+        "lan"
+      );
+      return { endpoint, mode: "lan" };
+    }
+    throw new Error("Unsupported endpoint binding");
   }
 
   _enterpriseConfig(config = {}) {
@@ -274,10 +316,15 @@ class ProviderService {
         return createOpenAI({ apiKey, baseURL: ENDPOINTS.corti }).chat(model);
       case "custom":
       case "lan": {
-        const baseURL = validatedEndpoint(config.baseUrl || config.lanUrl, {
-          allowPrivate: true,
+        const binding = this._endpointBinding(provider);
+        const providerFetch = this.createProviderFetch(binding.endpoint, binding.mode, {
+          lookup: this.lookup,
         });
-        return createOpenAI({ apiKey: apiKey || "no-key", baseURL }).chat(model);
+        return createOpenAI({
+          apiKey: provider === "lan" ? "credentialless" : apiKey || "no-key",
+          baseURL: binding.endpoint,
+          fetch: providerFetch,
+        }).chat(model);
       }
       default:
         throw new Error(`Unsupported reasoning provider: ${provider}`);

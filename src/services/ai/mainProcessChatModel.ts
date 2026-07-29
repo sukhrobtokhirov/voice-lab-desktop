@@ -6,8 +6,6 @@ import type {
 } from "@ai-sdk/provider";
 
 type PublicProviderConfig = {
-  baseUrl?: string;
-  lanUrl?: string;
   bedrockRegion?: string;
   bedrockProfile?: string;
   azureEndpoint?: string;

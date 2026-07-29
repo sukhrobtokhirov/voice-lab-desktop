@@ -35,6 +35,7 @@ const controlOnly = new Set([
   "getUpdateInfo",
   "workspaceApiRequest",
   "providerSaveCredential",
+  "providerSaveEndpoint",
   "providerListModels",
   "providerTranscribeFile",
   "getTinfoilChatModels",

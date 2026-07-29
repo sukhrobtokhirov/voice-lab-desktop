@@ -58,6 +58,8 @@ const PERSISTED_KEYS = [
   "AZURE_OPENAI_API_VERSION",
   "VERTEX_PROJECT",
   "VERTEX_LOCATION",
+  "CUSTOM_CLEANUP_ENDPOINT",
+  "LAN_CLEANUP_ENDPOINT",
 ];
 
 // Module-level so writes are serialized across all instances — hotkeyManager
@@ -312,6 +314,22 @@ class EnvironmentManager {
   saveCleanupCustomKey(key) {
     delete process.env.CUSTOM_REASONING_API_KEY;
     return this._saveKey("CUSTOM_CLEANUP_API_KEY", key);
+  }
+
+  getCustomProviderEndpoint() {
+    return this._getKey("CUSTOM_CLEANUP_ENDPOINT");
+  }
+
+  saveCustomProviderEndpoint(value) {
+    return this._saveKey("CUSTOM_CLEANUP_ENDPOINT", value);
+  }
+
+  getLanProviderEndpoint() {
+    return this._getKey("LAN_CLEANUP_ENDPOINT");
+  }
+
+  saveLanProviderEndpoint(value) {
+    return this._saveKey("LAN_CLEANUP_ENDPOINT", value);
   }
 
   // Enterprise providers — AWS Bedrock

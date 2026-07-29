@@ -41,8 +41,6 @@ const CREDENTIAL_IDS = [
 
 const publicProviderConfigSchema = z
   .object({
-    baseUrl: z.string().trim().max(2048).optional(),
-    lanUrl: z.string().trim().max(2048).optional(),
     systemPrompt: z.string().max(100_000).optional(),
     maxTokens: z.number().int().min(1).max(131_072).optional(),
     temperature: z.number().min(0).max(2).optional(),
@@ -86,7 +84,13 @@ const providerCredentialSaveSchema = z
 const providerModelListSchema = z
   .object({
     provider: z.enum(["openai", "openrouter", "custom", "lan"]),
-    baseUrl: z.string().trim().min(1).max(2048),
+  })
+  .strict();
+
+const providerEndpointSaveSchema = z
+  .object({
+    provider: z.enum(["custom", "lan"]),
+    endpoint: z.string().trim().min(1).max(2048),
   })
   .strict();
 
@@ -166,6 +170,7 @@ module.exports = {
   PROVIDERS,
   parse,
   providerCredentialSaveSchema,
+  providerEndpointSaveSchema,
   providerConfigValueSchema,
   providerFileTranscriptionSchema,
   providerModelListSchema,

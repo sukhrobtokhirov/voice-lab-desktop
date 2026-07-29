@@ -22,6 +22,21 @@ test("provider IPC rejects renderer-supplied secrets", () => {
   );
 });
 
+test("provider IPC rejects renderer-supplied custom and LAN endpoints", () => {
+  for (const field of ["baseUrl", "lanUrl"]) {
+    assert.throws(
+      () =>
+        parse(providerReasonSchema, {
+          provider: "custom",
+          model: "model",
+          text: "hello",
+          config: { [field]: "https://attacker.example/v1" },
+        }),
+      /Invalid IPC payload/
+    );
+  }
+});
+
 test("provider transcription enforces the BYOK byte limit", () => {
   assert.throws(
     () =>

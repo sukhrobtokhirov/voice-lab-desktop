@@ -559,6 +559,7 @@ export default function ReasoningModelSelector({
                 lockedBaseUrl
                 apiKeyRequired
                 getKeyUrl={OPENROUTER_KEYS_URL}
+                endpointProvider="openrouter"
               />
             ) : selectedCloudProvider === "custom" ? (
               <OpenAICompatiblePanel
@@ -570,6 +571,7 @@ export default function ReasoningModelSelector({
                 model={reasoningModel}
                 setModel={setReasoningModel}
                 defaultBaseUrl={API_ENDPOINTS.OPENAI_BASE}
+                endpointProvider="custom"
               />
             ) : (
               <>

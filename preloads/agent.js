@@ -418,7 +418,9 @@ const fullElectronAPI = {
   providerCredentialStatus: () => ipcRenderer.invoke("provider-credential-status"),
   providerSaveCredential: (credential, value) =>
     ipcRenderer.invoke("provider-save-credential", { credential, value }),
-  providerListModels: (payload) => ipcRenderer.invoke("provider-list-models", payload),
+  providerSaveEndpoint: (provider, endpoint) =>
+    ipcRenderer.invoke("provider-save-endpoint", { provider, endpoint }),
+  providerListModels: (provider) => ipcRenderer.invoke("provider-list-models", { provider }),
   providerReason: (payload) => ipcRenderer.invoke("provider-reason", payload),
   providerStreamStart: (payload) => ipcRenderer.invoke("provider-stream-start", payload),
   providerStreamCancel: (streamId) => ipcRenderer.invoke("provider-stream-cancel", streamId),
