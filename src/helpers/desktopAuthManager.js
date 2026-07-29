@@ -31,6 +31,15 @@ function base64url(buffer) {
   return buffer.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
+function refreshIdempotencyKey(session) {
+  const operation = [
+    "desktop-refresh-v1",
+    String(session?.sessionId || ""),
+    String(session?.refreshToken || ""),
+  ].join("\0");
+  return `desktop-refresh-${base64url(crypto.createHash("sha256").update(operation).digest())}`;
+}
+
 function finiteSeconds(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -469,10 +478,14 @@ class DesktopAuthManager extends EventEmitter {
       if (session.kind === "desktop-v2") {
         response = await this._request("/api/v1/auth/desktop/token/refresh/", {
           method: "POST",
+          headers: {
+            "Idempotency-Key": refreshIdempotencyKey(session),
+          },
           body: JSON.stringify({
             grant_type: "refresh_token",
             client_id: CLIENT_ID,
             refresh_token: session.refreshToken,
+            device: this._device(),
           }),
         });
       } else {
