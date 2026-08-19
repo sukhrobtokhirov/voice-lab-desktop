@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, Command, HardDrive, KeyRound, Languages, LogIn, Sparkles } from "lucide-react";
+import { CheckCircle2, Command, Languages, LogIn, Sparkles } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import WindowControls from "./WindowControls";
 import StepProgress from "./ui/StepProgress";
 import PermissionsSection from "./ui/PermissionsSection";
-import LanguageSelector, { getDesktopLanguageOptions } from "./ui/LanguageSelector";
+import LanguageSelector from "./ui/LanguageSelector";
+import { getDesktopLanguageOptions } from "../config/desktopLanguageOptions";
 import AuthenticationStep from "./AuthenticationStep";
 import { HotkeyInput } from "./ui/HotkeyInput";
 import { usePermissions } from "../hooks/usePermissions";
@@ -24,9 +25,6 @@ import {
   type OnboardingStep,
 } from "../constants/onboarding";
 
-const MODE_KEY = "voicelab:onboarding-mode:v1";
-type SetupMode = "account" | "local" | "api-key";
-
 interface OnboardingFlowProps {
   onComplete: (options?: { openSettings?: boolean }) => void;
 }
@@ -34,11 +32,6 @@ interface OnboardingFlowProps {
 export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState<OnboardingStep>(readOnboardingStep);
-  const [mode, setMode] = useState<SetupMode>(() => {
-    const saved = localStorage.getItem(MODE_KEY);
-    return saved === "account" || saved === "local" || saved === "api-key" ? saved : "account";
-  });
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const preferredLanguage = useSettingsStore((state) => state.preferredLanguage) as DesktopLanguageCode;
   const [hotkey, setHotkey] = useState(() => localStorage.getItem("hotkey") || "CommandOrControl+Shift+Space");
   const [testText, setTestText] = useState("");
@@ -47,18 +40,36 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const { registerHotkey, isRegistering } = useHotkeyRegistration();
   const usage = useUsage();
 
+  useEffect(() => {
+    if (step !== "hotkey") return undefined;
+
+    return window.electronAPI?.onDictationComplete?.(({ text }) => {
+      const result = typeof text === "string" ? text.trim() : "";
+      if (result) setTestText(result);
+    });
+  }, [step]);
+
   const stepIndex = ONBOARDING_STEPS.indexOf(step);
-  const provider: DesktopLanguageProvider = mode === "account" ? "aisha" : "whisper";
-  const cloudCapabilities =
-    usage?.hasLoaded && !usage.isLoading && !usage.error
-      ? {
-          supportedLanguages: usage.supportedLanguages,
-          autoDetectionSupported: usage.autoDetectionSupported,
-        }
-      : undefined;
+  const provider: DesktopLanguageProvider = "voicelab";
+  const cloudCapabilities = useMemo(
+    () =>
+      usage?.hasLoaded && !usage.isLoading && !usage.error
+        ? {
+            supportedLanguages: usage.supportedLanguages,
+            autoDetectionSupported: usage.autoDetectionSupported,
+          }
+        : undefined,
+    [
+      usage?.hasLoaded,
+      usage?.isLoading,
+      usage?.error,
+      usage?.supportedLanguages,
+      usage?.autoDetectionSupported,
+    ]
+  );
   const languageOptions = useMemo(
-    () => getDesktopLanguageOptions(provider, mode === "account" ? cloudCapabilities : undefined),
-    [cloudCapabilities, mode, provider]
+    () => getDesktopLanguageOptions(provider, cloudCapabilities),
+    [cloudCapabilities, provider]
   );
   const selectedSupported = languageOptions.some((item) => item.value === preferredLanguage && !item.disabled);
 
@@ -67,11 +78,6 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     setStep(next);
   }, []);
 
-  const chooseMode = (nextMode: SetupMode) => {
-    localStorage.setItem(MODE_KEY, nextMode);
-    setMode(nextMode);
-  };
-
   const setLanguage = (language: string) => {
     localStorage.setItem("preferredLanguage", language);
     useSettingsStore.setState({ preferredLanguage: language });
@@ -79,26 +85,15 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
 
   const finish = () => {
     const state = useSettingsStore.getState();
-    if (mode === "account") {
-      state.setCloudTranscriptionForAllScopes({ useLocalWhisper: false, cloudTranscriptionMode: "openwhispr" });
-      localStorage.setItem("transcriptionMode", "openwhispr");
-      useSettingsStore.setState({ transcriptionMode: "openwhispr" });
-    } else if (mode === "local") {
-      state.setCloudTranscriptionForAllScopes({ useLocalWhisper: true, cloudTranscriptionMode: "byok" });
-      localStorage.setItem("transcriptionMode", "local");
-      useSettingsStore.setState({ transcriptionMode: "local", useCleanupModel: false, useDictationAgent: false });
-    } else {
-      state.setCloudTranscriptionForAllScopes({ useLocalWhisper: false, cloudTranscriptionMode: "byok" });
-      localStorage.setItem("transcriptionMode", "providers");
-      useSettingsStore.setState({ transcriptionMode: "providers", useCleanupModel: false, useDictationAgent: false });
-    }
+    state.setCloudTranscriptionForAllScopes({ useLocalWhisper: false, cloudTranscriptionMode: "openwhispr" });
+    localStorage.setItem("transcriptionMode", "openwhispr");
+    useSettingsStore.setState({ transcriptionMode: "openwhispr" });
     clearOnboardingProgress();
-    onComplete({ openSettings: mode === "api-key" });
+    onComplete();
   };
 
   const canContinue =
     step === "welcome" ||
-    (step === "mode" && mode !== "account") ||
     (step === "language-permissions" && selectedSupported && permissions.micPermissionGranted) ||
     step === "hotkey";
 
@@ -121,42 +116,21 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
           </div>
         )}
 
-        {step === "mode" && mode === "account" && !showAdvanced && (
+        {step === "mode" && (
           <AuthenticationStep
             onAuthComplete={() => go("language-permissions")}
-            onContinueWithoutAccount={() => setShowAdvanced(true)}
           />
-        )}
-
-        {step === "mode" && mode === "account" && showAdvanced && (
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-xl font-semibold">{t("desktop.onboarding.advanced.title")}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {t("desktop.onboarding.advanced.description")}
-              </p>
-            </div>
-            <button onClick={() => chooseMode("local")} className="flex w-full gap-3 rounded-xl border border-border p-3.5 text-left hover:border-[#f05a4f]/40 hover:bg-[#f05a4f]/5"><HardDrive className="h-5 w-5" /><span><strong className="block text-sm">{t("desktop.onboarding.advanced.localTitle")}</strong><span className="text-xs text-muted-foreground">{t("desktop.onboarding.advanced.localDescription")}</span></span></button>
-            <button onClick={() => chooseMode("api-key")} className="flex w-full gap-3 rounded-xl border border-border p-3.5 text-left hover:border-[#f05a4f]/40 hover:bg-[#f05a4f]/5"><KeyRound className="h-5 w-5" /><span><strong className="block text-sm">{t("desktop.onboarding.advanced.providerTitle")}</strong><span className="text-xs text-muted-foreground">{t("desktop.onboarding.advanced.providerDescription")}</span></span></button>
-            <Button variant="ghost" className="w-full" onClick={() => setShowAdvanced(false)}>
-              {t("desktop.onboarding.advanced.useCloud")}
-            </Button>
-          </div>
-        )}
-
-        {step === "mode" && mode && mode !== "account" && (
-          <div className="space-y-5 text-center"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-muted">{mode === "local" ? <HardDrive /> : <KeyRound />}</div><div><h2 className="text-xl font-semibold">{t(mode === "local" ? "desktop.onboarding.mode.localTitle" : "desktop.onboarding.mode.providerTitle")}</h2><p className="mt-1 text-sm text-muted-foreground">{t(mode === "local" ? "desktop.onboarding.mode.localDescription" : "desktop.onboarding.mode.providerDescription")}</p></div></div>
         )}
 
         {step === "language-permissions" && (
           <div className="space-y-5">
             <div><h2 className="text-xl font-semibold">{t("desktop.onboarding.language.title")}</h2><p className="mt-1 text-sm text-muted-foreground">{t("desktop.onboarding.language.description")}</p></div>
-            {mode === "account" && usage?.isLoading && (
+            {usage?.isLoading && (
               <p role="status" className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
                 {t("desktop.onboarding.language.loadingCapabilities")}
               </p>
             )}
-            {mode === "account" && usage?.error && (
+            {usage?.error && (
               <p role="status" className="rounded-lg bg-amber-500/8 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
                 {t("desktop.onboarding.language.capabilitiesUnavailable")}
               </p>
@@ -181,12 +155,12 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         )}
 
         {step === "ready" && (
-          <div className="space-y-5 text-center"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10"><CheckCircle2 className="h-7 w-7 text-emerald-500" /></div><div><h2 className="text-2xl font-semibold">{t("desktop.onboarding.ready.title")}</h2><p className="mt-2 text-sm text-muted-foreground">{t(mode === "account" ? "desktop.onboarding.ready.account" : mode === "local" ? "desktop.onboarding.ready.local" : "desktop.onboarding.ready.provider")}</p></div></div>
+          <div className="space-y-5 text-center"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10"><CheckCircle2 className="h-7 w-7 text-emerald-500" /></div><div><h2 className="text-2xl font-semibold">{t("desktop.onboarding.ready.title")}</h2><p className="mt-2 text-sm text-muted-foreground">{t("desktop.onboarding.ready.account")}</p></div></div>
         )}
       </main>
       <footer className="flex items-center justify-between border-t border-border px-6 py-4">
         <Button variant="ghost" disabled={stepIndex === 0} onClick={() => go(ONBOARDING_STEPS[Math.max(0, stepIndex - 1)])}>{t("common.back")}</Button>
-        {step === "ready" ? <Button onClick={finish}>{t("desktop.onboarding.ready.start")}</Button> : step === "mode" && mode === "account" ? <span /> : <Button disabled={!canContinue} onClick={() => go(ONBOARDING_STEPS[Math.min(ONBOARDING_STEPS.length - 1, stepIndex + 1)])}>{t("common.continue")}</Button>}
+        {step === "ready" ? <Button onClick={finish}>{t("desktop.onboarding.ready.start")}</Button> : step === "mode" ? <span /> : <Button disabled={!canContinue} onClick={() => go(ONBOARDING_STEPS[Math.min(ONBOARDING_STEPS.length - 1, stepIndex + 1)])}>{t("common.continue")}</Button>}
       </footer>
     </div>
   );

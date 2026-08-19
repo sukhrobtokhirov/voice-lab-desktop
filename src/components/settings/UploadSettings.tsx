@@ -3,7 +3,7 @@ import { Cloud } from "lucide-react";
 import { SettingsPanel, SettingsPanelRow } from "../ui/SettingsSection";
 import { Badge } from "../ui/badge";
 
-/** Aisha-only upload STT — no BYOK / local picker. */
+/** VoiceLab Cloud upload STT — no BYOK / local picker. */
 export function UploadTranscriptionPanel() {
   const { t } = useTranslation();
 
@@ -20,7 +20,7 @@ export function UploadTranscriptionPanel() {
                 <p className="text-sm font-medium text-foreground">
                   {t("settingsPage.transcription.modes.openwhispr")}
                 </p>
-                <Badge variant="success">Aisha</Badge>
+                <Badge variant="success">VoiceLab</Badge>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 {t("settingsPage.transcription.modes.openwhisprDesc")}

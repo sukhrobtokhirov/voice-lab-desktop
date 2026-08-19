@@ -3,38 +3,11 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { useSettingsStore } from "../../stores/settingsStore";
+import type { DesktopLanguageProvider } from "../../config/desktopLanguages";
 import {
-  DESKTOP_LANGUAGE_CATALOG,
-  languageUnsupportedReason,
-  providerSupportsLanguage,
-  type DesktopLanguageCapabilities,
-  type DesktopLanguageProvider,
-} from "../../config/desktopLanguages";
-
-export interface LanguageOption {
-  value: string;
-  label: string;
-  flag: string;
-  localizedName?: string;
-  group?: "automatic" | "central-asia" | "other";
-  disabled?: boolean;
-  disabledReason?: string;
-}
-
-export function getDesktopLanguageOptions(
-  provider: DesktopLanguageProvider,
-  capabilities?: DesktopLanguageCapabilities
-): LanguageOption[] {
-  return DESKTOP_LANGUAGE_CATALOG.map((language) => ({
-    value: language.code,
-    label: language.label,
-    localizedName: language.localizedName,
-    flag: language.flag,
-    group: language.group,
-    disabled: !providerSupportsLanguage(provider, language.code, capabilities),
-    disabledReason: languageUnsupportedReason(provider, language.code, capabilities),
-  }));
-}
+  getDesktopLanguageOptions,
+  type LanguageOption,
+} from "../../config/desktopLanguageOptions";
 
 interface LanguageSelectorProps {
   value: string;
@@ -62,7 +35,7 @@ export default function LanguageSelector({
   const { t } = useTranslation();
   const configuredProvider = useSettingsStore((state) => {
     if (state.useLocalWhisper) return "whisper" as const;
-    if (state.cloudTranscriptionMode === "openwhispr") return "aisha" as const;
+    if (state.cloudTranscriptionMode === "openwhispr") return "voicelab" as const;
     if (["openai", "groq", "mistral", "tinfoil"].includes(state.cloudTranscriptionProvider)) {
       return "whisper" as const;
     }

@@ -424,8 +424,8 @@ function clearCache() {
   cachedFFmpegPath = null;
 }
 
-/** Aisha STT accepts mp3, wav, ogg, m4a — not webm/flac/etc. */
-const AISHA_STT_FORMATS = {
+/** VoiceLab Desktop Dictate accepts these formats without conversion. */
+const CLOUD_STT_FORMATS = {
   wav: { ext: "wav", contentType: "audio/wav" },
   mp3: { ext: "mp3", contentType: "audio/mpeg" },
   mpeg: { ext: "mp3", contentType: "audio/mpeg" },
@@ -455,10 +455,10 @@ function detectAudioContainer(buffer) {
 }
 
 /**
- * Normalize audio for Aisha STT uploads.
+ * Normalize audio for VoiceLab Cloud STT uploads.
  * Passthrough for wav/mp3/ogg/m4a; otherwise FFmpeg → 16 kHz mono WAV.
  */
-async function prepareAishaSttAudio(input, options = {}) {
+async function prepareCloudSttAudio(input, options = {}) {
   const hintExt = (options.hintExt || "").replace(/^\./, "").toLowerCase();
   let buffer = null;
   let inputPath = null;
@@ -472,7 +472,7 @@ async function prepareAishaSttAudio(input, options = {}) {
   }
 
   const detected = detectAudioContainer(buffer) || hintExt || null;
-  const passthrough = detected && AISHA_STT_FORMATS[detected];
+  const passthrough = detected && CLOUD_STT_FORMATS[detected];
   if (passthrough) {
     return {
       buffer,
@@ -482,7 +482,7 @@ async function prepareAishaSttAudio(input, options = {}) {
     };
   }
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aisha-stt-"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-stt-"));
   const inExt = detected === "webm" ? "webm" : detected === "flac" ? "flac" : hintExt || "webm";
   tempInputPath = inputPath || path.join(tempDir, `input.${inExt}`);
   const tempWavPath = path.join(tempDir, "output.wav");
@@ -550,7 +550,7 @@ module.exports = {
   computeFloat32RMS,
   mergeAudioSegments,
   detectAudioContainer,
-  prepareAishaSttAudio,
+  prepareCloudSttAudio,
   getAudioDurationSeconds,
   clearCache,
 };

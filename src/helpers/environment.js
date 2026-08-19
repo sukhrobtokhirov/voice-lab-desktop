@@ -9,7 +9,6 @@ const { BYOK_API_KEYS } = require("../config/secretKeys");
 
 const SECRET_KEYS = [
   ...BYOK_API_KEYS.map((k) => k.env),
-  "AISHA_API_KEY",
   "ASSEMBLYAI_API_KEY",
   "DEEPGRAM_API_KEY",
   "CORTI_CLIENT_ID",
@@ -378,15 +377,6 @@ class EnvironmentManager {
     return this._saveKey("AZURE_OPENAI_API_KEY", key);
   }
 
-  getAishaApiKey() {
-    return this._getKey("AISHA_API_KEY");
-  }
-
-  saveAishaApiKey(key) {
-    const result = this._saveKey("AISHA_API_KEY", key);
-    this.saveAllKeysToEnvFile().catch(() => {});
-    return result;
-  }
   getAzureDeployment() {
     return this._getKey("AZURE_OPENAI_DEPLOYMENT");
   }

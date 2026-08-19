@@ -131,14 +131,14 @@ export const CACHE_CONFIG = {
   PASTE_DELAY_MS: 50, // Delay before paste simulation to allow clipboard to settle
 } as const;
 
-// Aisha / VoiceLab cloud speech API (docs: https://aisha.group/uz/api-documentation)
-// Legacy VITE_OPENWHISPR_API_URL still accepted.
+// VoiceLab API origin. Legacy VITE_OPENWHISPR_API_URL remains accepted for
+// development compatibility, but production defaults to VoiceLab itself.
 export const OPENWHISPR_API_URL =
   (env.VITE_VOICELAB_API_URL as string) ||
   (env.VITE_OPENWHISPR_API_URL as string) ||
-  "https://back.aisha.group";
+  "https://api.voicelab.uz";
 
-export const AISHA_API_BASE = OPENWHISPR_API_URL;
+export const VOICELAB_API_BASE = OPENWHISPR_API_URL;
 
 // Retry Configuration
 export const RETRY_CONFIG = {

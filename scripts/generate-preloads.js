@@ -57,6 +57,7 @@ const controlOnly = new Set([
   "authRefreshSession",
   "authLogout",
   "authDeleteAccount",
+  "onDictationComplete",
 ]);
 
 const agent = new Set([

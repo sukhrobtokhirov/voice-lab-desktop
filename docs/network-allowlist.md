@@ -12,31 +12,20 @@ onboarding).
 
 | Host                                          | Protocol | Port | Purpose                                                                            |
 | --------------------------------------------- | -------- | ---- | ---------------------------------------------------------------------------------- |
-| `api.openwhispr.com`                          | HTTPS    | 443  | Cloud API: transcription, sync, agent reasoning, settings, usage.                  |
-| `auth.openwhispr.com`                         | HTTPS    | 443  | Account sign-in and session refresh (Better Auth).                                 |
+| `api.voicelab.uz`                             | HTTPS    | 443  | Desktop authentication, AI Credits wallet, Dictate operations, and sync.           |
+| `voicelab.uz`                                 | HTTPS    | 443  | Account authorization and Billing UI.                                              |
 | `github.com`, `objects.githubusercontent.com` | HTTPS    | 443  | Application auto-update (release artifacts via electron-updater, GitHub provider). |
-
-## Required for streaming transcription
-
-OpenWhispr Cloud routes streaming sessions through one of three providers.
-Allowlist all three unless a specific provider is pinned in configuration.
-
-| Host                       | Protocol   | Port | Purpose                                                                           |
-| -------------------------- | ---------- | ---- | --------------------------------------------------------------------------------- |
-| `api.deepgram.com`         | WSS        | 443  | Deepgram streaming transcription.                                                 |
-| `api.openai.com`           | WSS, HTTPS | 443  | OpenAI Realtime streaming transcription.                                          |
-| `streaming.assemblyai.com` | WSS, HTTPS | 443  | AssemblyAI streaming transcription. Token endpoint is HTTPS; live session is WSS. |
 
 ## Required for local model downloads
 
-Contacted only when a user opts into a local model (Whisper, Parakeet, or a
-local GGUF reasoning model). Not required for cloud-only installs.
+Contacted only for optional local intelligence, semantic search, or speaker-diarization assets.
+Speech transcription itself does not download a model.
 
 | Host                                                    | Protocol | Port | Purpose                                                                     |
 | ------------------------------------------------------- | -------- | ---- | --------------------------------------------------------------------------- |
-| `huggingface.co`                                        | HTTPS    | 443  | Whisper GGML, Parakeet, GGUF, and embedding model downloads.                |
+| `huggingface.co`                                        | HTTPS    | 443  | GGUF intelligence and embedding model downloads.                            |
 | `cdn-lfs.huggingface.co`, `cdn-lfs-us-1.huggingface.co` | HTTPS    | 443  | HuggingFace large-file CDN (LFS-backed model files).                        |
-| `github.com`, `objects.githubusercontent.com`           | HTTPS    | 443  | sherpa-onnx, llama.cpp, whisper.cpp, and Qdrant binaries (GitHub releases). |
+| `github.com`, `objects.githubusercontent.com`           | HTTPS    | 443  | Speaker diarization, llama.cpp, and Qdrant binaries (GitHub releases).      |
 
 ## Required for Google Calendar (optional feature)
 
@@ -47,7 +36,7 @@ Contacted only if the user connects Google Calendar in settings.
 | `accounts.google.com`   | HTTPS    | 443  | OAuth authorization.                                        |
 | `oauth2.googleapis.com` | HTTPS    | 443  | OAuth token exchange and revoke.                            |
 | `www.googleapis.com`    | HTTPS    | 443  | Calendar event and calendar list reads.                     |
-| `openwhispr.com`        | HTTPS    | 443  | OAuth desktop callback redirect (`/auth/desktop-callback`). |
+| `voicelab.uz`           | HTTPS    | 443  | OAuth desktop callback redirect (`/auth/desktop-callback`). |
 
 ## Required for URL audio import (optional feature)
 
@@ -68,12 +57,12 @@ provider. Skip any provider not in use.
 
 | Host                                                                             | Protocol   | Port | Used when                                                                                                                                                                                                                                                                                                                                                |
 | -------------------------------------------------------------------------------- | ---------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `api.openai.com`                                                                 | HTTPS      | 443  | OpenAI API key configured (transcription or reasoning).                                                                                                                                                                                                                                                                                                  |
-| `*.cognitiveservices.azure.com`, `*.openai.azure.com`, `*.services.ai.azure.com` | HTTPS      | 443  | Azure AI Foundry / Azure OpenAI speech-to-text configured (custom transcription provider pointed at your own Azure resource endpoint).                                                                                                                                                                                                                   |
+| `api.openai.com`                                                                 | HTTPS      | 443  | OpenAI API key configured for optional reasoning.                                                                                                                                                                                                                                                                                                        |
+| `*.cognitiveservices.azure.com`, `*.openai.azure.com`, `*.services.ai.azure.com` | HTTPS      | 443  | Optional Azure-hosted reasoning configuration.                                                                                                                                                                                                                                                                                                           |
 | `api.anthropic.com`                                                              | HTTPS      | 443  | Anthropic API key configured.                                                                                                                                                                                                                                                                                                                            |
 | `generativelanguage.googleapis.com`                                              | HTTPS      | 443  | Gemini API key configured.                                                                                                                                                                                                                                                                                                                               |
 | `api.groq.com`                                                                   | HTTPS      | 443  | Groq API key configured.                                                                                                                                                                                                                                                                                                                                 |
-| `atc.tinfoil.sh`, `*.tinfoil.sh`                                                 | WSS, HTTPS | 443  | Tinfoil API key configured. `atc.tinfoil.sh` serves the enclave attestation bundle (verified locally against an embedded sigstore root). Inference and realtime transcription connect to an enclave host assigned dynamically at runtime (e.g. `inference.tinfoil.sh`, `router.infN.tinfoil.sh`), so allowlist `*.tinfoil.sh` rather than pinning hosts. |
+| `atc.tinfoil.sh`, `*.tinfoil.sh`                                                 | HTTPS      | 443  | Tinfoil reasoning configured; enclave attestation and inference hosts are assigned dynamically.                                                                                                                                                                                                                                                          |
 | `api.mistral.ai`                                                                 | HTTPS      | 443  | Mistral API key configured.                                                                                                                                                                                                                                                                                                                              |
 | `openrouter.ai`                                                                  | HTTPS      | 443  | OpenRouter selected as a reasoning provider (`/api/v1/models` is fetched even without a key).                                                                                                                                                                                                                                                            |
 
@@ -98,16 +87,8 @@ Run from a machine on the same network as the user. A successful response
 (any HTTP status, including `401`) confirms the network path works.
 
 ```sh
-# OpenWhispr Cloud reachability
-curl -v https://api.openwhispr.com/api/health
-
-# Streaming providers
-curl -v https://api.deepgram.com/v1/projects
-curl -v https://api.openai.com/v1/models
-curl -v https://streaming.assemblyai.com/v3/token
-
-# Model downloads (only if local mode is in use)
-curl -v -I https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin
+# VoiceLab Desktop API reachability (401 is expected without a desktop bearer token)
+curl -v https://api.voicelab.uz/api/v1/desktop/wallet/
 ```
 
 If a request returns `Could not resolve host`, the DNS layer (resolver,

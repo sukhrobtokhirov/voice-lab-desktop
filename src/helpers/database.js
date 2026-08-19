@@ -895,9 +895,11 @@ class DatabaseManager {
         throw new Error("Database not initialized");
       }
       const statusFilter = includeDiscarded ? "" : " AND status != 'discarded'";
+      const hiddenAuthFailures =
+        " AND NOT (status = 'failed' AND error_code IN ('AUTH_EXPIRED', 'AUTH_REQUIRED'))";
       const privacyScope = this._activePrivacyScope();
       const stmt = this.db.prepare(
-        `SELECT * FROM transcriptions WHERE deleted_at IS NULL${statusFilter}
+        `SELECT * FROM transcriptions WHERE deleted_at IS NULL${statusFilter}${hiddenAuthFailures}
          AND privacy_scope_id = ? ORDER BY timestamp DESC LIMIT ?`
       );
       const transcriptions = stmt.all(privacyScope, limit);

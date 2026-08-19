@@ -73,9 +73,8 @@ function MainApp() {
     if (!authLoaded) return;
 
     const onboardingCompleted = localStorage.getItem("onboardingCompleted") === "true";
-    const authSkipped =
-      localStorage.getItem("authenticationSkipped") === "true" ||
-      localStorage.getItem("skipAuth") === "true";
+    localStorage.removeItem("authenticationSkipped");
+    localStorage.removeItem("skipAuth");
     const onboardingInProgress = hasOnboardingProgress();
     const isReturningUser =
       !onboardingCompleted && isSignedIn && !isGracePeriodOnly && !onboardingInProgress;
@@ -89,7 +88,7 @@ function MainApp() {
     if (isControlPanel) {
       if (!resolved) {
         setShowOnboarding(true);
-      } else if (!isSignedIn && !authSkipped) {
+      } else if (!isSignedIn) {
         setNeedsReauth(true);
       }
     }
@@ -152,11 +151,6 @@ function MainApp() {
             <Card className="bg-card/90 backdrop-blur-2xl border border-border/50 dark:border-white/5 shadow-lg rounded-xl overflow-hidden">
               <CardContent className="p-6">
                 <AuthenticationStep
-                  onContinueWithoutAccount={() => {
-                    localStorage.setItem("authenticationSkipped", "true");
-                    localStorage.setItem("skipAuth", "true");
-                    setNeedsReauth(false);
-                  }}
                   onAuthComplete={() => setNeedsReauth(false)}
                   onNeedsVerification={() => {}}
                 />

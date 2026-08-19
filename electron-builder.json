@@ -103,8 +103,6 @@
       "from": "resources/bin/",
       "to": "bin/",
       "filter": [
-        "whisper-cpp-*",
-        "whisper-server-*",
         "llama-server-*",
         "sherpa-onnx-*",
         "yt-dlp-*",

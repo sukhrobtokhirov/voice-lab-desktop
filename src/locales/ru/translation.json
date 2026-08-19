@@ -167,7 +167,7 @@
   "onboarding": {
     "steps": {
       "welcome": "Приветствие",
-      "aishaKey": "Ключ Aisha",
+      "voiceLabAccount": "Аккаунт VoiceLab",
       "setup": "Настройка",
       "permissions": "Разрешения",
       "activation": "Диктовка",
@@ -176,18 +176,18 @@
       "finish": "Готово",
       "voiceAgent": "Голосовой агент"
     },
-    "aishaKey": {
-      "title": "Подключите свой API-ключ Aisha",
-      "description": "VoiceLab Cloud использует Aisha для распознавания речи. Создайте личный API-ключ на space.aisha.group и вставьте его ниже.",
+    "voiceLabAccount": {
+      "title": "Войдите в VoiceLab",
+      "description": "Подключите аккаунт VoiceLab один раз. Облачная транскрипция запускается автоматически и использует ваши AI Credits.",
       "getKeyHint": "Ещё нет ключа?",
-      "openSpace": "Открыть space.aisha.group",
-      "inputLabel": "API-ключ Aisha",
+      "openSpace": "Открыть VoiceLab",
+      "inputLabel": "Аккаунт VoiceLab",
       "placeholder": "Вставьте ваш API-ключ",
       "helpText": "Хранится только на этом устройстве. Позже можно изменить в Настройки → Аккаунт.",
       "validating": "Проверка ключа…",
       "errors": {
-        "required": "Введите API-ключ Aisha, чтобы продолжить.",
-        "invalid": "Ключ отклонён. Создайте новый на space.aisha.group.",
+        "required": "Войдите в аккаунт VoiceLab, чтобы продолжить.",
+        "invalid": "VoiceLab не смог авторизовать сессию. Повторите вход.",
         "saveFailed": "Не удалось сохранить ключ. Попробуйте снова."
       }
     },
@@ -386,7 +386,7 @@
       "failedCtaSettings": "Настройте провайдер транскрипции",
       "failedCtaAndRetry": "затем нажмите повторить",
       "failedCtaSettingsOnly": "Настройте провайдер транскрипции в Настройках",
-      "failedLimitReached": "Недостаточно баланса Aisha — пополните на space.aisha.group",
+      "failedLimitReached": "Недостаточно AI Credits VoiceLab — откройте Billing для пополнения",
       "failedOffline": "Нет подключения",
       "clearAll": "Очистить все",
       "clearAllTitle": "Очистить все транскрипции",
@@ -571,14 +571,14 @@
       "errorTitles": {
         "sessionExpired": "Сессия истекла",
         "offline": "Нет подключения к интернету",
-        "dailyLimitReached": "Проблема с оплатой Aisha",
-        "aishaBillingFailed": "Проблема с оплатой Aisha",
-        "aishaBillingRetry": "Транскрипция не удалась",
+        "dailyLimitReached": "Проблема с оплатой VoiceLab",
+        "walletInsufficient": "Проблема с оплатой VoiceLab",
+        "walletChargeFailed": "Транскрипция не удалась",
         "providerRateLimited": "Ограничение провайдера"
       },
       "fallback": {
-        "title": "Резервный режим",
-        "description": "Локальный Whisper не сработал. Использован OpenAI API."
+        "title": "Повтор VoiceLab",
+        "description": "Исходный запрос не удался, и VoiceLab безопасно повторил его."
       },
       "translationFallback": {
         "unreachableTitle": "Перевод недоступен",
@@ -606,10 +606,10 @@
       "errorDescriptions": {
         "sessionExpired": "Сессия VoiceLab Cloud недоступна. Войдите снова из Настроек.",
         "offline": "Вы офлайн. Облачная транскрипция требует подключения к интернету.",
-        "dailyLimitReached": "Ошибка оплаты Aisha или недостаточно баланса. Повторите попытку или пополните на space.aisha.group.",
-        "aishaBillingFailed": "Недостаточно баланса Aisha. Пополните на space.aisha.group и повторите попытку.",
-        "aishaBillingRetry": "Транзакция оплаты Aisha не удалась. Повторите попытку через момент.",
-        "aishaKeyMissing": "Добавьте API-ключ Aisha в Настройки → Аккаунт (создайте на space.aisha.group).",
+        "dailyLimitReached": "Достигнут лимит VoiceLab или недостаточно AI Credits. Откройте Billing и повторите попытку.",
+        "walletInsufficient": "Недостаточно AI Credits VoiceLab. Откройте Billing для пополнения.",
+        "walletChargeFailed": "VoiceLab не смог завершить списание. Повторите попытку через момент.",
+        "authRequired": "Войдите в аккаунт VoiceLab для работы VoiceLab Cloud.",
         "providerRateLimited": "Ваш провайдер транскрипции ограничил запрос. Подождите немного и попробуйте снова."
       }
     },
@@ -740,6 +740,27 @@
   },
   "auth": {
     "cloudNotConfigured": "Облако не настроено",
+    "desktopTitle": "Войдите в VoiceLab Desktop",
+    "desktopBrowserHint": "Безопасный вход откроется в браузере и автоматически вернёт вас в приложение.",
+    "desktopWaiting": "Завершите вход в браузере. VoiceLab Desktop продолжит автоматически.",
+    "desktopSecurity": "Пароль не передаётся приложению. Токен сессии защищён операционной системой.",
+    "desktopOpenBrowser": "Продолжить в браузере",
+    "desktopOpening": "Открываем безопасный вход…",
+    "desktopReopen": "Открыть браузер снова",
+    "desktopCancel": "Отменить вход",
+    "desktopCancelled": "Вход отменён. Вы можете попробовать снова.",
+    "desktopExpired": "Срок действия запроса истёк. Начните вход заново.",
+    "desktopFailed": "Не удалось завершить вход. Попробуйте снова.",
+    "desktopNetworkTimeout": "Сервер аутентификации не ответил вовремя. Проверьте подключение и повторите попытку.",
+    "desktopInvalidResponse": "Сервер аутентификации вернул неверный ответ. Повторите попытку позже.",
+    "desktopCallbackInvalid": "Не удалось проверить ссылку возврата. Начните вход заново.",
+    "desktopSecurityError": "Ссылка входа не прошла проверку безопасности VoiceLab. Начните вход заново.",
+    "desktopReplayDetected": "Эта ссылка входа уже использована. Создайте новый запрос на вход.",
+    "desktopUnauthorized": "Сессия VoiceLab больше недействительна. Войдите снова.",
+    "desktopUnavailable": "Аутентификация Desktop недоступна в этой сессии приложения. Перезапустите VoiceLab Desktop.",
+    "desktopServerRejected": "Сервер аутентификации отклонил запрос. Повторите попытку или обратитесь в поддержку с кодом ошибки ниже.",
+    "desktopReopenFailed": "Не удалось снова открыть браузер. Отмените и начните вход заново.",
+    "desktopProtocolUnavailable": "Ссылка безопасного возврата не зарегистрирована. Перезапустите или переустановите VoiceLab Desktop.",
     "common": {
       "back": "Назад",
       "continue": "Продолжить",
@@ -1133,22 +1154,22 @@
   },
   "settingsPage": {
     "account": {
-      "aishaKey": {
-        "sectionDescription": "VoiceLab Cloud использует ваш личный API-ключ Aisha. Вход в аккаунт VoiceLab не требуется.",
-        "label": "API-ключ Aisha",
-        "description": "Создайте ключ на space.aisha.group и вставьте его сюда.",
-        "openSpace": "Открыть space.aisha.group",
+      "voiceLabAccount": {
+        "sectionDescription": "VoiceLab Cloud использует ваш аккаунт и общий кошелёк AI Credits.",
+        "label": "Аккаунт VoiceLab",
+        "description": "Войдите один раз; отдельный API-ключ для речи не нужен.",
+        "openSpace": "Открыть VoiceLab",
         "helpText": "Хранится только на этом устройстве.",
         "placeholder": "Вставьте ваш API-ключ",
         "validating": "Проверка ключа…",
         "valid": "Ключ подходит.",
         "invalid": "Ключ отклонён.",
-        "billing": "Ключ принят, но баланс Aisha низкий. Пополните на space.aisha.group.",
-        "saved": "API-ключ Aisha сохранён",
-        "cleared": "API-ключ Aisha удалён.",
+        "billing": "Баланс AI Credits VoiceLab низкий. Откройте Billing для пополнения.",
+        "saved": "Аккаунт VoiceLab подключён",
+        "cleared": "Сессия VoiceLab завершена.",
         "saveFailed": "Не удалось сохранить ключ.",
-        "missingTitle": "Нужен API-ключ Aisha",
-        "missingBody": "Добавьте личный API-ключ Aisha, чтобы пользоваться VoiceLab Cloud. Получите ключ на space.aisha.group.",
+        "missingTitle": "Нужен вход в VoiceLab",
+        "missingBody": "Войдите для облачной диктовки VoiceLab. Отдельный API-ключ не нужен.",
         "missingCta": "Открыть настройки аккаунта"
       },
       "badges": {
@@ -1729,7 +1750,7 @@
     "llms": {
       "title": "Языковые модели",
       "description": "Настройка моделей для очистки, форматирования заметок и чата",
-      "temporarilyDisabled": "Настройки LLM-провайдеров временно отключены. Для работы с речью используется только VoiceLab Cloud (Aisha).",
+      "temporarilyDisabled": "Настройки LLM-провайдеров временно отключены. Для работы с речью используется VoiceLab Cloud.",
       "tabs": {
         "dictationCleanup": "Очистка диктовки",
         "dictationAgent": "Voice Agent",
@@ -1795,7 +1816,7 @@
       "transcriptionPreviewDescription": "Показывать транскрипцию в плавающем окне перед очисткой",
       "vad": {
         "title": "Определение голосовой активности",
-        "description": "Настройте, как Silero VAD обнаруживает и сегментирует речь для локальной транскрипции Whisper",
+        "description": "Настройте, как Silero VAD обнаруживает и сегментирует речь во время записи",
         "toggles": {
           "dictation": {
             "title": "Silero VAD для диктовки",
@@ -2225,9 +2246,9 @@
       "transcriptionFailed": "Ошибка транскрибирования",
       "errorOccurred": "Произошла ошибка",
       "noSpeechDetected": "В этой аудиозаписи речь не обнаружена.",
-      "noProviderTitle": "Провайдер транскрипции не настроен",
-      "noProviderDescription": "Добавьте API-ключ или скачайте локальную модель, чтобы начать транскрипцию.",
-      "noProviderAction": "Открыть настройки транскрипции",
+      "noProviderTitle": "Требуется вход",
+      "noProviderDescription": "Войдите, чтобы использовать транскрипцию VoiceLab. Оплата списывается с баланса AI Credits.",
+      "noProviderAction": "Войти",
       "fileTooLarge": "Этот файл превышает ограничение в 500 MB.",
       "largeFileNote": "Большие файлы разделяются и транскрибируются параллельно.",
       "chunkProgress": "Транскрибирование части {{completed}} из {{total}}...",
@@ -3082,9 +3103,9 @@
     },
     "creditShortage": {
       "title": "Нужно больше AI Credits",
-      "description": "Для этой записи недостаточно кредитов. Пополните баланс или продолжите локально.",
+      "description": "Для этой записи недостаточно кредитов. Пополните баланс или выберите тариф.",
       "required": "Нужно",
-      "useLocal": "Использовать локально за 0 кредитов"
+      "useLocal": "Управлять биллингом VoiceLab"
     },
     "dictation": {
       "ready": "Готово"
@@ -3188,13 +3209,13 @@
       "dictation": "Диктовка",
       "dictationDescription": "Язык, микрофон и вставка текста",
       "shortcuts": "Горячие клавиши",
-      "shortcutsDescription": "Клавиши диктовки и Aisha",
+      "shortcutsDescription": "Клавиши диктовки и VoiceLab",
       "privacy": "Данные и конфиденциальность",
       "privacyDescription": "Облачная копия, локальное аудио и хранение",
       "advanced": "Дополнительно",
-      "advancedDescription": "Локальные модели, BYOK и инструменты разработчика",
-      "advancedSetup": "Расширенная транскрипция",
-      "advancedSetupDescription": "VoiceLab Cloud используется по умолчанию. Локальные модели и BYOK остаются на устройстве."
+      "advancedDescription": "VoiceLab Cloud и инструменты разработчика",
+      "advancedSetup": "Облачная транскрипция",
+      "advancedSetupDescription": "VoiceLab Dictate автоматически использует текущий аккаунт."
     },
     "session": {
       "active": "Выполнен вход",

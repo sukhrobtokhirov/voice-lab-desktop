@@ -13,18 +13,15 @@ function storePath() {
 function readStore() {
   try {
     const parsed = JSON.parse(fs.readFileSync(storePath(), "utf8"));
-    if (
-      [1, 2, 3, STORE_VERSION].includes(parsed?.version) &&
-      Array.isArray(parsed.operations)
-    ) {
+    if ([1, 2, 3, STORE_VERSION].includes(parsed?.version) && Array.isArray(parsed.operations)) {
       return {
         version: STORE_VERSION,
         operations: parsed.operations.map((operation) => ({
           ...operation,
           logicalOperationId: operation.logicalOperationId || operation.operationId,
           totalDurationSeconds:
-            operation.totalDurationSeconds
-            ?? (Number.isFinite(operation.durationMs) ? operation.durationMs / 1000 : null),
+            operation.totalDurationSeconds ??
+            (Number.isFinite(operation.durationMs) ? operation.durationMs / 1000 : null),
           chunkResults: operation.chunkResults || {},
           serverOperations: operation.serverOperations || {},
         })),
@@ -38,14 +35,22 @@ function writeStore(store) {
   const destination = storePath();
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   const temp = `${destination}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`;
-  fs.writeFileSync(temp, JSON.stringify({ ...store, version: STORE_VERSION }), { encoding: "utf8", mode: 0o600, flag: "wx" });
+  fs.writeFileSync(temp, JSON.stringify({ ...store, version: STORE_VERSION }), {
+    encoding: "utf8",
+    mode: 0o600,
+    flag: "wx",
+  });
   fs.renameSync(temp, destination);
-  try { fs.chmodSync(destination, 0o600); } catch {}
+  try {
+    fs.chmodSync(destination, 0o600);
+  } catch {}
 }
 
 function prune(store) {
   const cutoff = Date.now() - PENDING_TTL_MS;
-  store.operations = store.operations.filter((item) => item.status === "pending" && item.updatedAt >= cutoff);
+  store.operations = store.operations.filter(
+    (item) => item.status === "pending" && item.updatedAt >= cutoff
+  );
 }
 
 function begin({ audioHash, source, durationMs, language = null, accountId }) {
@@ -70,9 +75,7 @@ function begin({ audioHash, source, durationMs, language = null, accountId }) {
     source,
     language,
     durationMs: Number.isFinite(durationMs) ? durationMs : null,
-    totalDurationSeconds: Number.isFinite(durationMs) && durationMs > 0
-      ? durationMs / 1000
-      : null,
+    totalDurationSeconds: Number.isFinite(durationMs) && durationMs > 0 ? durationMs / 1000 : null,
     serverOperations: {},
     chunkResults: {},
     expectedChunkCount: null,
@@ -85,7 +88,16 @@ function begin({ audioHash, source, durationMs, language = null, accountId }) {
   return operation;
 }
 
-function deterministicChunkKey(operation, index) { return `${operation.idempotencyKey}:chunk:${index}`; }
+function deterministicChunkKey(operation, index) {
+  const digest = crypto
+    .createHash("sha256")
+    .update(`${operation.idempotencyKey}:chunk:${index}`)
+    .digest();
+  digest[6] = (digest[6] & 0x0f) | 0x50;
+  digest[8] = (digest[8] & 0x3f) | 0x80;
+  const hex = digest.subarray(0, 16).toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 function attachServerOperation(operationId, index, serverOperationId, expectedChunkCount = null) {
   const store = readStore();
@@ -117,7 +129,10 @@ function remove(operationId) {
 function retain(operationId) {
   const store = readStore();
   const item = store.operations.find((candidate) => candidate.operationId === operationId);
-  if (item) { item.updatedAt = Date.now(); writeStore(store); }
+  if (item) {
+    item.updatedAt = Date.now();
+    writeStore(store);
+  }
 }
 
 function get(operationId) {

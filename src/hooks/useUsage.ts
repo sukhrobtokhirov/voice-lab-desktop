@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "./useAuth";
 
 export interface CreditWalletData {
+  isUnlimited: boolean;
   balanceCredits: string;
   reservedCredits: string;
   availableCredits: string;
@@ -30,6 +31,7 @@ interface UseUsageResult extends CreditWalletData {
 }
 
 const EMPTY: CreditWalletData = {
+  isUnlimited: false,
   balanceCredits: "0",
   reservedCredits: "0",
   availableCredits: "0",
@@ -74,6 +76,7 @@ export function useUsage(): UseUsageResult | null {
         };
         const limits = (result.limits ?? {}) as Record<string, unknown>;
         setData({
+          isUnlimited: result.isUnlimited === true,
           balanceCredits: String(result.balanceCredits ?? "0"),
           reservedCredits: String(result.reservedCredits ?? "0"),
           availableCredits: String(result.availableCredits ?? "0"),
@@ -92,8 +95,8 @@ export function useUsage(): UseUsageResult | null {
               : []),
           autoDetectionSupported: Boolean(
             response.autoDetectionSupported ??
-              response.auto_detection_supported ??
-              limits.auto_detection_supported
+            response.auto_detection_supported ??
+            limits.auto_detection_supported
           ),
         });
       } catch (caught) {
@@ -152,7 +155,7 @@ export function useUsage(): UseUsageResult | null {
     ...data,
     status: errorCode ? "unavailable" : "active",
     isSubscribed: data.plan !== "free",
-    isOverLimit: Number.isFinite(available) && available <= 0,
+    isOverLimit: !data.isUnlimited && Number.isFinite(available) && available <= 0,
     isLoading,
     hasLoaded,
     error,

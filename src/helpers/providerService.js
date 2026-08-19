@@ -49,7 +49,6 @@ const CREDENTIALS = Object.freeze({
   bedrockSessionToken: ["getBedrockSessionToken", "saveBedrockSessionToken"],
   azureApiKey: ["getAzureApiKey", "saveAzureApiKey"],
   vertexApiKey: ["getVertexApiKey", "saveVertexApiKey"],
-  aishaApiKey: ["getAishaApiKey", "saveAishaApiKey"],
 });
 
 const PUBLIC_CONFIG = Object.freeze({

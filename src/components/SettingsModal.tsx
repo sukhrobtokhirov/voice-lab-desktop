@@ -1,12 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Mic,
-  UserCircle,
-  Wrench,
-  Keyboard,
-  Shield,
-} from "lucide-react";
+import { Mic, UserCircle, Wrench, Keyboard, Shield } from "lucide-react";
 import SidebarModal, { type SidebarItem } from "./ui/SidebarModal";
 import SettingsPage, { SettingsSectionType } from "./SettingsPage";
 
@@ -86,7 +80,7 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         label: t("desktop.settings.shortcuts", { defaultValue: "Shortcuts" }),
         icon: Keyboard,
         description: t("desktop.settings.shortcutsDescription", {
-          defaultValue: "Dictation and Aisha shortcuts",
+          defaultValue: "Dictation and VoiceLab AI shortcuts",
         }),
         group: t("settingsModal.groups.app", { defaultValue: "Dictate" }),
       },
@@ -104,7 +98,7 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         label: t("desktop.settings.advanced", { defaultValue: "Advanced" }),
         icon: Wrench,
         description: t("desktop.settings.advancedDescription", {
-          defaultValue: "Local models, BYOK and developer tools",
+          defaultValue: "VoiceLab Cloud and developer tools",
         }),
         group: t("settingsModal.groups.system", { defaultValue: "System" }),
       },
@@ -147,6 +141,7 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
       sidebarItems={sidebarItems}
       activeSection={activeSection}
       onSectionChange={handleSectionChange}
+      sidebarWidth="w-60"
     >
       <SettingsPage
         activeSection={activeSection}

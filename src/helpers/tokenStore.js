@@ -8,17 +8,30 @@ const secretCrypto = require("./secretCrypto");
 
 const STORE_VERSION = 2;
 const STORE_MAGIC = Buffer.from("VLAB-AUTH\0V2\0", "utf8");
+const CANONICAL_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const storeFile = () => path.join(app.getPath("userData"), "auth-token.bin");
 const legacyStoreFile = () => path.join(app.getPath("userData"), "auth-token.json");
 const legacyMigrationSentinel = () =>
   path.join(app.getPath("userData"), ".auth-token-legacy-migrated");
 
 let cachedStore = null;
+let installationIdPersisted = false;
+
+function canonicalInstallationId(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return CANONICAL_UUID_PATTERN.test(normalized) ? normalized : null;
+}
+
+function createInstallationId() {
+  return crypto.randomUUID().toLowerCase();
+}
 
 function emptyStore() {
   return {
     version: STORE_VERSION,
-    installationId: crypto.randomUUID(),
+    installationId: createInstallationId(),
     session: null,
     pending: null,
   };
@@ -36,7 +49,33 @@ function normalizeSession(session) {
     refreshExpiresAt: Number(session.refreshExpiresAt) || 0,
     sessionId: session.sessionId || session.session_id || "",
     user: session.user && typeof session.user === "object" ? session.user : null,
-    kind: session.kind || "legacy",
+    kind: session.kind === "desktop-go-v2" ? "desktop-go-v2" : "legacy",
+  };
+}
+
+function normalizePending(pending) {
+  if (!pending || typeof pending !== "object") return null;
+  const requiredStrings = ["codeVerifier", "state", "redirectUri"];
+  if (requiredStrings.some((key) => typeof pending[key] !== "string" || !pending[key])) return null;
+  const createdAt = Number(pending.createdAt);
+  const expiresAt = Number(pending.expiresAt);
+  if (!Number.isFinite(createdAt) || !Number.isFinite(expiresAt) || expiresAt <= createdAt) {
+    return null;
+  }
+  return {
+    codeVerifier: pending.codeVerifier,
+    state: pending.state,
+    redirectUri: pending.redirectUri,
+    createdAt,
+    expiresAt,
+    authorizationRequestId:
+      typeof pending.authorizationRequestId === "string" ? pending.authorizationRequestId : "",
+    authorizationUrl:
+      typeof pending.authorizationUrl === "string" && pending.authorizationUrl.length <= 4096
+        ? pending.authorizationUrl
+        : "",
+    callbackFingerprint:
+      typeof pending.callbackFingerprint === "string" ? pending.callbackFingerprint : "",
   };
 }
 
@@ -47,7 +86,7 @@ function parseStore(raw, { allowLegacy = false } = {}) {
       version: STORE_VERSION,
       installationId: String(parsed.installationId),
       session: normalizeSession(parsed.session),
-      pending: parsed.pending && typeof parsed.pending === "object" ? parsed.pending : null,
+      pending: normalizePending(parsed.pending),
     };
   }
 
@@ -84,10 +123,14 @@ function readStore() {
         });
       }
     }
+    installationIdPersisted = false;
     return (cachedStore = emptyStore());
   }
   if (!secretCrypto.isAvailable()) {
-    authLogger.error("secure_storage_unavailable", { errorCode: "AUTH_SECURE_STORAGE_UNAVAILABLE" });
+    authLogger.error("secure_storage_unavailable", {
+      errorCode: "AUTH_SECURE_STORAGE_UNAVAILABLE",
+    });
+    installationIdPersisted = false;
     return (cachedStore = emptyStore());
   }
 
@@ -104,13 +147,17 @@ function readStore() {
     const raw = decrypted.value;
     const needsReencrypt = !hasMagic || decrypted.needsReencrypt;
     cachedStore = parseStore(raw, { allowLegacy: !hasMagic });
-    if (needsReencrypt) {
+    installationIdPersisted = Boolean(
+      canonicalInstallationId(cachedStore.installationId) === cachedStore.installationId
+    );
+    if (needsReencrypt || !installationIdPersisted) {
       writeStore(cachedStore);
       if (!hasMagic) markLegacyMigrationComplete();
     }
     return cachedStore;
   } catch {
     authLogger.error("secure_store_read_failed", { errorCode: "AUTH_SECURE_STORE_READ_FAILED" });
+    installationIdPersisted = false;
     return (cachedStore = emptyStore());
   }
 }
@@ -125,15 +172,24 @@ function writeStore(value) {
   const file = storeFile();
   const directory = path.dirname(file);
   const temporary = `${file}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+  const persistedValue = {
+    ...value,
+    version: STORE_VERSION,
+    installationId: canonicalInstallationId(value?.installationId) || createInstallationId(),
+  };
   fs.mkdirSync(directory, { recursive: true });
-  const encrypted = Buffer.concat([STORE_MAGIC, secretCrypto.encrypt(JSON.stringify(value))]);
+  const encrypted = Buffer.concat([
+    STORE_MAGIC,
+    secretCrypto.encrypt(JSON.stringify(persistedValue)),
+  ]);
   try {
     fs.writeFileSync(temporary, encrypted, { mode: 0o600, flag: "wx" });
     fs.renameSync(temporary, file);
     try {
       fs.chmodSync(file, 0o600);
     } catch {}
-    cachedStore = value;
+    cachedStore = persistedValue;
+    installationIdPersisted = true;
   } finally {
     try {
       fs.rmSync(temporary, { force: true });
@@ -154,11 +210,16 @@ function update(mutator, { allowMemoryOnly = false } = {}) {
 
 function getInstallationId() {
   const store = readStore();
-  if (!store.installationId) {
-    store.installationId = crypto.randomUUID();
-    if (secretCrypto.isAvailable()) writeStore(store);
+  const installationId = canonicalInstallationId(store.installationId) || createInstallationId();
+  if (store.installationId !== installationId || !installationIdPersisted) {
+    const next = { ...store, installationId };
+    if (secretCrypto.isAvailable()) {
+      writeStore(next);
+    } else {
+      cachedStore = next;
+    }
   }
-  return store.installationId;
+  return installationId;
 }
 
 function getSession() {
@@ -180,8 +241,9 @@ function getPending() {
 }
 
 function savePending(pending) {
-  if (!pending || typeof pending !== "object") throw new Error("Invalid pending authorization");
-  update((store) => ({ ...store, pending }));
+  const normalized = normalizePending(pending);
+  if (!normalized) throw new Error("Invalid pending authorization");
+  update((store) => ({ ...store, pending: normalized }));
 }
 
 function clearPending() {
@@ -196,10 +258,6 @@ function completeAuthorization(session) {
 
 function get() {
   return getSession()?.accessToken || null;
-}
-
-function getRefresh() {
-  return getSession()?.refreshToken || null;
 }
 
 function set(token) {
@@ -217,17 +275,6 @@ function set(token) {
   }
 }
 
-function setSession(accessToken, refreshToken) {
-  const existing = getSession();
-  saveSession({
-    ...(existing || {}),
-    accessToken,
-    accessExpiresAt: existing?.accessExpiresAt || Date.now() + 5 * 60 * 1000,
-    refreshToken: refreshToken || existing?.refreshToken || "",
-    kind: existing?.kind || "legacy",
-  });
-}
-
 function clear() {
   update((store) => ({ ...store, session: null, pending: null }), { allowMemoryOnly: true });
 }
@@ -240,10 +287,8 @@ module.exports = {
   get,
   getInstallationId,
   getPending,
-  getRefresh,
   getSession,
   savePending,
   saveSession,
   set,
-  setSession,
 };

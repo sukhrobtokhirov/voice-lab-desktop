@@ -39,7 +39,7 @@ export default function FinishStep({
   const cortiEnvironment = useSettingsStore((s) => s.cortiEnvironment);
   const setCortiEnvironment = useSettingsStore((s) => s.setCortiEnvironment);
 
-  // Aisha-only STT — Corti BYOK onboarding pitch disabled.
+  // VoiceLab account STT — separate provider-key onboarding is disabled.
   const cortiProvider = getTranscriptionProviders().find((p) => p.id === "corti");
   const [showCorti, setShowCorti] = useState(false);
   const hasCortiCredentials =

@@ -20,7 +20,7 @@ export function MeetingSpeakerDetectionRow() {
   );
 }
 
-/** Aisha-only meeting STT — no BYOK / local / self-hosted picker. */
+/** VoiceLab Cloud meeting STT — no BYOK / local / self-hosted picker. */
 export function MeetingTranscriptionPanel() {
   const { t } = useTranslation();
 
@@ -37,7 +37,7 @@ export function MeetingTranscriptionPanel() {
                 <p className="text-sm font-medium text-foreground">
                   {t("settingsPage.transcription.modes.openwhispr")}
                 </p>
-                <Badge variant="success">Aisha</Badge>
+                <Badge variant="success">VoiceLab</Badge>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 {t("settingsPage.transcription.modes.openwhisprDesc")}

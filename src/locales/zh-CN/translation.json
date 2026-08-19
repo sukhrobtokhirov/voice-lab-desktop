@@ -173,7 +173,8 @@
       "useCase": "关于你",
       "meeting": "会议",
       "finish": "完成",
-      "voiceAgent": "语音助手"
+      "voiceAgent": "语音助手",
+      "voiceLabAccount": "语音实验室帐户"
     },
     "hotkey": {
       "couldNotRegisterTitle": "无法注册该快捷键",
@@ -300,6 +301,21 @@
         "step1": "在 corti.ai 注册",
         "step2": "打开 Corti 控制台并创建 API 凭据",
         "step3": "在下方粘贴 Client ID 和 Secret"
+      }
+    },
+    "voiceLabAccount": {
+      "title": "登录 VoiceLab",
+      "description": "连接您的 VoiceLab 帐户一次。云转录会自动启动并使用您的 AI Credit 钱包。",
+      "getKeyHint": "还没有钥匙吗？",
+      "openSpace": "打开语音实验室",
+      "inputLabel": "语音实验室帐户",
+      "placeholder": "粘贴您的 API 密钥",
+      "helpText": "仅存储在此设备上。您可以稍后在“设置”→“帐户”中更改它。",
+      "validating": "正在检查密钥...",
+      "errors": {
+        "required": "登录您的 VoiceLab 帐户以继续。",
+        "invalid": "VoiceLab 无法授权此会话。尝试重新登录。",
+        "saveFailed": "无法保存密钥。再试一次。"
       }
     }
   },
@@ -556,7 +572,9 @@
         "sessionExpired": "会话已过期",
         "offline": "你已离线",
         "dailyLimitReached": "已达到每日上限",
-        "providerRateLimited": "服务商速率限制"
+        "providerRateLimited": "服务商速率限制",
+        "walletInsufficient": "VoiceLab 计费问题",
+        "walletChargeFailed": "转录失败"
       },
       "fallback": {
         "title": "回退模式",
@@ -589,7 +607,10 @@
         "sessionExpired": "VoiceLab Cloud 会话不可用。请到「设置」中重新登录。",
         "offline": "你目前离线。云端转录需要互联网连接。",
         "dailyLimitReached": "已达今日转录上限。请明天再试或升级你的套餐。",
-        "providerRateLimited": "你的转录服务商限制了请求频率。请稍候再试。"
+        "providerRateLimited": "你的转录服务商限制了请求频率。请稍候再试。",
+        "walletInsufficient": "您的 VoiceLab AI 积分余额不足。打开“结算”充值，然后重试。",
+        "walletChargeFailed": "VoiceLab 计费无法完成计费。请稍后重试。",
+        "authRequired": "登录您的 VoiceLab 帐户以使用 VoiceLab Cloud。"
       }
     },
     "clipboard": {
@@ -784,7 +805,28 @@
     },
     "welcomeSubtitle": "随时随地用语音输入",
     "welcomeTitle": "欢迎使用 VoiceLab",
-    "sessionExpired": "会话已过期，请重新登录。"
+    "sessionExpired": "会话已过期，请重新登录。",
+    "desktopTitle": "登录 VoiceLab 桌面版",
+    "desktopBrowserHint": "安全登录将在您的浏览器中打开，并在完成后返回此处。",
+    "desktopWaiting": "在浏览器中完成登录。 VoiceLab Desktop 将自动继续。",
+    "desktopSecurity": "您的密码永远不会进入桌面应用程序。会话令牌受您的操作系统保护。",
+    "desktopOpenBrowser": "在浏览器中继续",
+    "desktopOpening": "正在打开安全登录...",
+    "desktopReopen": "再次打开浏览器",
+    "desktopCancel": "取消登录",
+    "desktopCancelled": "登录已取消。你可以再试一次。",
+    "desktopExpired": "此登录请求已过期。重新开始继续。",
+    "desktopFailed": "无法完成登录。请再试一次。",
+    "desktopNetworkTimeout": "身份验证服务器响应时间过长。检查您的连接并重试。",
+    "desktopInvalidResponse": "身份验证服务器返回无效响应。请稍后重试。",
+    "desktopCallbackInvalid": "无法验证返回链接。重新开始登录。",
+    "desktopSecurityError": "登录链接未通过 VoiceLab 的安全检查。重新开始登录。",
+    "desktopReplayDetected": "该登录链接已被使用。启动新的登录请求。",
+    "desktopUnauthorized": "您的 VoiceLab 会话不再有效。再次登录。",
+    "desktopUnavailable": "桌面身份验证在此应用程序会话中不可用。重新启动 VoiceLab 桌面。",
+    "desktopServerRejected": "身份验证服务器拒绝了该请求。请重试或联系支持人员并提供以下错误代码。",
+    "desktopReopenFailed": "无法重新打开浏览器。取消并重新开始登录。",
+    "desktopProtocolUnavailable": "安全返回链接未注册。重新启动或重新安装 VoiceLab Desktop。"
   },
   "cleanupPrompt": "文本整理",
   "developerSection": {
@@ -1286,6 +1328,24 @@
         "successDescription": "您的账户和所有数据已被删除。应用将立即重新加载。",
         "failedTitle": "删除失败",
         "failedDescription": "删除您的账户时出错。您的本地数据可能已被部分删除。请重试。"
+      },
+      "voiceLabAccount": {
+        "sectionDescription": "VoiceLab Cloud 使用您的登录帐户和共享的 AI Credit 钱包。",
+        "label": "语音实验室帐户",
+        "description": "登录一次；不需要单独的语音 API 密钥。",
+        "openSpace": "打开语音实验室",
+        "helpText": "仅存储在此设备上。",
+        "placeholder": "粘贴您的 API 密钥",
+        "validating": "正在检查密钥...",
+        "valid": "钥匙看起来不错。",
+        "invalid": "该密钥被拒绝。",
+        "billing": "您的 VoiceLab AI 积分余额不足。打开账单进行充值。",
+        "saved": "VoiceLab 帐户已连接",
+        "cleared": "VoiceLab 会话结束。",
+        "saveFailed": "无法保存密钥。",
+        "missingTitle": "需要登录 VoiceLab",
+        "missingBody": "登录以使用 VoiceLab Cloud 听写。不需要单独的 API 密钥。",
+        "missingCta": "开设账户设置"
       }
     },
     "agentConfig": {
@@ -1696,7 +1756,8 @@
         "dictationTranslation": "翻译",
         "noteFormatting": "笔记格式化",
         "chatIntelligence": "聊天"
-      }
+      },
+      "temporarilyDisabled": "LLM 提供商设置暂时禁用。语音仅使用 VoiceLab Cloud。"
     },
     "noteFormatting": {
       "autoGenerateTitle": "自动生成笔记标题",
@@ -3017,5 +3078,149 @@
     },
     "start": "开始记录",
     "join": "加入并转录"
+  },
+  "desktop": {
+    "offline": "离线。本地听写仍然有效。",
+    "nav": {
+      "history": "历史",
+      "vocabulary": "词汇",
+      "more": "更多的"
+    },
+    "wallet": {
+      "title": "AI信用钱包",
+      "shared": "VoiceLab 产品之间的一种平衡",
+      "balance": "平衡",
+      "available": "可用的",
+      "reserved": "预订的",
+      "unavailable": "钱包暂时无法使用。",
+      "updated": "更新了{{time}}",
+      "live": "实时余额",
+      "manage": "管理账单"
+    },
+    "creditShortage": {
+      "title": "需要更多人工智能学分",
+      "description": "此录音没有足够的可用积分。添加学分或选择一个计划。",
+      "required": "需要",
+      "useLocal": "管理 VoiceLab 账单"
+    },
+    "dictation": {
+      "ready": "准备好"
+    },
+    "languages": {
+      "choose": "选择语言",
+      "search": "搜索语言",
+      "searchPlaceholder": "搜索语言或代码",
+      "clearSearch": "清除搜索",
+      "empty": "未找到语言。",
+      "autoUnsupported": "自动检测不适用于此服务。",
+      "languageUnsupported": "此语言不适用于所选服务。",
+      "groups": {
+        "automatic": "自动的",
+        "centralAsia": "中亚",
+        "other": "俄语和英语"
+      }
+    },
+    "onboarding": {
+      "progress": {
+        "welcome": "欢迎",
+        "mode": "帐户",
+        "language-permissions": "语言",
+        "hotkey": "捷径",
+        "ready": "准备好"
+      },
+      "welcome": {
+        "title": "VoiceLab 听写",
+        "description": "说话自然。您的文本将出现在您需要的地方。"
+      },
+      "advanced": {
+        "title": "高级设置",
+        "description": "使用本地模型或您自己的提供商，无需 VoiceLab Cloud 帐户。",
+        "localTitle": "本地模型",
+        "localDescription": "音频保留在此设备上并使用 0 AI 积分。",
+        "providerTitle": "我的提供者",
+        "providerDescription": "稍后在高级设置中连接您的 API 密钥。",
+        "useCloud": "继续使用 VoiceLab 云"
+      },
+      "mode": {
+        "localTitle": "本地模式",
+        "localDescription": "可以使用耳语语言和自动检测。",
+        "providerTitle": "提供者模式",
+        "providerDescription": "设置后连接您的提供商和 API 密钥。"
+      },
+      "language": {
+        "title": "语言和权限",
+        "description": "选择您通常听写的语言。",
+        "loadingCapabilities": "检查您的帐户可用的语言...",
+        "capabilitiesUnavailable": "无法检查云功能。您仍然可以选择语言。",
+        "unsupported": "所选模式不支持该语言。选择另一种语言继续。",
+        "microphoneRequired": "需要访问麦克风才能继续。"
+      },
+      "hotkey": {
+        "title": "快捷快速的测试",
+        "description": "设置快捷方式，说话，然后检查下面的结果。",
+        "placeholder": "您的结果将出现在这里..."
+      },
+      "ready": {
+        "title": "准备好",
+        "account": "您的 VoiceLab 帐户和 AI Credit 钱包已连接。",
+        "local": "选择本地转录。",
+        "provider": "打开高级设置以连接您的提供商。",
+        "start": "开始听写"
+      }
+    },
+    "dictionary": {
+      "actionFailed": "无法完成更改",
+      "tryAgain": "再试一次。本地保存的单词将保留在此设备上。",
+      "duplicateTitle": "已经在你的词汇里了",
+      "duplicateDescription": "这个词已经被保存了。",
+      "saved": "词汇更新",
+      "duplicatesSkipped": "{{count}} 重复已跳过",
+      "duplicatesSkipped_other": "{{count}} 重复项被跳过",
+      "status": {
+        "synced": "已同步",
+        "conflict": "需要审查",
+        "syncError": "保存到本地，同步失败",
+        "syncing": "正在同步",
+        "savedLocal": "已保存在此设备上"
+      }
+    },
+    "privacy": {
+      "notesSync": "笔记同步",
+      "notesSyncDescription": "在您登录的设备上同步笔记。",
+      "accountSync": "词汇和偏好",
+      "accountSyncDescription": "登录后帐户设置和词汇会自动同步。",
+      "alwaysOn": "在",
+      "transcriptBackup": "成绩单备份",
+      "transcriptBackupDescription": "此桌面版本未上传脚本文本。",
+      "audioBackup": "音频备份",
+      "audioBackupDescription": "录音保留在此设备上，不会上传。",
+      "notEnabled": "离开",
+      "notAvailable": "不可用",
+      "localAudio": "本地音频",
+      "localAudioDescription": "选择录音在此设备上保留的时间。"
+    },
+    "settings": {
+      "account": "账户及积分",
+      "accountDescription": "个人资料、会话和 AI Credit 钱包",
+      "dictation": "听写",
+      "dictationDescription": "语言、麦克风和粘贴行为",
+      "shortcuts": "快捷方式",
+      "shortcutsDescription": "听写和 VoiceLab 快捷键",
+      "privacy": "数据与隐私",
+      "privacyDescription": "云备份、本地音频和保留",
+      "advanced": "先进的",
+      "advancedDescription": "VoiceLab Cloud 和开发者工具",
+      "advancedSetup": "云转录",
+      "advancedSetupDescription": "VoiceLab Dictate 自动使用您的登录帐户。"
+    },
+    "session": {
+      "active": "已登录",
+      "device": "设备",
+      "thisDevice": "此 VoiceLab 听写桌面",
+      "status": "会议",
+      "protected": "主动且受保护",
+      "signedOut": "未登录",
+      "signedOutDescription": "登录以使用 VoiceLab Cloud 和您的 AI Credit 钱包。"
+    }
   }
 }

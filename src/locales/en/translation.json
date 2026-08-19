@@ -167,7 +167,7 @@
   "onboarding": {
     "steps": {
       "welcome": "Welcome",
-      "aishaKey": "Aisha key",
+      "voiceLabAccount": "VoiceLab account",
       "setup": "Setup",
       "permissions": "Permissions",
       "activation": "Dictation",
@@ -176,18 +176,18 @@
       "finish": "Finish",
       "voiceAgent": "Voice Agent"
     },
-    "aishaKey": {
-      "title": "Connect your Aisha API key",
-      "description": "VoiceLab Cloud uses Aisha for speech-to-text. Create a personal API key at space.aisha.group and paste it below.",
+    "voiceLabAccount": {
+      "title": "Sign in to VoiceLab",
+      "description": "Connect your VoiceLab account once. Cloud transcription starts automatically and uses your AI Credit wallet.",
       "getKeyHint": "Don’t have a key yet?",
-      "openSpace": "Open space.aisha.group",
-      "inputLabel": "Aisha API key",
+      "openSpace": "Open VoiceLab",
+      "inputLabel": "VoiceLab account",
       "placeholder": "Paste your API key",
       "helpText": "Stored only on this device. You can change it later in Settings → Account.",
       "validating": "Checking key…",
       "errors": {
-        "required": "Enter your Aisha API key to continue.",
-        "invalid": "That key was rejected. Create a new one at space.aisha.group.",
+        "required": "Sign in to your VoiceLab account to continue.",
+        "invalid": "VoiceLab could not authorize this session. Try signing in again.",
         "saveFailed": "Could not save the key. Try again."
       }
     },
@@ -220,7 +220,7 @@
     },
     "transcription": {
       "title": "Transcription Setup",
-      "description": "VoiceLab Cloud (Aisha) — choose your language",
+      "description": "VoiceLab Cloud — choose your language",
       "preferredLanguage": "Preferred Language"
     },
     "activation": {
@@ -400,7 +400,7 @@
       "failedCtaSettings": "Set up your transcription provider",
       "failedCtaAndRetry": "then click retry",
       "failedCtaSettingsOnly": "Set up your transcription provider in Settings",
-      "failedLimitReached": "Aisha balance insufficient — top up at space.aisha.group",
+      "failedLimitReached": "VoiceLab AI Credits are insufficient — open Billing to top up",
       "failedOffline": "You're offline",
       "rawTranscript": "Raw Transcript",
       "clearAll": "Clear all",
@@ -571,14 +571,14 @@
       "errorTitles": {
         "sessionExpired": "Session Expired",
         "offline": "You're Offline",
-        "dailyLimitReached": "Aisha Billing Issue",
-        "aishaBillingFailed": "Aisha Billing Issue",
-        "aishaBillingRetry": "Transcription Failed",
+        "dailyLimitReached": "VoiceLab Billing Issue",
+        "walletInsufficient": "VoiceLab Billing Issue",
+        "walletChargeFailed": "Transcription Failed",
         "providerRateLimited": "Provider Rate Limited"
       },
       "fallback": {
-        "title": "Fallback Mode",
-        "description": "Local Whisper failed. Used OpenAI API instead."
+        "title": "VoiceLab retry",
+        "description": "The original request failed and VoiceLab retried it safely."
       },
       "translationFallback": {
         "unreachableTitle": "Translation unavailable",
@@ -606,10 +606,10 @@
       "errorDescriptions": {
         "sessionExpired": "Your VoiceLab Cloud session is unavailable. Please sign in again from Settings.",
         "offline": "You're offline. Cloud transcription requires an internet connection.",
-        "dailyLimitReached": "Aisha billing failed or balance is insufficient. Try again, or top up at space.aisha.group.",
-        "aishaBillingFailed": "Aisha balance is insufficient. Top up at space.aisha.group, then try again.",
-        "aishaBillingRetry": "Aisha billing transaction failed. Please try again in a moment.",
-        "aishaKeyMissing": "Add your Aisha API key in Settings → Account (create one at space.aisha.group).",
+        "dailyLimitReached": "Your VoiceLab limit was reached or AI Credit balance is insufficient. Open Billing, then try again.",
+        "walletInsufficient": "Your VoiceLab AI Credit balance is insufficient. Open Billing to top up, then try again.",
+        "walletChargeFailed": "VoiceLab billing could not complete the charge. Please try again in a moment.",
+        "authRequired": "Sign in to your VoiceLab account to use VoiceLab Cloud.",
         "providerRateLimited": "Your transcription provider rate-limited the request. Wait a moment and try again."
       }
     },
@@ -740,6 +740,27 @@
   },
   "auth": {
     "cloudNotConfigured": "Cloud Not Configured",
+    "desktopTitle": "Sign in to VoiceLab Desktop",
+    "desktopBrowserHint": "Secure sign-in opens in your browser and returns here when complete.",
+    "desktopWaiting": "Complete sign-in in your browser. VoiceLab Desktop will continue automatically.",
+    "desktopSecurity": "Your password never enters the desktop app. The session token is protected by your operating system.",
+    "desktopOpenBrowser": "Continue in browser",
+    "desktopOpening": "Opening secure sign-in…",
+    "desktopReopen": "Open browser again",
+    "desktopCancel": "Cancel sign-in",
+    "desktopCancelled": "Sign-in was cancelled. You can try again.",
+    "desktopExpired": "This sign-in request expired. Start again to continue.",
+    "desktopFailed": "Sign-in could not be completed. Please try again.",
+    "desktopNetworkTimeout": "The authentication server took too long to respond. Check your connection and try again.",
+    "desktopInvalidResponse": "The authentication server returned an invalid response. Please try again shortly.",
+    "desktopCallbackInvalid": "The return link could not be verified. Start sign-in again.",
+    "desktopSecurityError": "The sign-in link failed VoiceLab’s security checks. Start sign-in again.",
+    "desktopReplayDetected": "This sign-in link has already been used. Start a new sign-in request.",
+    "desktopUnauthorized": "Your VoiceLab session is no longer valid. Sign in again.",
+    "desktopUnavailable": "Desktop authentication is unavailable in this app session. Restart VoiceLab Desktop.",
+    "desktopServerRejected": "The authentication server rejected the request. Try again or contact support with the error code below.",
+    "desktopReopenFailed": "The browser could not be reopened. Cancel and start sign-in again.",
+    "desktopProtocolUnavailable": "The secure return link is not registered. Restart or reinstall VoiceLab Desktop.",
     "common": {
       "back": "Back",
       "continue": "Continue",
@@ -1306,22 +1327,22 @@
       }
     },
     "account": {
-      "aishaKey": {
-        "sectionDescription": "VoiceLab Cloud uses your personal Aisha API key. No VoiceLab account sign-in is required.",
-        "label": "Aisha API key",
-        "description": "Create a key at space.aisha.group, then paste it here.",
-        "openSpace": "Open space.aisha.group",
+      "voiceLabAccount": {
+        "sectionDescription": "VoiceLab Cloud uses your signed-in account and shared AI Credit wallet.",
+        "label": "VoiceLab account",
+        "description": "Sign in once; no separate speech API key is required.",
+        "openSpace": "Open VoiceLab",
         "helpText": "Stored only on this device.",
         "placeholder": "Paste your API key",
         "validating": "Checking key…",
         "valid": "Key looks good.",
         "invalid": "That key was rejected.",
-        "billing": "Key accepted, but Aisha balance is low. Top up at space.aisha.group.",
-        "saved": "Aisha API key saved",
-        "cleared": "Aisha API key cleared.",
+        "billing": "Your VoiceLab AI Credit balance is low. Open Billing to top up.",
+        "saved": "VoiceLab account connected",
+        "cleared": "VoiceLab session ended.",
         "saveFailed": "Could not save the key.",
-        "missingTitle": "Aisha API key required",
-        "missingBody": "Add your personal Aisha API key to use VoiceLab Cloud dictation. Get one at space.aisha.group.",
+        "missingTitle": "VoiceLab sign-in required",
+        "missingBody": "Sign in to use VoiceLab Cloud dictation. No separate API key is required.",
         "missingCta": "Open Account settings"
       },
       "badges": {
@@ -1533,7 +1554,7 @@
         "local": "Local",
         "selfHosted": "Self-Hosted",
         "enterprise": "Enterprise",
-        "openwhisprDesc": "Aisha speech-to-text. Reliable accuracy — no provider setup.",
+        "openwhisprDesc": "VoiceLab speech-to-text, charged to your account's AI Credit wallet.",
         "providersDesc": "Bring your own API key.",
         "localDesc": "On-device models. Fully private.",
         "selfHostedDesc": "Your own server on your network.",
@@ -1902,7 +1923,7 @@
     "llms": {
       "title": "Language Models",
       "description": "Configure models for cleanup, note formatting, and chat",
-      "temporarilyDisabled": "LLM provider settings are temporarily disabled. Speech uses VoiceLab Cloud (Aisha) only.",
+      "temporarilyDisabled": "LLM provider settings are temporarily disabled. Speech uses VoiceLab Cloud only.",
       "tabs": {
         "dictationCleanup": "Dictation Cleanup",
         "dictationAgent": "Voice Agent",
@@ -1924,7 +1945,7 @@
         "providers": "Cloud Providers",
         "local": "Local",
         "selfHosted": "Self-Hosted",
-        "openwhisprDesc": "Aisha speech-to-text. Reliable accuracy — no provider setup.",
+        "openwhisprDesc": "VoiceLab speech-to-text, charged to your account's AI Credit wallet.",
         "providersDesc": "Bring your own API key.",
         "localDesc": "On-device models. Fully private.",
         "selfHostedDesc": "Your own server on your network."
@@ -1968,7 +1989,7 @@
       "transcriptionPreviewDescription": "Show transcription in a floating window before cleanup",
       "vad": {
         "title": "Voice Activity Detection",
-        "description": "Configure how Silero VAD detects and segments speech for local Whisper transcription",
+        "description": "Configure how Silero VAD detects and segments speech during audio capture",
         "toggles": {
           "dictation": {
             "title": "Silero VAD for Dictation",
@@ -2426,9 +2447,9 @@
       "transcriptionFailed": "Transcription failed",
       "errorOccurred": "An error occurred",
       "noSpeechDetected": "No speech detected in this audio.",
-      "noProviderTitle": "No transcription provider set up",
-      "noProviderDescription": "Add an API key or download a local model to start transcribing.",
-      "noProviderAction": "Open Transcription Settings",
+      "noProviderTitle": "Sign in required",
+      "noProviderDescription": "Sign in to transcribe with VoiceLab. Usage is charged from your AI Credits balance.",
+      "noProviderAction": "Sign In",
       "fileTooLarge": "This file exceeds the 500 MB limit.",
       "paidPlanRequired": "Cloud transcription for files over 25 MB requires a paid plan. Large files are processed with VoiceLab Cloud for reliable, high-quality results.",
       "largeFileNote": "Large files are split and transcribed in parallel.",
@@ -2802,7 +2823,7 @@
         "local": "Local",
         "selfHosted": "Self-Hosted",
         "enterprise": "Enterprise",
-        "openwhisprDesc": "Aisha speech-to-text. Reliable accuracy — no provider setup.",
+        "openwhisprDesc": "VoiceLab speech-to-text, charged to your account's AI Credit wallet.",
         "providersDesc": "Bring your own API key.",
         "localDesc": "On-device models. Fully private.",
         "selfHostedDesc": "Your own server on your network.",
@@ -3078,9 +3099,9 @@
     },
     "creditShortage": {
       "title": "More AI Credits needed",
-      "description": "There are not enough available credits for this recording. Add credits or continue locally.",
+      "description": "There are not enough available credits for this recording. Add credits or choose a plan.",
       "required": "Needed",
-      "useLocal": "Use local transcription for 0 credits"
+      "useLocal": "Manage VoiceLab billing"
     },
     "dictation": {
       "ready": "Ready"
@@ -3184,13 +3205,13 @@
       "dictation": "Dictation",
       "dictationDescription": "Language, microphone and paste behavior",
       "shortcuts": "Shortcuts",
-      "shortcutsDescription": "Dictation and Aisha shortcuts",
+      "shortcutsDescription": "Dictation and VoiceLab shortcuts",
       "privacy": "Data & Privacy",
       "privacyDescription": "Cloud backup, local audio and retention",
       "advanced": "Advanced",
-      "advancedDescription": "Local models, BYOK and developer tools",
-      "advancedSetup": "Advanced transcription",
-      "advancedSetupDescription": "VoiceLab Cloud is the default. Local models and BYOK stay on this device."
+      "advancedDescription": "VoiceLab Cloud and developer tools",
+      "advancedSetup": "Cloud transcription",
+      "advancedSetupDescription": "VoiceLab Dictate uses your signed-in account automatically."
     },
     "session": {
       "active": "Signed in",

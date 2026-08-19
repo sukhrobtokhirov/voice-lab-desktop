@@ -5,7 +5,7 @@ This repo is a fork of [OpenWhispr](https://github.com/OpenWhispr/openwhispr) be
 | Sprint | Goal | Status (as of this brief) |
 |--------|------|---------------------------|
 | **Sprint 1** | Brand, theme, package identity, URL/env retargeting, uz/en/ru-oriented locales | In progress / mostly surface-level |
-| **Sprint 2** | Real VoiceLab auth + cloud STT contract, OAuth desktop callback hosting, meeting ownership decisions | **In progress** — cloud STT uses Aisha API (`back.aisha.group` + `X-Api-Key`; docs: https://aisha.group/uz/api-documentation) |
+| **Sprint 2** | Real VoiceLab auth + cloud STT contract, OAuth desktop callback hosting, meeting ownership decisions | **Integrated** — cloud STT uses the authenticated VoiceLab Desktop API and shared AI Credit wallet |
 
 ---
 
@@ -39,8 +39,8 @@ Documented in `.env.example`:
 | Variable | Role | Default / notes |
 |----------|------|-----------------|
 | `VITE_AUTH_URL` | Better Auth client `baseURL` | Falls back to `https://voicelab.uz` in renderer (`src/lib/auth.ts`) |
-| `VITE_VOICELAB_API_URL` | Cloud API base (preferred) | Empty unless set |
-| `VITE_OPENWHISPR_API_URL` | Legacy alias for the same cloud base | Still accepted in `src/config/constants.ts` and main-process `getApiUrl()` |
+| `VOICELAB_DESKTOP_API_URL` | Desktop auth, wallet, and Dictate API origin | Channel-specific VoiceLab API origin |
+| `VITE_VOICELAB_API_URL` | Renderer-side VoiceLab API base | `https://api.voicelab.uz` in production |
 | Provider keys | OpenAI / Anthropic / Gemini / Groq / etc. | BYOK; unchanged from upstream |
 
 Support / docs links are being retargeted to `https://docs.voicelab.uz` and `info@voicelab.uz` (e.g. `src/components/ui/SupportDropdown.tsx`).
@@ -62,7 +62,7 @@ Sprint 1 intent for VoiceLab: prioritize **uz / en / ru** (matching web `voicela
 │ Electron main (main.js)                                     │
 │  - app lifecycle, protocol / auth bridge, tray, shortcuts   │
 │  - IPC (src/helpers/ipcHandlers.js)                         │
-│  - local Whisper / Parakeet servers, meetings, SQLite       │
+│  - VoiceLab Desktop API, meetings, SQLite                   │
 ├─────────────────────────────────────────────────────────────┤
 │ preload.js → window.electronAPI                             │
 ├─────────────────────────────────────────────────────────────┤
@@ -70,11 +70,10 @@ Sprint 1 intent for VoiceLab: prioritize **uz / en / ru** (matching web `voicela
 │  - dictation, settings, notes, meetings overlays            │
 │  - better-auth/react client (src/lib/auth.ts)               │
 └─────────────────────────────────────────────────────────────┘
-         │ local                    │ cloud (optional)
-         ▼                          ▼
-  whisper.cpp / sherpa-onnx    VITE_VOICELAB_API_URL
-  (Metal / CUDA / Vulkan)      → POST /api/transcribe, /api/health, …
-                               + BYOK OpenAI-compatible STT
+                                    │ VoiceLab account
+                                    ▼
+                              /api/v1/desktop/wallet/
+                              /api/v1/desktop/dictation/operations/
 ```
 
 ### Electron main vs renderer
@@ -83,25 +82,18 @@ Sprint 1 intent for VoiceLab: prioritize **uz / en / ru** (matching web `voicela
 - **Renderer:** `src/` Vite app (`npm run dev` → `dev:renderer` + `dev:main`). Talks to main only through `window.electronAPI`.
 - **Cloud proxy:** renderer uses `src/services/cloudApi.ts` → IPC `cloudApiRequest`; transcription path uses IPC `cloud-transcribe` in `ipcHandlers.js`.
 
-### Local Whisper
+### Speech transcription
 
-- whisper.cpp binaries / models via download scripts (`download:whisper-cpp`, GPU managers).
-- Runtime helpers: `src/helpers/whisper.js`, `whisperServer.js`, CUDA/Vulkan managers.
-- Alternative local ASR: NVIDIA Parakeet via sherpa-onnx (`parakeetWsServer.js`, etc.).
+- Transcription is cloud-only through the authenticated VoiceLab Desktop API.
+- No local speech model, whisper.cpp server, or transcription provider key is bundled or required.
 
 ### Cloud providers (BYOK)
 
 OpenAI-compatible and vendor endpoints from settings + env keys (OpenAI, Groq, Mistral/Voxtral, Tinfoil, Anthropic/Gemini for LLM cleanup/agent — not STT). Self-hosted mode expects OpenAI wire format: `POST {base}/audio/transcriptions` → `{"text":"..."}`. Non-compatible vendors use `examples/custom-asr-shim/`.
 
-### “OpenWhispr Cloud” API surface (still in code)
+### VoiceLab Desktop cloud surface
 
-When `VITE_VOICELAB_API_URL` / `VITE_OPENWHISPR_API_URL` is set and the user is authenticated, main process calls paths such as:
-
-- `POST {api}/api/transcribe` (multipart audio + client metadata)
-- `GET {api}/api/health`
-- usage / streaming tokens / Stripe / referrals / agent endpoints (same OpenWhispr cloud shape)
-
-Auth for those calls: Bearer from `tokenStore` (preferred), cookie fallback scoped to auth + API URLs.
+The main process authenticates with the OAuth-style desktop authorization-code + PKCE flow. Cloud dictation, retries, meeting chunks, and file uploads use the dedicated Desktop Dictate operation endpoints. Usage comes from the Desktop wallet endpoint; charges settle against the signed-in account's shared AI Credit wallet. No separate speech API key is required.
 
 ### Better Auth URLs (desktop assumptions)
 
@@ -150,18 +142,12 @@ Desktop cloud path today:
 
 ```text
 IPC cloud-transcribe
-  → POST {VITE_VOICELAB_API_URL|/VITE_OPENWHISPR_API_URL}/api/transcribe
-  → multipart: file + language/prompt/clientType/appVersion/…
-  → JSON with text + OpenWhispr usage fields (wordsUsed, plan, sttProvider, …)
+  → POST /api/v1/desktop/dictation/operations/
+  → Bearer desktop access token + multipart audio/language
+  → poll /api/v1/desktop/dictation/operations/{id}/ until complete
 ```
 
-VoiceLab production STT is documented at `https://docs.voicelab.uz/api/speech-to-text` and served from `https://api.voicelab.uz` (web uses `API_URL`, not this Electron multipart `/api/transcribe` shape).
-
-**Gap:** Map or shim VoiceLab STT to what `ipcHandlers.js` expects, **or** rewrite the cloud transcription IPC to VoiceLab’s API. Until a backend contract is agreed, keep:
-
-- Local Whisper / Parakeet for offline dictation  
-- BYOK / self-hosted OpenAI-compatible STT  
-- `examples/custom-asr-shim/` when the vendor is not OpenAI-shaped  
+VoiceLab production STT is served from `https://api.voicelab.uz`. Desktop authentication, operation state, wallet checks, and AI Credit charges follow the dedicated desktop API contract.
 
 Env naming: prefer `VITE_VOICELAB_API_URL`; keep reading `VITE_OPENWHISPR_API_URL` during transition (`src/config/constants.ts`).
 
@@ -200,7 +186,7 @@ Sprint 2 decision: keep meetings as a Desktop-differentiator (default), or later
 | Env / constants | `.env.example`, `src/config/constants.ts`, `src/vite.config.mjs` (injects `VITE_*`) |
 | Cloud IPC / STT | `src/helpers/ipcHandlers.js` (`cloud-transcribe`, `getApiUrl`, `getAuthUrl`), `src/services/cloudApi.ts`, `src/helpers/audioManager.js` |
 | Self-hosted / shim | `src/helpers/selfHostedTranscription.js`, `examples/custom-asr-shim/` |
-| Local Whisper | `src/helpers/whisper.js`, `whisperServer.js`, `scripts/download-whisper-cpp.js` |
+| Desktop STT | Authenticated VoiceLab Desktop Dictate operations; AI Credits are charged server-side |
 | Meetings | `src/helpers/meeting*.js`, `src/components/Meeting*.tsx`, `src/stores/meetingRecordingStore.ts` |
 | Locales | `src/i18n.ts`, `src/locales/**` |
 | Docs / support links | `src/components/ui/SupportDropdown.tsx`, `src/utils/externalLinks.ts` |
@@ -228,7 +214,7 @@ npm run dev
 - [ ] Logo + coral/blue theme visible in UI  
 - [ ] External docs/support links hit `docs.voicelab.uz` / `info@voicelab.uz`  
 - [ ] `uz` (or agreed default) selectable once locale agent lands  
-- [ ] Cloud sign-in **expected to fail** until Sprint 2 auth + callback exist — use local Whisper for dictation testing  
+- [ ] Browser sign-in returns to the desktop and enables Dictate automatically
 
 ---
 

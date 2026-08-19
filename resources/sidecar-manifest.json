@@ -217,12 +217,6 @@
       "platform": "darwin",
       "arch": "arm64",
       "sha256": "0a5f892366618bd642d15b8726b9a74b6f9ed2c55eace345df3238c3ff2fe3e8"
-    },
-    {
-      "path": "bin/whisper-server-darwin-arm64",
-      "platform": "darwin",
-      "arch": "arm64",
-      "sha256": "52d8e775436055cd4d93258e6b0f0bd5bb54418b4f6be218f0047a3f921eb3f7"
     }
   ]
 }

@@ -36,7 +36,6 @@ const CREDENTIAL_IDS = [
   "bedrockSessionToken",
   "azureApiKey",
   "vertexApiKey",
-  "aishaApiKey",
 ];
 
 const publicProviderConfigSchema = z

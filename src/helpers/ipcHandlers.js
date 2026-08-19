@@ -2,8 +2,6 @@ const { ipcMain, app, shell, BrowserWindow, systemPreferences, net } = require("
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
-const http = require("http");
-const https = require("https");
 const crypto = require("crypto");
 const debugLogger = require("./debugLogger");
 const { createSecureHandler } = require("./ipcSecurity");
@@ -12,12 +10,8 @@ const { registerProviderIpc } = require("./ipc/registerProviderIpc");
 const { registerAuthIpc } = require("./ipc/registerAuthIpc");
 const { registerSyncIpc } = require("./ipc/registerSyncIpc");
 const { registerUpdateIpc } = require("./ipc/registerUpdateIpc");
-const {
-  collectSyncBootstrapV2,
-  isRestartableBootstrapError,
-} = require("./syncBootstrapV2");
+const { collectSyncBootstrapV2, isRestartableBootstrapError } = require("./syncBootstrapV2");
 const { validateWorkspaceApiRequest } = require("./workspaceApiRequest");
-const { classifyAndLog } = require("./networkErrors");
 const GnomeShortcutManager = require("./gnomeShortcut");
 const HyprlandShortcutManager = require("./hyprlandShortcut");
 const AssemblyAiStreaming = require("./assemblyAiStreaming");
@@ -73,6 +67,25 @@ const ALLOWED_MEETING_PROVIDERS = new Set([
   "corti-realtime",
 ]);
 
+const DISABLED_LEGACY_SPEECH_CHANNELS = new Set([
+  "dictation-realtime-warmup",
+  "dictation-realtime-start",
+  "dictation-realtime-stop",
+  "start-dictation-preview",
+  "assemblyai-streaming-warmup",
+  "assemblyai-streaming-start",
+  "assemblyai-streaming-stop",
+  "assemblyai-streaming-status",
+  "deepgram-streaming-warmup",
+  "deepgram-streaming-start",
+  "deepgram-streaming-stop",
+  "deepgram-streaming-status",
+  "corti-streaming-warmup",
+  "corti-streaming-start",
+  "corti-streaming-stop",
+  "corti-streaming-status",
+]);
+
 // Meeting capture runs at 24 kHz (see meetingRecordingStore AudioContext); cloud
 // streaming providers must be told the true PCM rate or they misread the audio.
 const MEETING_STREAM_SAMPLE_RATE = 24000;
@@ -108,234 +121,23 @@ const AUDIO_MIME_TYPES = {
 const CLOUD_INLINE_LIMIT = 4 * 1024 * 1024;
 const CLOUD_CHUNK_CONCURRENCY = 5;
 const CLOUD_CHUNK_SEGMENT_SECONDS = 240;
-const CLOUD_CHUNK_MAX_ATTEMPTS = 3;
 
 const { mergeSpeakersWithText, formatSpeakerTranscript } = require("./speakerMerge");
 const { approveAudioPath, resolveAllowedAudioPath } = require("./audioPathPolicy");
 
-function buildMultipartBody(
-  fileBuffer,
-  fileName,
-  contentType,
-  fields = {},
-  { fileFieldName = "file" } = {}
-) {
-  const boundary = `----VoiceLab${Date.now()}`;
-  const parts = [];
-
-  parts.push(
-    `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="${fileFieldName}"; filename="${fileName}"\r\n` +
-      `Content-Type: ${contentType}\r\n\r\n`
-  );
-  parts.push(fileBuffer);
-  parts.push("\r\n");
-
-  for (const [name, value] of Object.entries(fields)) {
-    if (value != null) {
-      parts.push(
-        `--${boundary}\r\n` +
-          `Content-Disposition: form-data; name="${name}"\r\n\r\n` +
-          `${value}\r\n`
-      );
-    }
-  }
-
-  parts.push(`--${boundary}--\r\n`);
-
-  const bodyParts = parts.map((p) => (typeof p === "string" ? Buffer.from(p) : p));
-  return { body: Buffer.concat(bodyParts), boundary };
-}
-
-async function postMultipart(url, body, boundary, headers = {}) {
-  const response = await net.fetch(url.toString(), {
-    method: "POST",
-    headers: {
-      "Content-Type": `multipart/form-data; boundary=${boundary}`,
-      ...headers,
-    },
-    body,
-    useSessionCookies: false,
-  });
-  const text = await response.text();
-  try {
-    return { statusCode: response.status, data: JSON.parse(text) };
-  } catch {
-    // Vercel platform errors (413 payload cap, 504 timeout) return non-JSON bodies.
-    throw Object.assign(new Error(`Server error ${response.status}: ${text.slice(0, 120)}`), {
-      code: "SERVER_ERROR",
-      statusCode: response.status,
-    });
-  }
-}
-
-/** Node https multipart — Electron net.fetch has caused opaque 402s with Aisha STT. */
-function postMultipartNode(url, body, boundary, headers = {}) {
-  return new Promise((resolve, reject) => {
-    const u = typeof url === "string" ? new URL(url) : url;
-    const lib = u.protocol === "http:" ? http : https;
-    const req = lib.request(
-      {
-        protocol: u.protocol,
-        hostname: u.hostname,
-        port: u.port || undefined,
-        path: `${u.pathname}${u.search}`,
-        method: "POST",
-        headers: {
-          "Content-Type": `multipart/form-data; boundary=${boundary}`,
-          "Content-Length": body.length,
-          Accept: "application/json",
-          ...headers,
-        },
-      },
-      (res) => {
-        const chunks = [];
-        res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => {
-          const text = Buffer.concat(chunks).toString("utf8");
-          try {
-            resolve({ statusCode: res.statusCode, data: JSON.parse(text) });
-          } catch {
-            reject(
-              Object.assign(new Error(`Server error ${res.statusCode}: ${text.slice(0, 120)}`), {
-                code: "SERVER_ERROR",
-                statusCode: res.statusCode,
-              })
-            );
-          }
-        });
-      }
-    );
-    req.on("error", (error) => {
-      reject(
-        Object.assign(new Error(error.message || "Network error"), {
-          code: "NETWORK_ERROR",
-        })
-      );
-    });
-    req.write(body);
-    req.end();
-  });
-}
-
-function interpretTranscribeResponse(data) {
-  if (data && typeof data === "object" && data.statusCode == null) {
-    const result = data.result || {};
-    const text = result.transcript || result.text || data.transcript || data.text;
-    if (text != null) return { ...data, text };
-  }
-  // Aisha: 401/403 bad key, 402 balance, 503 unavailable (see llms-api.txt)
-  if (data.statusCode === 401 || data.statusCode === 403) {
-    throw Object.assign(
-      new Error(data.data?.detail || data.data?.error || "Invalid or missing API key"),
-      { code: "AUTH_EXPIRED" }
-    );
-  }
-  if (data.statusCode === 503) {
-    throw Object.assign(new Error(data.data?.detail || "Request timed out"), {
-      code: "SERVER_ERROR",
-    });
-  }
-  if (data.statusCode === 402 || data.statusCode === 429) {
-    const detail = data.data?.detail || data.data?.error || "";
-    const looksLikeTransientBilling =
-      /transaction failed/i.test(detail) || data.data?.error_key === "transaction_failed";
-    // 402 "Transaction failed" is often transient — not a daily quota.
-    // Persistent 402/429 is Aisha billing/balance, not VoiceLab daily limits.
-    throw Object.assign(
-      new Error(
-        looksLikeTransientBilling
-          ? detail || "Aisha billing transaction failed. Please try again."
-          : detail || "Aisha balance insufficient. Top up at https://space.aisha.group"
-      ),
-      {
-        code: looksLikeTransientBilling ? "SERVER_ERROR" : "LIMIT_REACHED",
-        statusCode: data.statusCode,
-        retryable: looksLikeTransientBilling,
-        messageKey: looksLikeTransientBilling
-          ? "hooks.audioRecording.errorDescriptions.aishaBillingRetry"
-          : "hooks.audioRecording.errorDescriptions.aishaBillingFailed",
-        ...data.data,
-      }
-    );
-  }
-  if (data.statusCode === 422 && data.data?.code === "NO_SPEECH_DETECTED") {
-    throw Object.assign(new Error(data.data.error || "No speech detected in audio"), {
-      code: "NO_SPEECH_DETECTED",
-    });
-  }
-  if (data.statusCode !== 200 && data.statusCode !== 201) {
-    throw Object.assign(
-      new Error(data.data?.detail || data.data?.error || `API error: ${data.statusCode}`),
-      { statusCode: data.statusCode }
-    );
-  }
-  const payload = data.data || {};
-  // Normalize Aisha `{ transcript }` to OpenWhispr-shaped `{ text }`
-  return {
-    ...payload,
-    text: payload.text || payload.transcript || "",
-    transcript: payload.transcript || payload.text || "",
-  };
-}
-
-function getAishaSttPath(audioBytes) {
-  // Short sync v1; longer audio uses async v2 (poll separately when needed)
-  const INLINE_V1_LIMIT = 8 * 1024 * 1024;
-  return audioBytes > INLINE_V1_LIMIT ? "/api/v2/stt/post/" : "/api/v1/stt/post/";
-}
-
-async function pollAishaSttV2(apiUrl, authHeader, id, { maxAttempts = 60, intervalMs = 2000 } = {}) {
-  const base = apiUrl.replace(/\/+$/, "");
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const res = await net.fetch(`${base}/api/v2/stt/get/${id}/`, {
-      method: "GET",
-      headers: { ...authHeader },
-      useSessionCookies: false,
-      signal: AbortSignal.timeout(15000),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw Object.assign(new Error(data.detail || data.error || `STT poll failed: ${res.status}`), {
-        statusCode: res.status,
-        code: res.status === 401 || res.status === 403 ? "AUTH_EXPIRED" : "SERVER_ERROR",
-      });
-    }
-    if (data.status === "SUCCESS") {
-      return interpretTranscribeResponse({ statusCode: 200, data });
-    }
-    if (data.status === "FAILED") {
-      throw Object.assign(new Error(data.detail || "Transcription failed"), {
-        code: "SERVER_ERROR",
-      });
-    }
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-  throw Object.assign(new Error("Transcription timed out"), { code: "SERVER_ERROR" });
-}
-
-const NON_RETRYABLE_CHUNK_CODES = new Set(["AUTH_EXPIRED", "LIMIT_REACHED", "NO_SPEECH_DETECTED"]);
-
-function isTransientChunkError(err) {
-  if (NON_RETRYABLE_CHUNK_CODES.has(err.code)) return false;
-  return !err.statusCode || err.statusCode >= 500;
-}
-
 async function chunkedCloudTranscribe({
   buffer = null,
   filePath = null,
-  apiUrl,
-  authHeader,
-  multipartFields = {},
   onProgress,
   concurrencyLimit = CLOUD_CHUNK_CONCURRENCY,
   segmentDuration = CLOUD_CHUNK_SEGMENT_SECONDS,
   inputExt = "webm",
-  postFn = postMultipart,
-  requestChunk = null,
+  requestChunk,
 }) {
+  if (typeof requestChunk !== "function") {
+    throw new TypeError("VoiceLab chunk request handler is required");
+  }
   const { splitAudioFile } = require("./ffmpegUtils");
-  const post = typeof postFn === "function" ? postFn : postMultipart;
 
   const jobId = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
   const chunkDir = path.join(os.tmpdir(), `ow-chunks-${jobId}`);
@@ -365,31 +167,9 @@ async function chunkedCloudTranscribe({
 
     const transcribeChunk = async (index) => {
       const chunkBuffer = fs.readFileSync(chunkPaths[index]);
-      const chunkName = path.basename(chunkPaths[index]);
-      const { body, boundary } = buildMultipartBody(
-        chunkBuffer,
-        chunkName,
-        "audio/mpeg",
-        multipartFields,
-        { fileFieldName: "audio" }
-      );
-      const url = new URL(`${apiUrl.replace(/\/+$/, "")}/api/v1/stt/post/`);
-
-      for (let attempt = 1; ; attempt++) {
-        try {
-          const data = requestChunk
-            ? await requestChunk(chunkBuffer, index, totalChunks)
-            : await post(url, body, boundary, authHeader);
-          results[index] = interpretTranscribeResponse(data);
-          break;
-        } catch (err) {
-          if (requestChunk || attempt >= CLOUD_CHUNK_MAX_ATTEMPTS || !isTransientChunkError(err)) throw err;
-          debugLogger.warn(`Chunk ${index} attempt ${attempt} failed, retrying`, {
-            error: err.message,
-          });
-          await new Promise((resolve) => setTimeout(resolve, 1000 * attempt + Math.random() * 500));
-        }
-      }
+      const data = await requestChunk(chunkBuffer, index, totalChunks);
+      const result = data?.operation?.result || data?.result || data?.operation || data || {};
+      results[index] = { ...data, text: result.transcript || result.text || "" };
 
       completedCount++;
       onProgress?.({
@@ -462,8 +242,6 @@ class IPCHandlers {
     this.environmentManager = managers.environmentManager;
     this.databaseManager = managers.databaseManager;
     this.clipboardManager = managers.clipboardManager;
-    this.whisperManager = managers.whisperManager;
-    this.parakeetManager = managers.parakeetManager;
     this.diarizationManager = managers.diarizationManager;
     this.windowManager = managers.windowManager;
     this.updateManager = managers.updateManager;
@@ -471,8 +249,6 @@ class IPCHandlers {
     this.linuxKeyManager = managers.linuxKeyManager;
     this.textEditMonitor = managers.textEditMonitor;
     this.getTrayManager = managers.getTrayManager;
-    this.whisperCudaManager = managers.whisperCudaManager;
-    this.whisperVulkanManager = managers.whisperVulkanManager;
     this.googleCalendarManager = managers.googleCalendarManager;
     this.meetingDetectionEngine = managers.meetingDetectionEngine;
     this.audioTapManager = managers.audioTapManager;
@@ -481,7 +257,18 @@ class IPCHandlers {
     this.meetingAecManager = managers.meetingAecManager;
     this.desktopAuthManager = managers.desktopAuthManager;
     this.voiceLabApiClient = managers.voiceLabApiClient;
-    this._handle = createSecureHandler(ipcMain, this.windowManager);
+    const secureHandle = createSecureHandler(ipcMain, this.windowManager);
+    this._handle = (channel, handler) =>
+      secureHandle(
+        channel,
+        DISABLED_LEGACY_SPEECH_CHANNELS.has(channel)
+          ? async () => ({
+              success: false,
+              code: "CLOUD_ONLY",
+              error: "VoiceLab Desktop speech transcription uses the authenticated cloud API.",
+            })
+          : handler
+      );
     this.providerService = new ProviderService(this.environmentManager);
     this._authGeneration = 0;
     this.desktopAuthManager?.on?.("status", (status) => {
@@ -493,14 +280,21 @@ class IPCHandlers {
       if (status?.status !== "authenticated") {
         return;
       }
-      this._bootstrapDesktopSync(generation)
-        .then((state) => this._resumePendingDesktopDictations(generation, state.accountId))
-        .catch((error) => {
-          debugLogger.warn("Desktop sync activation failed", {
+      const accountId = this.desktopAuthManager?.getSessionMetadata?.().accountId;
+      if (accountId) {
+        this._resumePendingDesktopDictations(generation, accountId).catch((error) => {
+          debugLogger.warn("Pending VoiceLab dictation resume failed", {
             error: error?.message,
             code: error?.code,
           });
         });
+      }
+      this._bootstrapDesktopSync(generation).catch((error) => {
+        debugLogger.warn("Desktop sync activation failed", {
+          error: error?.message,
+          code: error?.code,
+        });
+      });
     });
     this.oauthProtocolRegistered = managers.oauthProtocolRegistered === true;
     this.oauthProtocol = managers.oauthProtocol || "openwhispr";
@@ -536,15 +330,6 @@ class IPCHandlers {
     this._setupAudioCleanup();
     this._logDetectedGpus();
     this.setupHandlers();
-
-    if (this.whisperManager?.serverManager) {
-      this.whisperManager.serverManager.on("cuda-fallback", () => {
-        this.broadcastToWindows("cuda-fallback-notification", {});
-      });
-      this.whisperManager.serverManager.on("gpu-fallback", () => {
-        this.broadcastToWindows("gpu-fallback-notification", {});
-      });
-    }
   }
 
   _getWhisperVadSettings() {
@@ -945,14 +730,21 @@ class IPCHandlers {
     );
   }
 
+  _desktopAuthContextMatches(expectedGeneration, expectedAccountId) {
+    return (
+      expectedGeneration === this._authGeneration &&
+      this.desktopAuthManager?.getSessionMetadata?.().accountId === expectedAccountId
+    );
+  }
+
   async _bootstrapDesktopSync(expectedGeneration = this._authGeneration) {
     if (!this.voiceLabApiClient) throw new Error("VoiceLab sync client unavailable");
     const sessionAccountId = this.desktopAuthManager?.getSessionMetadata?.().accountId;
     if (!sessionAccountId) throw new Error("VoiceLab account unavailable");
     const assertContext = () => {
       if (
-        expectedGeneration !== this._authGeneration
-        || this.desktopAuthManager?.getSessionMetadata?.().accountId !== sessionAccountId
+        expectedGeneration !== this._authGeneration ||
+        this.desktopAuthManager?.getSessionMetadata?.().accountId !== sessionAccountId
       ) {
         const error = new Error("VoiceLab account changed during sync activation");
         error.code = "AUTH_ACCOUNT_CHANGED";
@@ -964,15 +756,13 @@ class IPCHandlers {
       { assertContext }
     );
     assertContext();
-    return this.databaseManager
-      .getDesktopSyncStore()
-      .bindAccount(bootstrap);
+    return this.databaseManager.getDesktopSyncStore().bindAccount(bootstrap);
   }
 
   async _resumePendingDesktopDictations(expectedGeneration, expectedAccountId) {
-    if (!this._desktopSyncContextMatches(expectedGeneration, expectedAccountId)) return;
+    if (!this._desktopAuthContextMatches(expectedGeneration, expectedAccountId)) return;
     const completed = await this.voiceLabApiClient.resumePendingDictations();
-    if (!this._desktopSyncContextMatches(expectedGeneration, expectedAccountId)) return;
+    if (!this._desktopAuthContextMatches(expectedGeneration, expectedAccountId)) return;
     for (const result of completed) {
       this.broadcastToWindows("dictation-operation-resumed", result);
     }
@@ -1022,10 +812,7 @@ class IPCHandlers {
               200
             );
           } catch (error) {
-            if (
-              error?.code === "SYNC_CURSOR_EXPIRED"
-              && Number(error?.status) === 410
-            ) {
+            if (error?.code === "SYNC_CURSOR_EXPIRED" && Number(error?.status) === 410) {
               await this._bootstrapDesktopSync(generation);
               response = await this.voiceLabApiClient.getSyncChanges(
                 store.getCursor(expectedAccountId),
@@ -1139,7 +926,6 @@ class IPCHandlers {
     this._handle("resize-main-window", (event, sizeKey) => {
       return this.windowManager.resizeMainWindow(sizeKey);
     });
-
 
     this._handle("db-save-transcription", async (event, text, rawText, options) => {
       const result = this.databaseManager.saveTranscription(text, rawText, options);
@@ -1334,9 +1120,7 @@ class IPCHandlers {
     });
 
     this._handle("desktop-dictionary-legacy-decision", async (_event, decision) => {
-      const state = this.databaseManager
-        .getDesktopSyncStore()
-        .decideLegacyAttachment(decision);
+      const state = this.databaseManager.getDesktopSyncStore().decideLegacyAttachment(decision);
       this.broadcastToWindows("dictionary-updated", state);
       return state;
     });
@@ -1618,26 +1402,18 @@ class IPCHandlers {
       return this.databaseManager.updateAgentConversationTitle(id, title);
     });
 
-    this._handle(
-      "db-add-agent-message",
-      async (event, conversationId, role, content, metadata) => {
-        const result = this.databaseManager.addAgentMessage(
-          conversationId,
-          role,
-          content,
-          metadata
-        );
-        if (this.vectorIndex?.isReady?.()) {
-          const conv = this.databaseManager.getAgentConversation(conversationId);
-          if (conv && conv.messages?.length % 3 === 0) {
-            this.vectorIndex
-              .upsertConversationChunks(conversationId, conv.title, conv.messages)
-              .catch(() => {});
-          }
+    this._handle("db-add-agent-message", async (event, conversationId, role, content, metadata) => {
+      const result = this.databaseManager.addAgentMessage(conversationId, role, content, metadata);
+      if (this.vectorIndex?.isReady?.()) {
+        const conv = this.databaseManager.getAgentConversation(conversationId);
+        if (conv && conv.messages?.length % 3 === 0) {
+          this.vectorIndex
+            .upsertConversationChunks(conversationId, conv.title, conv.messages)
+            .catch(() => {});
         }
-        return result;
       }
-    );
+      return result;
+    });
 
     this._handle("db-get-agent-messages", async (event, conversationId) => {
       return this.databaseManager.getAgentMessages(conversationId);
@@ -1925,31 +1701,6 @@ class IPCHandlers {
       }
     });
 
-    this._handle("transcribe-audio-file", async (event, filePath, options = {}) => {
-      const fs = require("fs");
-      try {
-        if (typeof filePath !== "string") {
-          return { success: false, error: "Invalid file path" };
-        }
-        const real = resolveAllowedAudioPath(filePath);
-        if (!real) return { success: false, error: "File path not allowed" };
-        const audioBuffer = fs.readFileSync(real);
-        if (options.provider === "nvidia") {
-          const result = await this.parakeetManager.transcribeLocalParakeet(audioBuffer, options);
-          return result;
-        }
-        const vadOptions = this._resolveWhisperVadOptions("noteRecording");
-        const result = await this.whisperManager.transcribeLocalWhisper(audioBuffer, {
-          ...options,
-          ...vadOptions,
-        });
-        return result;
-      } catch (error) {
-        debugLogger.error("Audio file transcription error", { error: error.message });
-        return { success: false, error: error.message };
-      }
-    });
-
     this._handle("paste-text", async (event, text, options) => {
       const mainWindow = this.windowManager?.mainWindow;
 
@@ -2035,163 +1786,6 @@ class IPCHandlers {
       return this.clipboardManager.checkPasteTools();
     });
 
-    this._handle("transcribe-local-whisper", async (event, audioBlob, options = {}) => {
-      debugLogger.log("transcribe-local-whisper called", {
-        audioBlobType: typeof audioBlob,
-        audioBlobSize: audioBlob?.byteLength || audioBlob?.length || 0,
-        options,
-      });
-
-      try {
-        const vadOptions = this._resolveWhisperVadOptions("dictation");
-        const result = await this.whisperManager.transcribeLocalWhisper(audioBlob, {
-          ...options,
-          ...vadOptions,
-        });
-
-        debugLogger.log("Whisper result", {
-          success: result.success,
-          hasText: !!result.text,
-          message: result.message,
-          error: result.error,
-        });
-
-        // Check if no audio was detected and send appropriate event
-        if (!result.success && result.message === "No audio detected") {
-          debugLogger.log("Sending no-audio-detected event to renderer");
-          event.sender.send("no-audio-detected");
-        }
-
-        return result;
-      } catch (error) {
-        debugLogger.error("Local Whisper transcription error", error);
-        const errorMessage = error.message || "Unknown error";
-
-        // Return specific error types for better user feedback
-        if (errorMessage.includes("FFmpeg not found")) {
-          return {
-            success: false,
-            error: "ffmpeg_not_found",
-            message: "FFmpeg is missing. Please reinstall the app or install FFmpeg manually.",
-          };
-        }
-        if (
-          errorMessage.includes("FFmpeg conversion failed") ||
-          errorMessage.includes("FFmpeg process error")
-        ) {
-          return {
-            success: false,
-            error: "ffmpeg_error",
-            message: "Audio conversion failed. The recording may be corrupted.",
-          };
-        }
-        if (
-          errorMessage.includes("whisper.cpp not found") ||
-          errorMessage.includes("whisper-cpp")
-        ) {
-          return {
-            success: false,
-            error: "whisper_not_found",
-            message: "Whisper binary is missing. Please reinstall the app.",
-          };
-        }
-        if (
-          errorMessage.includes("Audio buffer is empty") ||
-          errorMessage.includes("Audio data too small")
-        ) {
-          return {
-            success: false,
-            error: "no_audio_data",
-            message: "No audio detected",
-          };
-        }
-        if (errorMessage.includes("model") && errorMessage.includes("not downloaded")) {
-          return {
-            success: false,
-            error: "model_not_found",
-            message: errorMessage,
-          };
-        }
-
-        throw error;
-      }
-    });
-
-    this._handle("check-whisper-installation", async (event) => {
-      return this.whisperManager.checkWhisperInstallation();
-    });
-
-    this._handle("get-audio-diagnostics", async () => {
-      return this.whisperManager.getDiagnostics();
-    });
-
-    this._handle("download-whisper-model", async (event, modelName) => {
-      try {
-        const result = await this.whisperManager.downloadWhisperModel(modelName, (progressData) => {
-          if (!event.sender.isDestroyed()) {
-            event.sender.send("whisper-download-progress", progressData);
-          }
-        });
-        return result;
-      } catch (error) {
-        if (
-          error.code !== "DOWNLOAD_IN_PROGRESS" &&
-          error.code !== "DOWNLOAD_CANCELLED" &&
-          !event.sender.isDestroyed()
-        ) {
-          event.sender.send("whisper-download-progress", {
-            type: "error",
-            model: modelName,
-            error: error.message,
-            code: error.code || "DOWNLOAD_FAILED",
-          });
-        }
-        return {
-          success: false,
-          error: error.message,
-          code: error.code || "DOWNLOAD_FAILED",
-        };
-      }
-    });
-
-    this._handle("check-model-status", async (event, modelName) => {
-      return this.whisperManager.checkModelStatus(modelName);
-    });
-
-    this._handle("list-whisper-models", async (event) => {
-      return this.whisperManager.listWhisperModels();
-    });
-
-    this._handle("delete-whisper-model", async (event, modelName) => {
-      return this.whisperManager.deleteWhisperModel(modelName);
-    });
-
-    this._handle("delete-all-whisper-models", async () => {
-      return this.whisperManager.deleteAllWhisperModels();
-    });
-
-    this._handle("cancel-whisper-download", async (event) => {
-      return this.whisperManager.cancelDownload();
-    });
-
-    this._handle("whisper-server-start", async (event, modelName) => {
-      const useCuda =
-        process.env.WHISPER_CUDA_ENABLED === "true" && this.whisperCudaManager?.isDownloaded();
-      const useVulkan =
-        !useCuda &&
-        process.env.WHISPER_VULKAN_ENABLED === "true" &&
-        this.whisperVulkanManager?.isDownloaded();
-      return this.whisperManager.startServer(modelName, { useCuda, useVulkan });
-    });
-
-    this._handle("whisper-server-stop", async () => {
-      return this.whisperManager.stopServer();
-    });
-
-    this._handle("whisper-server-status", async () => {
-      return this.whisperManager.getServerStatus();
-    });
-
     this._handle("detect-gpu", async () => {
       const { detectNvidiaGpu } = require("../utils/gpuDetection");
       return detectNvidiaGpu();
@@ -2203,14 +1797,14 @@ class IPCHandlers {
     });
 
     this._handle("set-gpu-device-index", async (_event, purpose, uuid) => {
-      if (purpose !== "transcription" && purpose !== "intelligence") {
+      if (purpose !== "intelligence") {
         return { success: false };
       }
       // Empty string clears the pinned GPU; otherwise require an nvidia-smi UUID. See #531.
       if (typeof uuid !== "string" || (uuid !== "" && !uuid.startsWith("GPU-"))) {
         return { success: false };
       }
-      const key = purpose === "intelligence" ? "INTELLIGENCE_GPU_UUID" : "TRANSCRIPTION_GPU_UUID";
+      const key = "INTELLIGENCE_GPU_UUID";
       const oldUuid = process.env[key] || "";
       process.env[key] = uuid;
       this.environmentManager.saveAllKeysToEnvFile().catch((err) => {
@@ -2219,20 +1813,6 @@ class IPCHandlers {
 
       if (oldUuid !== uuid) {
         try {
-          if (purpose === "transcription" && this.whisperManager?.serverManager?.process) {
-            debugLogger.info(
-              "Restarting whisper-server for GPU change",
-              { from: oldUuid, to: uuid },
-              "gpu"
-            );
-            const modelName = this.whisperManager.currentServerModel;
-            await this.whisperManager.stopServer();
-            if (modelName) {
-              await this.whisperManager.startServer(modelName, {
-                useCuda: !!process.env.WHISPER_CUDA_ENABLED,
-              });
-            }
-          }
           if (purpose === "intelligence") {
             const modelManager = require("./modelManagerBridge").default;
             if (modelManager.serverManager?.process) {
@@ -2261,255 +1841,10 @@ class IPCHandlers {
     });
 
     this._handle("get-gpu-device-index", async (_event, purpose) => {
-      if (purpose !== "transcription" && purpose !== "intelligence") {
+      if (purpose !== "intelligence") {
         return "";
       }
-      const key = purpose === "intelligence" ? "INTELLIGENCE_GPU_UUID" : "TRANSCRIPTION_GPU_UUID";
-      return process.env[key] || "";
-    });
-
-    this._handle("get-cuda-whisper-status", async () => {
-      const { detectNvidiaGpu } = require("../utils/gpuDetection");
-      const gpuInfo = await detectNvidiaGpu();
-      if (!this.whisperCudaManager) {
-        return { downloaded: false, downloading: false, path: null, gpuInfo };
-      }
-      return {
-        downloaded: this.whisperCudaManager.isDownloaded(),
-        downloading: this.whisperCudaManager.isDownloading(),
-        path: this.whisperCudaManager.getCudaBinaryPath(),
-        gpuInfo,
-      };
-    });
-
-    this._handle("download-cuda-whisper-binary", async (event) => {
-      if (!this.whisperCudaManager) {
-        return { success: false, error: "CUDA not supported on this platform" };
-      }
-      try {
-        await this.whisperCudaManager.download((downloaded, total) => {
-          if (!event.sender.isDestroyed()) {
-            event.sender.send("cuda-download-progress", {
-              downloadedBytes: downloaded,
-              totalBytes: total,
-              percentage: total > 0 ? Math.round((downloaded / total) * 100) : 0,
-            });
-          }
-        });
-        this._syncStartupEnv({ WHISPER_CUDA_ENABLED: "true" });
-        // Restart whisper-server so it picks up the CUDA binary
-        await this.whisperManager.stopServer().catch(() => {});
-        return { success: true };
-      } catch (error) {
-        debugLogger.error("CUDA binary download failed", {
-          error: error.message,
-          stack: error.stack,
-        });
-        return { success: false, error: error.message };
-      }
-    });
-
-    this._handle("cancel-cuda-whisper-download", async () => {
-      if (!this.whisperCudaManager) return { success: false };
-      return this.whisperCudaManager.cancelDownload();
-    });
-
-    this._handle("delete-cuda-whisper-binary", async () => {
-      if (!this.whisperCudaManager) return { success: false };
-      // Stop the server first so the running binary can be deleted on Windows
-      await this.whisperManager.stopServer().catch(() => {});
-      const result = await this.whisperCudaManager.delete();
-      if (result.success) {
-        this._syncStartupEnv({}, ["WHISPER_CUDA_ENABLED"]);
-      }
-      return result;
-    });
-
-    this._handle("get-vulkan-whisper-status", async () => {
-      const { detectVulkanGpu } = require("../utils/vulkanDetection");
-      const { detectNvidiaGpu } = require("../utils/gpuDetection");
-      const [vulkan, gpuInfo] = await Promise.all([detectVulkanGpu(), detectNvidiaGpu()]);
-      return {
-        downloaded: this.whisperVulkanManager?.isDownloaded() ?? false,
-        downloading: this.whisperVulkanManager?.isDownloading() ?? false,
-        vulkan,
-        hasNvidiaGpu: gpuInfo.hasNvidiaGpu,
-      };
-    });
-
-    this._handle("download-vulkan-whisper-binary", async (event) => {
-      if (!this.whisperVulkanManager) {
-        return { success: false, error: "Vulkan not supported on this platform" };
-      }
-      try {
-        // Stop the server first: overwriting a running binary EBUSYs on Windows
-        await this.whisperManager.stopServer().catch(() => {});
-        await this.whisperVulkanManager.download((downloaded, total) => {
-          if (!event.sender.isDestroyed()) {
-            event.sender.send("vulkan-whisper-download-progress", {
-              downloadedBytes: downloaded,
-              totalBytes: total,
-              percentage: total > 0 ? Math.round((downloaded / total) * 100) : 0,
-            });
-          }
-        });
-        this._syncStartupEnv({ WHISPER_VULKAN_ENABLED: "true" });
-        return { success: true };
-      } catch (error) {
-        debugLogger.error("Vulkan whisper binary download failed", {
-          error: error.message,
-          stack: error.stack,
-        });
-        return { success: false, error: error.message };
-      }
-    });
-
-    this._handle("cancel-vulkan-whisper-download", async () => {
-      if (!this.whisperVulkanManager) return { success: false };
-      return { success: this.whisperVulkanManager.cancelDownload() };
-    });
-
-    this._handle("delete-vulkan-whisper-binary", async () => {
-      if (!this.whisperVulkanManager) return { success: false };
-      // Stop the server first so the running binary can be deleted on Windows
-      await this.whisperManager.stopServer().catch(() => {});
-      const { deletedCount } = await this.whisperVulkanManager.delete();
-      this._syncStartupEnv({}, ["WHISPER_VULKAN_ENABLED"]);
-      return { success: true, deletedCount };
-    });
-
-    this._handle("check-ffmpeg-availability", async (event) => {
-      return this.whisperManager.checkFFmpegAvailability();
-    });
-
-    this._handle("transcribe-local-parakeet", async (event, audioBlob, options = {}) => {
-      debugLogger.log("transcribe-local-parakeet called", {
-        audioBlobType: typeof audioBlob,
-        audioBlobSize: audioBlob?.byteLength || audioBlob?.length || 0,
-        options,
-      });
-
-      try {
-        const result = await this.parakeetManager.transcribeLocalParakeet(audioBlob, options);
-
-        debugLogger.log("Parakeet result", {
-          success: result.success,
-          hasText: !!result.text,
-          message: result.message,
-          error: result.error,
-        });
-
-        if (!result.success && result.message === "No audio detected") {
-          debugLogger.log("Sending no-audio-detected event to renderer");
-          event.sender.send("no-audio-detected");
-        }
-
-        return result;
-      } catch (error) {
-        debugLogger.error("Local Parakeet transcription error", error);
-        const errorMessage = error.message || "Unknown error";
-
-        if (errorMessage.includes("sherpa-onnx") && errorMessage.includes("not found")) {
-          return {
-            success: false,
-            error: "parakeet_not_found",
-            message: "Parakeet binary is missing. Please reinstall the app.",
-          };
-        }
-        if (errorMessage.includes("model") && errorMessage.includes("not downloaded")) {
-          return {
-            success: false,
-            error: "model_not_found",
-            message: errorMessage,
-          };
-        }
-
-        throw error;
-      }
-    });
-
-    this._handle("check-parakeet-installation", async () => {
-      return this.parakeetManager.checkInstallation();
-    });
-
-    this._handle("download-parakeet-model", async (event, modelName) => {
-      try {
-        const result = await this.parakeetManager.downloadParakeetModel(
-          modelName,
-          (progressData) => {
-            if (!event.sender.isDestroyed()) {
-              event.sender.send("parakeet-download-progress", progressData);
-            }
-          }
-        );
-        return result;
-      } catch (error) {
-        if (
-          error.code !== "DOWNLOAD_IN_PROGRESS" &&
-          error.code !== "DOWNLOAD_CANCELLED" &&
-          !event.sender.isDestroyed()
-        ) {
-          event.sender.send("parakeet-download-progress", {
-            type: "error",
-            model: modelName,
-            error: error.message,
-            code: error.code || "DOWNLOAD_FAILED",
-          });
-        }
-        return {
-          success: false,
-          error: error.message,
-          code: error.code || "DOWNLOAD_FAILED",
-        };
-      }
-    });
-
-    this._handle("check-parakeet-model-status", async (_event, modelName) => {
-      return this.parakeetManager.checkModelStatus(modelName);
-    });
-
-    this._handle("list-parakeet-models", async () => {
-      return this.parakeetManager.listParakeetModels();
-    });
-
-    this._handle("delete-parakeet-model", async (_event, modelName) => {
-      return this.parakeetManager.deleteParakeetModel(modelName);
-    });
-
-    this._handle("delete-all-parakeet-models", async () => {
-      return this.parakeetManager.deleteAllParakeetModels();
-    });
-
-    this._handle("cancel-parakeet-download", async () => {
-      return this.parakeetManager.cancelDownload();
-    });
-
-    this._handle("get-parakeet-diagnostics", async () => {
-      return this.parakeetManager.getDiagnostics();
-    });
-
-    this._handle("parakeet-server-start", async (event, modelName) => {
-      const result = await this.parakeetManager.startServer(modelName);
-      // Persisting a provider that failed to start would wedge every launch
-      // into a failing pre-warm.
-      if (result.success) {
-        process.env.LOCAL_TRANSCRIPTION_PROVIDER = "nvidia";
-        process.env.PARAKEET_MODEL = modelName;
-        await this.environmentManager.saveAllKeysToEnvFile();
-      }
-      return result;
-    });
-
-    this._handle("parakeet-server-stop", async () => {
-      const result = await this.parakeetManager.stopServer();
-      delete process.env.LOCAL_TRANSCRIPTION_PROVIDER;
-      delete process.env.PARAKEET_MODEL;
-      await this.environmentManager.saveAllKeysToEnvFile();
-      return result;
-    });
-
-    this._handle("parakeet-server-status", async () => {
-      return this.parakeetManager.getServerStatus();
+      return process.env.INTELLIGENCE_GPU_UUID || "";
     });
 
     // Diarization model management
@@ -2635,17 +1970,7 @@ class IPCHandlers {
       const errors = [];
       const mainWindow = this.windowManager.mainWindow;
 
-      // Stop services before deleting files they hold open
-      try {
-        await this.parakeetManager?.stopServer();
-      } catch (e) {
-        errors.push(`Parakeet stop: ${e.message}`);
-      }
-      try {
-        this.whisperManager?.stopServer();
-      } catch (e) {
-        errors.push(`Whisper stop: ${e.message}`);
-      }
+      // Stop services before deleting files they hold open.
       try {
         this.googleCalendarManager?.stop();
       } catch (e) {
@@ -2679,11 +2004,6 @@ class IPCHandlers {
         if (fs.existsSync(whisperDir)) fs.rmSync(whisperDir, { recursive: true, force: true });
       } catch (e) {
         errors.push(`Whisper models: ${e.message}`);
-      }
-      try {
-        await this.parakeetManager?.deleteAllParakeetModels();
-      } catch (e) {
-        errors.push(`Parakeet models: ${e.message}`);
       }
       try {
         const modelManager = require("./modelManagerBridge").default;
@@ -3159,43 +2479,7 @@ class IPCHandlers {
       const setVars = {};
       const clearVars = [];
 
-      if (prefs.useLocalWhisper && prefs.model) {
-        // Local mode with model selected - set provider and model for pre-warming
-        setVars.LOCAL_TRANSCRIPTION_PROVIDER = prefs.localTranscriptionProvider;
-        if (prefs.localTranscriptionProvider === "nvidia") {
-          setVars.PARAKEET_MODEL = prefs.model;
-          clearVars.push("LOCAL_WHISPER_MODEL");
-          this.whisperManager.stopServer().catch((err) => {
-            debugLogger.error("Failed to stop whisper-server on provider switch", {
-              error: err.message,
-            });
-          });
-        } else {
-          setVars.LOCAL_WHISPER_MODEL = prefs.model;
-          clearVars.push("PARAKEET_MODEL");
-          this.parakeetManager.stopServer().catch((err) => {
-            debugLogger.error("Failed to stop parakeet-server on provider switch", {
-              error: err.message,
-            });
-          });
-        }
-      } else if (prefs.useLocalWhisper) {
-        // Local mode enabled but no model selected - clear pre-warming vars
-        clearVars.push("LOCAL_TRANSCRIPTION_PROVIDER", "PARAKEET_MODEL", "LOCAL_WHISPER_MODEL");
-      } else {
-        // Cloud mode - stop local servers to free RAM
-        clearVars.push("LOCAL_TRANSCRIPTION_PROVIDER", "PARAKEET_MODEL", "LOCAL_WHISPER_MODEL");
-        this.whisperManager.stopServer().catch((err) => {
-          debugLogger.error("Failed to stop whisper-server on cloud switch", {
-            error: err.message,
-          });
-        });
-        this.parakeetManager.stopServer().catch((err) => {
-          debugLogger.error("Failed to stop parakeet-server on cloud switch", {
-            error: err.message,
-          });
-        });
-      }
+      clearVars.push("LOCAL_TRANSCRIPTION_PROVIDER", "PARAKEET_MODEL", "LOCAL_WHISPER_MODEL");
 
       // TODO: drop legacy REASONING_PROVIDER / LOCAL_REASONING_MODEL clears once
       // the read fallback is removed (~2 releases after this lands).
@@ -3674,12 +2958,11 @@ class IPCHandlers {
     };
     this.desktopAuthManager?.on("status", broadcastAuthState);
 
-this._handle("open-voicelab-billing", async (_event, source = "dictate") => {
-  if (!this.voiceLabApiClient) return { success: false, error: "Billing unavailable" };
-  await shell.openExternal(this.voiceLabApiClient.getBillingUrl(source));
-  return { success: true };
-});
-
+    this._handle("open-voicelab-billing", async (_event, source = "dictate") => {
+      if (!this.voiceLabApiClient) return { success: false, error: "Billing unavailable" };
+      await shell.openExternal(this.voiceLabApiClient.getBillingUrl(source));
+      return { success: true };
+    });
 
     const clearAuthenticatedRuntime = async () => {
       const services = [
@@ -3711,13 +2994,12 @@ this._handle("open-voicelab-billing", async (_event, source = "dictate") => {
     })();
 
     const getApiUrl = () =>
+      this.voiceLabApiClient?.apiBaseUrl ||
+      process.env.VOICELAB_DESKTOP_API_URL ||
       process.env.VOICELAB_API_URL ||
       process.env.VITE_VOICELAB_API_URL ||
-      process.env.OPENWHISPR_API_URL ||
-      process.env.VITE_OPENWHISPR_API_URL ||
       runtimeEnv.VITE_VOICELAB_API_URL ||
-      runtimeEnv.VITE_OPENWHISPR_API_URL ||
-      "https://back.aisha.group";
+      "https://api.voicelab.uz";
 
     const getAuthUrl = () =>
       process.env.AUTH_URL ||
@@ -3725,20 +3007,9 @@ this._handle("open-voicelab-billing", async (_event, source = "dictate") => {
       runtimeEnv.VITE_AUTH_URL ||
       "https://voicelab.uz";
 
-    // Aisha cloud STT/TTS uses X-Api-Key (https://aisha.group/llms-api.txt)
-    // Prefer user-saved key from EnvironmentManager / userData over bundled env.
-    const getAishaApiKey = () =>
-      this.environmentManager?.getAishaApiKey?.() ||
-      process.env.AISHA_API_KEY ||
-      process.env.VITE_AISHA_API_KEY ||
-      runtimeEnv.AISHA_API_KEY ||
-      "";
-
     const getAuthHeaderFromWindow = async () => {
       const token = await this.desktopAuthManager?.getValidAccessToken?.();
       if (token) return { Authorization: `Bearer ${token}` };
-      const apiKey = getAishaApiKey();
-      if (apiKey) return { "X-Api-Key": apiKey };
       return {};
     };
 
@@ -3747,242 +3018,146 @@ this._handle("open-voicelab-billing", async (_event, source = "dictate") => {
       return getAuthHeaderFromWindow(win);
     };
 
-    const getCloudSttAuthHeader = async (event) => {
-      const apiKey = getAishaApiKey();
-      if (apiKey) return { "X-Api-Key": apiKey };
-      return getAuthHeader(event);
-    };
-
     // Honors system proxy via Electron's net stack. useSessionCookies:false so
     // Electron doesn't auto-attach jar cookies on top of our explicit headers.
     const proxyFetch = (url, init = {}) => net.fetch(url, { ...init, useSessionCookies: false });
 
-this._handle("cloud-transcribe", async (_event, audioBuffer, opts = {}) => {
-  let operation = null;
-  try {
-    if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
-    const { prepareAishaSttAudio } = require("./ffmpegUtils");
-    const prepared = await prepareAishaSttAudio(Buffer.from(audioBuffer), {
-      hintExt: opts.mimeType?.includes("ogg")
-        ? "ogg"
-        : opts.mimeType?.includes("mp4")
-          ? "m4a"
-          : "webm",
-    });
-    const audioData = prepared.buffer;
-    const durationMs = Number.isFinite(opts.durationSeconds)
-      ? Math.round(opts.durationSeconds * 1000)
-      : null;
-    await this._runDesktopSync({ pull: false, maxPushBatches: 2, bestEffort: true });
-    operation = await this.voiceLabApiClient.beginDictation({
-      audioBuffer: audioData,
-      source: "dictate",
-      durationMs,
-      language: opts.language ?? null,
-    });
-    let result;
-    if (audioData.length > CLOUD_INLINE_LIMIT) {
-      const chunked = await chunkedCloudTranscribe({
-        buffer: audioData,
-        apiUrl: "",
-        authHeader: {},
-        inputExt: prepared.fileName.split(".").pop(),
-        concurrencyLimit: 1,
-        requestChunk: (chunkBuffer, index, total) =>
-          this.voiceLabApiClient.sendDictationChunk(
-            operation,
-            chunkBuffer,
-            {
-              source: "dictate",
-              language: opts.language ?? null,
-              hasDiarization: !!opts.hasDiarization,
-              durationMs,
-              contentType: "audio/mpeg",
-              fileName: `dictation-${index}.mp3`,
+    const transcribeWithVoiceLab = async ({
+      buffer,
+      source,
+      durationMs = null,
+      language = null,
+      contentType,
+      fileName,
+      onProgress,
+    }) => {
+      if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
+      let operation = null;
+      try {
+        operation = await this.voiceLabApiClient.beginDictation({
+          audioBuffer: buffer,
+          source,
+          durationMs,
+          language,
+        });
+        let result;
+        if (buffer.length > CLOUD_INLINE_LIMIT && Number.isFinite(durationMs)) {
+          const chunked = await chunkedCloudTranscribe({
+            buffer,
+            inputExt: path.extname(fileName).slice(1) || "webm",
+            onProgress,
+            concurrencyLimit: 1,
+            requestChunk: (chunkBuffer, index, total) =>
+              this.voiceLabApiClient.sendDictationChunk(
+                operation,
+                chunkBuffer,
+                {
+                  source,
+                  language,
+                  contentType: "audio/mpeg",
+                  fileName: `${source}-${index}.mp3`,
+                },
+                index,
+                total
+              ),
+          });
+          const last = chunked.lastResponse || {};
+          result = {
+            ...last,
+            operation: {
+              ...(last.operation || {}),
+              result: {
+                ...(last.operation?.result || last.result || {}),
+                text: chunked.text,
+              },
             },
-            index,
-            total
-          ),
-      });
-      const last = chunked.lastResponse || {};
-      result = {
-        ...last,
-        result: { ...(last.result || {}), text: chunked.text },
-        warning: chunked.warning,
-      };
-    } else {
-      result = await this.voiceLabApiClient.sendDictationChunk(operation, audioData, {
-        source: "dictate",
-        language: opts.language ?? null,
-        hasDiarization: !!opts.hasDiarization,
-        durationMs,
-        contentType: prepared.contentType,
-        fileName: prepared.fileName,
-      });
-    }
-    const response = await this.voiceLabApiClient.publicResult(result, operation.operationId);
-    this.voiceLabApiClient.finishDictation(operation);
-    return { ...response, clientTranscriptionId: operation.operationId };
-  } catch (error) {
-    if (operation) this.voiceLabApiClient?.failDictation(operation, error);
-    return typeof error?.toPublic === "function"
-      ? error.toPublic()
-      : { success: false, error: error.message || "VoiceLab Dictate failed", code: "BACKEND_FAILED" };
-  }
-});
+            warning: chunked.warning,
+          };
+        } else {
+          result = await this.voiceLabApiClient.sendDictationChunk(operation, buffer, {
+            source,
+            language,
+            contentType,
+            fileName,
+          });
+        }
+        const response = await this.voiceLabApiClient.publicResult(result, operation.operationId);
+        this.voiceLabApiClient.finishDictation(operation);
+        return { ...response, clientTranscriptionId: operation.operationId };
+      } catch (error) {
+        if (operation) this.voiceLabApiClient.failDictation(operation, error);
+        throw error;
+      }
+    };
+
+    this._handle("cloud-transcribe", async (_event, audioBuffer, opts = {}) => {
+      try {
+        const { prepareCloudSttAudio } = require("./ffmpegUtils");
+        const prepared = await prepareCloudSttAudio(Buffer.from(audioBuffer), {
+          hintExt: opts.mimeType?.includes("ogg")
+            ? "ogg"
+            : opts.mimeType?.includes("mp4")
+              ? "m4a"
+              : "webm",
+        });
+        const audioData = prepared.buffer;
+        const durationMs = Number.isFinite(opts.durationSeconds)
+          ? Math.round(opts.durationSeconds * 1000)
+          : null;
+        await this._runDesktopSync({ pull: false, maxPushBatches: 2, bestEffort: true });
+        return await transcribeWithVoiceLab({
+          buffer: audioData,
+          source: "dictate",
+          durationMs,
+          language: opts.language ?? null,
+          contentType: prepared.contentType,
+          fileName: prepared.fileName,
+        });
+      } catch (error) {
+        return typeof error?.toPublic === "function"
+          ? error.toPublic()
+          : {
+              success: false,
+              error: error.message || "VoiceLab Dictate failed",
+              code: "BACKEND_FAILED",
+            };
+      }
+    });
 
     this._handle("cloud-health-check", async () => {
-      const apiUrl = getApiUrl();
-      if (!apiUrl) {
-        return {
-          ok: false,
-          code: "NO_API_URL",
-          messageKey: "streaming.errors.cloudUnreachable.generic",
-        };
-      }
-      const apiKey = getAishaApiKey();
-      // Aisha has no /api/health — probe STT history with the API key
-      const url = `${apiUrl.replace(/\/+$/, "")}/api/v1/stt/get/?page=1&limit=1`;
       try {
-        const res = await proxyFetch(url, {
-          method: "GET",
-          headers: apiKey ? { "X-Api-Key": apiKey } : {},
-          signal: AbortSignal.timeout(3000),
-        });
-        return { ok: res.ok, status: res.status };
-      } catch (err) {
-        const classified = classifyAndLog(err, url);
-        if (classified.isNetworkError) {
-          return { ok: false, code: classified.code, messageKey: classified.messageKey };
-        }
+        if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
+        await this.voiceLabApiClient.getWallet({ force: true });
+        return { ok: true, status: 200 };
+      } catch (error) {
         return {
           ok: false,
-          code: "UNKNOWN",
+          code: error?.code || "VOICELAB_UNAVAILABLE",
           messageKey: "streaming.errors.cloudUnreachable.generic",
         };
       }
     });
 
-    this._handle("validate-aisha-api-key", async (_event, key) => {
-      const apiUrl = getApiUrl();
-      const testKey =
-        (typeof key === "string" ? key.trim() : "") || getAishaApiKey();
-      if (!apiUrl) {
-        return { ok: false, code: "NO_API_URL", message: "Aisha API URL not configured" };
-      }
-      if (!testKey) {
-        return { ok: false, code: "MISSING", message: "Aisha API key is required" };
-      }
-      const url = `${apiUrl.replace(/\/+$/, "")}/api/v1/stt/get/?page=1&limit=1`;
-      try {
-        const res = await proxyFetch(url, {
-          method: "GET",
-          headers: { "X-Api-Key": testKey },
-          signal: AbortSignal.timeout(8000),
-        });
-        if (res.status === 401 || res.status === 403) {
-          return {
-            ok: false,
-            code: "AUTH",
-            status: res.status,
-            message: "Invalid Aisha API key. Create one at https://space.aisha.group",
-          };
-        }
-        if (res.status === 402) {
-          return {
-            ok: false,
-            code: "BILLING",
-            status: res.status,
-            message: "Aisha balance is insufficient. Top up at https://space.aisha.group",
-            keyAccepted: true,
-          };
-        }
-        if (res.ok) {
-          return { ok: true, status: res.status };
-        }
-        return {
-          ok: false,
-          code: "HTTP",
-          status: res.status,
-          message: `Aisha returned HTTP ${res.status}`,
-        };
-      } catch (err) {
-        return {
-          ok: false,
-          code: "NETWORK",
-          message: err?.message || "Could not reach Aisha. Check your internet connection.",
-        };
-      }
-    });
-
-    this._handle("retry-transcription", async (event, id, settings) => {
+    this._handle("retry-transcription", async (_event, id, settings) => {
       const buffer = this.audioStorageManager.getAudioBuffer(id);
       if (!buffer) return { success: false, error: "Audio file not found" };
       try {
-        let result;
         const preferredLanguage = settings?.preferredLanguage;
         const language =
           preferredLanguage && preferredLanguage !== "auto"
             ? preferredLanguage.split("-")[0]
-            : undefined;
-
-        // Aisha-only — retries always go to VoiceLab Cloud.
-        {
-          const apiKey = getAishaApiKey();
-          const apiUrl = getApiUrl();
-          if (!apiKey) {
-            throw Object.assign(
-              new Error(
-                "Aisha API key not configured. Add your key in Settings → Account (from https://space.aisha.group)."
-              ),
-              {
-                code: "API_KEY_MISSING",
-                messageKey: "hooks.audioRecording.errorDescriptions.aishaKeyMissing",
-              }
-            );
-          }
-          if (!apiUrl) throw new Error("Aisha API URL not configured");
-          const { prepareAishaSttAudio } = require("./ffmpegUtils");
-          const prepared = await prepareAishaSttAudio(buffer);
-          const multipartFields = {
-            language: language || "uz",
-            has_diarization: "false",
-          };
-          const sttAuth = { "X-Api-Key": apiKey };
-          if (prepared.buffer.length > CLOUD_INLINE_LIMIT) {
-            const { text } = await chunkedCloudTranscribe({
-              buffer: prepared.buffer,
-              apiUrl,
-              authHeader: sttAuth,
-              multipartFields,
-              inputExt: prepared.fileName.split(".").pop(),
-              postFn: postMultipartNode,
-            });
-            result = { text, source: "aisha", model: "cloud" };
-          } else {
-            const { body, boundary } = buildMultipartBody(
-              prepared.buffer,
-              prepared.fileName,
-              prepared.contentType,
-              multipartFields,
-              { fileFieldName: "audio" }
-            );
-            const sttPath = getAishaSttPath(prepared.buffer.length);
-            const url = new URL(`${apiUrl.replace(/\/+$/, "")}${sttPath}`);
-            const data = await postMultipartNode(url, body, boundary, sttAuth);
-            if (sttPath.startsWith("/api/v2/") && data.statusCode === 200 && data.data?.id) {
-              const detail = await pollAishaSttV2(apiUrl, sttAuth, data.data.id);
-              result = { text: detail.text, source: "aisha", model: "cloud" };
-            } else {
-              const responseData = interpretTranscribeResponse(data);
-              result = {
-                text: responseData.text,
-                source: "aisha",
-                model: "cloud",
-              };
-            }
-          }
-        }
+            : null;
+        const existingRow = this.databaseManager.getTranscriptionById(id);
+        const { prepareCloudSttAudio } = require("./ffmpegUtils");
+        const prepared = await prepareCloudSttAudio(buffer);
+        const result = await transcribeWithVoiceLab({
+          buffer: prepared.buffer,
+          source: "dictate-retry",
+          durationMs: existingRow?.audio_duration_ms ?? null,
+          language,
+          contentType: prepared.contentType,
+          fileName: prepared.fileName,
+        });
 
         if (!result?.text) {
           return { success: false, error: "No transcription engine available" };
@@ -3990,9 +3165,8 @@ this._handle("cloud-transcribe", async (_event, audioBuffer, opts = {}) => {
 
         this.databaseManager.updateTranscriptionText(id, result.text, result.text);
         this.databaseManager.updateTranscriptionStatus(id, "completed");
-        const providerName = result.source || "local";
-        const modelName = result.model || null;
-        const existingRow = this.databaseManager.getTranscriptionById(id);
+        const providerName = result.sttProvider || "voicelab";
+        const modelName = result.sttModel || null;
         this.databaseManager.updateTranscriptionAudio(id, {
           hasAudio: 1,
           audioDurationMs: existingRow?.audio_duration_ms ?? null,
@@ -4551,8 +3725,7 @@ this._handle("cloud-transcribe", async (_event, audioBuffer, opts = {}) => {
         throw error;
       };
 
-      const dual = (factory) =>
-        streams === 2 ? Promise.all([factory(), factory()]) : factory();
+      const dual = (factory) => (streams === 2 ? Promise.all([factory(), factory()]) : factory());
 
       if (options.provider === "assemblyai-realtime") {
         if (options.mode === "byok") {
@@ -4779,6 +3952,7 @@ this._handle("cloud-transcribe", async (_event, audioBuffer, opts = {}) => {
     let meetingLocalModel = null;
     let meetingLocalLanguage = null;
     let meetingLocalTranscribing = false;
+    let meetingLocalTranscriptionPromise = null;
     let meetingPendingMicChunks = [];
     let meetingPendingMicFinals = [];
     let meetingPendingMicFinalTimer = null;
@@ -5165,56 +4339,16 @@ this._handle("cloud-transcribe", async (_event, audioBuffer, opts = {}) => {
 
       try {
         let result;
-        if (meetingLocalProvider === "aisha") {
-          const apiUrl = getApiUrl();
-          const apiKey = getAishaApiKey();
-          if (!apiUrl || !apiKey) {
-            throw Object.assign(
-            new Error(
-              "Aisha API key not configured. Add your key in Settings → Account (from https://space.aisha.group)."
-            ),
-            {
-              code: "API_KEY_MISSING",
-              messageKey: "hooks.audioRecording.errorDescriptions.aishaKeyMissing",
-            }
-          );
-          }
-          const authHeader = { "X-Api-Key": apiKey };
-          const language = meetingLocalLanguage || "uz";
-          const multipartFields = {
-            language,
-            has_diarization: "false",
-          };
-          const sttPath = getAishaSttPath(wav.length);
-          const { body, boundary } = buildMultipartBody(
-            wav,
-            "meeting-chunk.wav",
-            "audio/wav",
-            multipartFields,
-            { fileFieldName: "audio" }
-          );
-          const url = new URL(`${apiUrl.replace(/\/+$/, "")}${sttPath}`);
-          const data = await postMultipartNode(url, body, boundary, authHeader);
-          let text = "";
-          if (sttPath.startsWith("/api/v2/") && data.statusCode === 200 && data.data?.id) {
-            const detail = await pollAishaSttV2(apiUrl, authHeader, data.data.id);
-            text = detail.text || "";
-          } else {
-            text = interpretTranscribeResponse(data).text || "";
-          }
-          result = { success: true, text, source: "aisha" };
-        } else if (meetingLocalProvider === "nvidia") {
-          result = await this.parakeetManager.transcribeLocalParakeet(wav, {
-            model: meetingLocalModel,
-          });
-        } else {
-          const vadOptions = this._resolveWhisperVadOptions("meeting");
-          result = await this.whisperManager.transcribeLocalWhisper(wav, {
-            model: meetingLocalModel,
-            language: meetingLocalLanguage,
-            ...vadOptions,
-          });
-        }
+        const durationMs = Math.round((pcm16k.length / 2 / 16000) * 1000);
+        const response = await transcribeWithVoiceLab({
+          buffer: wav,
+          source: `meeting-${source}`,
+          durationMs,
+          language: meetingLocalLanguage || null,
+          contentType: "audio/wav",
+          fileName: `meeting-${source}.wav`,
+        });
+        result = { ...response, source: "voicelab" };
 
         if (result?.success && result.text?.trim()) {
           const text = result.text.trim();
@@ -5341,15 +4475,26 @@ this._handle("cloud-transcribe", async (_event, audioBuffer, opts = {}) => {
       }
     };
 
-    const transcribeAllLocalBuffers = async () => {
-      if (meetingLocalTranscribing) return;
-      meetingLocalTranscribing = true;
-      try {
-        await transcribeLocalMeetingChunk("system");
-        await transcribeLocalMeetingChunk("mic");
-      } finally {
-        meetingLocalTranscribing = false;
-      }
+    const transcribeAllLocalBuffers = () => {
+      const previous = meetingLocalTranscriptionPromise || Promise.resolve();
+      const queued = previous
+        .catch(() => {})
+        .then(async () => {
+          meetingLocalTranscribing = true;
+          try {
+            await transcribeLocalMeetingChunk("system");
+            await transcribeLocalMeetingChunk("mic");
+          } finally {
+            meetingLocalTranscribing = false;
+          }
+        });
+      meetingLocalTranscriptionPromise = queued;
+      queued.finally(() => {
+        if (meetingLocalTranscriptionPromise === queued) {
+          meetingLocalTranscriptionPromise = null;
+        }
+      });
+      return queued;
     };
 
     const resetMeetingLocalState = () => {
@@ -5385,6 +4530,7 @@ this._handle("cloud-transcribe", async (_event, audioBuffer, opts = {}) => {
       meetingLocalModel = null;
       meetingLocalLanguage = null;
       meetingLocalTranscribing = false;
+      meetingLocalTranscriptionPromise = null;
       meetingPendingMicChunks = [];
       resetPendingMicFinals();
       meetingAecEnabled = false;
@@ -5437,62 +4583,9 @@ this._handle("cloud-transcribe", async (_event, audioBuffer, opts = {}) => {
     };
 
     const transcribeDictationPreviewChunk = async () => {
-      // The chunked path only feeds the preview window.
-      if (!dictationPreviewDisplay) return;
-      if (dictationPreviewTranscribing) return;
-      if (!dictationPreviewBuffer.length) return;
-
-      dictationPreviewTranscribing = true;
-      try {
-        const pcm = Buffer.concat(dictationPreviewBuffer);
-        dictationPreviewBuffer = [];
-
-        const samples = new Int16Array(pcm.buffer, pcm.byteOffset, pcm.length / 2);
-        let sumSq = 0;
-        for (let i = 0; i < samples.length; i++) {
-          const n = samples[i] / 0x7fff;
-          sumSq += n * n;
-        }
-        const rms = Math.sqrt(sumSq / samples.length);
-        debugLogger.debug("Dictation preview chunk", {
-          pcmBytes: pcm.length,
-          rms: rms.toFixed(6),
-          samples: samples.length,
-        });
-        if (rms < 0.002) return;
-
-        const wav = pcm16ToWav(pcm);
-
-        let result;
-        if (dictationPreviewProvider === "nvidia") {
-          result = await this.parakeetManager.transcribeLocalParakeet(wav, {
-            model: dictationPreviewModel,
-          });
-        } else {
-          const vadOptions = this._resolveWhisperVadOptions("dictation");
-          result = await this.whisperManager.transcribeLocalWhisper(wav, {
-            model: dictationPreviewModel,
-            language: dictationPreviewLanguage,
-            ...vadOptions,
-          });
-        }
-
-        if (result?.success && result.text?.trim()) {
-          this.windowManager.appendTranscriptionPreview(result.text.trim());
-        } else if (result && !result.success) {
-          debugLogger.warn("Dictation preview chunk returned failure", {
-            error: result.error || result.message,
-            provider: dictationPreviewProvider,
-          });
-        }
-      } catch (error) {
-        debugLogger.error("Dictation preview transcription chunk failed", {
-          error: error.message,
-          provider: dictationPreviewProvider,
-        });
-      } finally {
-        dictationPreviewTranscribing = false;
-      }
+      // Live local previews were removed with the local STT runtime. Final cloud
+      // results still use the normal preview/result notification flow.
+      dictationPreviewBuffer = [];
     };
 
     const resetMeetingStreamingState = () => {
@@ -5643,50 +4736,14 @@ this._handle("cloud-transcribe", async (_event, audioBuffer, opts = {}) => {
     };
 
     // Pre-warm: fetch tokens + connect WebSockets before user hits record
-    this._handle("meeting-transcription-prepare", async (event, options = {}) => {
+    this._handle("meeting-transcription-prepare", async () => {
       if (meetingTranscriptionPrepareInProgress || meetingTranscriptionStartInProgress) {
         debugLogger.debug("Meeting transcription prepare already in progress, ignoring");
         return { success: false, error: "Operation in progress" };
       }
-
-      if (!ALLOWED_MEETING_PROVIDERS.has(options.provider)) {
-        return { success: false, error: `Unsupported provider: ${options.provider}` };
-      }
-
-      if (options.provider === "local") {
-        return { success: true };
-      }
-
-      const { mode: systemAudioMode } = await getMeetingSystemAudioPlan();
-
-      if (isMeetingStreamingConnected(systemAudioMode)) {
-        debugLogger.debug("Meeting transcription already prepared (warm connections)");
-        return { success: true, alreadyPrepared: true };
-      }
-
-      meetingTranscriptionPrepareInProgress = true;
-      meetingTranscriptionPreparePromise = (async () => {
-        let timeoutHandle;
-        try {
-          await Promise.race([
-            connectRealtimeStreaming(event, options),
-            new Promise((_, reject) => {
-              timeoutHandle = setTimeout(() => reject(new Error("Prepare timed out")), 15000);
-            }),
-          ]);
-          debugLogger.debug("Meeting transcription prepared (meeting streams warm)");
-          return { success: true };
-        } catch (error) {
-          debugLogger.error("Meeting transcription prepare error", { error: error.message });
-          return { success: false, error: error.message };
-        } finally {
-          if (timeoutHandle) clearTimeout(timeoutHandle);
-          meetingTranscriptionPrepareInProgress = false;
-          meetingTranscriptionPreparePromise = null;
-        }
-      })();
-
-      return meetingTranscriptionPreparePromise;
+      // VoiceLab Desktop Dictate is batch-only; preparation has no remote
+      // provider connection or user-supplied credential to warm up.
+      return { success: true, alreadyPrepared: true };
     });
 
     this._handle("meeting-transcription-cancel", async () => {
@@ -5736,81 +4793,33 @@ this._handle("cloud-transcribe", async (_event, audioBuffer, opts = {}) => {
           this._meetingSystemStreaming = null;
         }
 
-        // If already prepared (warm connections from prepare), just re-attach handlers
-        if (!meetingLocalMode && isMeetingStreamingConnected(systemAudioMode)) {
-          debugLogger.debug("Meeting transcription start: reusing warm connections");
-          const win = BrowserWindow.fromWebContents(event.sender);
-          attachMeetingStreamingHandlers(this._meetingMicStreaming, win, "mic");
-          if (systemAudioMode !== "unsupported") {
-            attachMeetingStreamingHandlers(this._meetingSystemStreaming, win, "system");
-          }
-          await startMeetingAec(systemAudioMode);
-          await startLiveSpeakerIdentification(win, systemAudioMode);
-          ({ systemAudioMode, systemAudioStrategy } = await startMeetingSystemAudio(
-            event,
-            systemAudioMode,
-            systemAudioStrategy,
-            "during warm-start reuse"
-          ));
-          return {
-            success: true,
-            systemAudioMode,
-            systemAudioStrategy,
-            oneOnOneAttendee: meetingOneOnOneAttendee,
-          };
-        }
+        // Ignore renderer provider/model fields. Meetings always buffer PCM and
+        // submit authenticated chunks to VoiceLab Desktop Dictate.
+        meetingLocalMode = true;
+        meetingLocalProvider = "voicelab";
+        meetingLocalModel = "voicelab-cloud";
+        meetingLocalLanguage = options.language || null;
+        meetingLocalWin = BrowserWindow.fromWebContents(event.sender);
+        meetingLocalBuffers = { mic: [], system: [] };
+        meetingLocalTranscript = "";
 
-        if (options.provider === "local") {
-          meetingLocalMode = true;
-          meetingLocalProvider = options.localProvider || "whisper";
-          meetingLocalModel = options.localModel || null;
-          meetingLocalLanguage = options.language || null;
-          meetingLocalWin = BrowserWindow.fromWebContents(event.sender);
-          meetingLocalBuffers = { mic: [], system: [] };
-          meetingLocalTranscript = "";
-
-          await startLiveSpeakerIdentification(meetingLocalWin, systemAudioMode);
-          await startMeetingAec(systemAudioMode);
-
-          meetingLocalTimer = setInterval(() => {
-            transcribeAllLocalBuffers();
-          }, LOCAL_MEETING_CHUNK_INTERVAL_MS);
-
-          ({ systemAudioMode, systemAudioStrategy } = await startMeetingSystemAudio(
-            event,
-            systemAudioMode,
-            systemAudioStrategy,
-            "in local meeting mode"
-          ));
-
-          debugLogger.debug("Meeting transcription started in local mode", {
-            provider: meetingLocalProvider,
-            systemAudioMode,
-            systemAudioStrategy,
-          });
-
-          return {
-            success: true,
-            systemAudioMode,
-            systemAudioStrategy,
-            oneOnOneAttendee: meetingOneOnOneAttendee,
-          };
-        }
-
-        if (!ALLOWED_MEETING_PROVIDERS.has(options.provider)) {
-          return { success: false, error: `Unsupported provider: ${options.provider}` };
-        }
-
-        await connectRealtimeStreaming(event, options);
-        const realtimeWin = BrowserWindow.fromWebContents(event.sender);
-        await startLiveSpeakerIdentification(realtimeWin, systemAudioMode);
+        await startLiveSpeakerIdentification(meetingLocalWin, systemAudioMode);
         await startMeetingAec(systemAudioMode);
+
+        meetingLocalTimer = setInterval(() => {
+          transcribeAllLocalBuffers();
+        }, LOCAL_MEETING_CHUNK_INTERVAL_MS);
+
         ({ systemAudioMode, systemAudioStrategy } = await startMeetingSystemAudio(
           event,
           systemAudioMode,
           systemAudioStrategy,
-          "in realtime mode"
+          "in VoiceLab cloud meeting mode"
         ));
+        debugLogger.debug("Meeting transcription started with VoiceLab Cloud", {
+          systemAudioMode,
+          systemAudioStrategy,
+        });
         return {
           success: true,
           systemAudioMode,
@@ -6080,14 +5089,14 @@ this._handle("cloud-transcribe", async (_event, audioBuffer, opts = {}) => {
       return result;
     };
 
-this._handle("dictation-realtime-warmup", async (event, options = {}) => {
-  if ((options.mode || "openwhispr") !== "byok") {
-    return {
-      success: false,
-      code: "VOICELAB_STREAMING_DISABLED",
-      error: "VoiceLab-funded streaming requires server-authoritative metering.",
-    };
-  }
+    this._handle("dictation-realtime-warmup", async (event, options = {}) => {
+      if ((options.mode || "openwhispr") !== "byok") {
+        return {
+          success: false,
+          code: "VOICELAB_STREAMING_DISABLED",
+          error: "VoiceLab-funded streaming requires server-authoritative metering.",
+        };
+      }
       try {
         await connectDictationStreaming(event, options);
         startDictationIdleTimer();
@@ -6097,14 +5106,14 @@ this._handle("dictation-realtime-warmup", async (event, options = {}) => {
       }
     });
 
-this._handle("dictation-realtime-start", async (event, options = {}) => {
-  if ((options.mode || "openwhispr") !== "byok") {
-    return {
-      success: false,
-      code: "VOICELAB_STREAMING_DISABLED",
-      error: "VoiceLab-funded streaming requires server-authoritative metering.",
-    };
-  }
+    this._handle("dictation-realtime-start", async (event, options = {}) => {
+      if ((options.mode || "openwhispr") !== "byok") {
+        return {
+          success: false,
+          code: "VOICELAB_STREAMING_DISABLED",
+          error: "VoiceLab-funded streaming requires server-authoritative metering.",
+        };
+      }
       try {
         clearDictationIdleTimer();
         this._dictationPreviewEnabled = !!options.preview;
@@ -6113,10 +5122,6 @@ this._handle("dictation-realtime-start", async (event, options = {}) => {
       } catch (err) {
         return streamingStartFailure(err);
       }
-    });
-
-    ipcMain.on("dictation-realtime-send", (_event, buffer) => {
-      this._dictationStreaming?.sendAudio(Buffer.from(buffer));
     });
 
     this._handle("dictation-realtime-stop", async () => {
@@ -6133,86 +5138,9 @@ this._handle("dictation-realtime-start", async (event, options = {}) => {
       return { success: true, text: result.text || "" };
     });
 
-    this._handle(
-      "start-dictation-preview",
-      async (_event, { provider, model, language, display = true }) => {
-        resetDictationPreviewState();
-        const gen = dictationPreviewGen;
-        dictationPreviewMode = true;
-        dictationPreviewSessionActive = true;
-        dictationPreviewProvider = provider;
-        dictationPreviewModel = model;
-        dictationPreviewLanguage = language || null;
-        dictationPreviewDisplay = display;
-        dictationPreviewChunkCount = 0;
-        if (display) this.windowManager.showTranscriptionPreview("");
-
-        if (provider === "nvidia" && this.parakeetManager.supportsOnlineStreaming(model)) {
-          try {
-            const stream = await this.parakeetManager.createOnlineStream(model, {
-              onUpdate: (text) => {
-                if (gen === dictationPreviewGen && text && dictationPreviewDisplay) {
-                  this.windowManager.showTranscriptionPreview(text);
-                }
-              },
-              onError: (error) => {
-                if (gen !== dictationPreviewGen || dictationPreviewStream !== stream) return;
-                // Keep the preview alive on the chunked path; the final
-                // transcript falls back to decoding the full recording.
-                debugLogger.warn("Online preview stream failed mid-session, falling back", {
-                  model,
-                  error: error.message,
-                });
-                dictationPreviewStream = null;
-                if (dictationPreviewDisplay) startDictationPreviewTimer();
-              },
-            });
-            if (gen !== dictationPreviewGen) {
-              stream.abort();
-              return { success: true };
-            }
-            dictationPreviewStream = stream;
-            for (const chunk of dictationPreviewBuffer) {
-              stream.sendPcm16(chunk);
-            }
-            dictationPreviewBuffer = [];
-            return { success: true };
-          } catch (error) {
-            debugLogger.warn("Online preview stream unavailable, falling back to chunked preview", {
-              model,
-              error: error.message,
-            });
-          }
-        }
-
-        if (gen !== dictationPreviewGen) return { success: true };
-        if (!display) {
-          // A headless session exists only to feed the online stream; without
-          // one, buffered PCM would just accumulate with no consumer.
-          resetDictationPreviewState();
-          return { success: true };
-        }
-        startDictationPreviewTimer();
-        return { success: true };
-      }
-    );
-
-    ipcMain.on("dictation-preview-audio", (_event, audioBuffer) => {
-      if (!dictationPreviewMode) return;
-      dictationPreviewChunkCount++;
-      if (dictationPreviewChunkCount <= 3 || dictationPreviewChunkCount % 50 === 0) {
-        debugLogger.debug("Dictation preview audio received", {
-          bytes: audioBuffer?.byteLength || audioBuffer?.length,
-          count: dictationPreviewChunkCount,
-          bufferSize: dictationPreviewBuffer.length,
-        });
-      }
-      const pcm = Buffer.isBuffer(audioBuffer) ? audioBuffer : Buffer.from(audioBuffer);
-      if (dictationPreviewStream) {
-        dictationPreviewStream.sendPcm16(pcm);
-        return;
-      }
-      dictationPreviewBuffer.push(pcm);
+    this._handle("start-dictation-preview", async () => {
+      resetDictationPreviewState();
+      return { success: false, code: "CLOUD_ONLY", error: "Live local preview is unavailable." };
     });
 
     this._handle("dismiss-dictation-preview", async () => {
@@ -6222,11 +5150,15 @@ this._handle("dictation-realtime-start", async (event, options = {}) => {
     });
 
     this._handle("complete-dictation-preview", async (_event, { text } = {}) => {
+      const completedText = typeof text === "string" ? text.trim() : "";
+      if (completedText) {
+        this.broadcastToWindows("dictation-complete", { text: completedText });
+      }
       if (!dictationPreviewSessionActive) {
         return { success: true };
       }
-      if (typeof text === "string" && text.trim()) {
-        this.windowManager.completeTranscriptionPreview(text);
+      if (completedText) {
+        this.windowManager.completeTranscriptionPreview(completedText);
       } else {
         resetDictationPreviewState();
         this.windowManager.hideTranscriptionPreview();
@@ -6521,96 +5453,44 @@ this._handle("dictation-realtime-start", async (event, options = {}) => {
       }
     });
 
-this._handle("cloud-streaming-usage", async () => ({
-  success: false,
-  code: "VOICELAB_STREAMING_DISABLED",
-  error:
-    "VoiceLab-funded streaming is disabled until server-authoritative stream metering is available.",
-}));
+    this._handle("cloud-streaming-usage", async () => ({
+      success: false,
+      code: "VOICELAB_STREAMING_DISABLED",
+      error:
+        "VoiceLab-funded streaming is disabled until server-authoritative stream metering is available.",
+    }));
 
-this._handle("cloud-usage", async () => {
-  try {
-    if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
-    const wallet = await this.voiceLabApiClient.getWallet({ force: true });
-    return { success: true, ...wallet };
-  } catch (error) {
-    return typeof error?.toPublic === "function"
-      ? error.toPublic()
-      : { success: false, error: error.message || "Wallet unavailable", code: "WALLET_UNAVAILABLE" };
-  }
-});
-
-    this._handle("cloud-checkout", (event, opts) =>
-      fetchStripeUrl(event, "/api/stripe/checkout", "Cloud checkout error", opts || undefined)
-    );
-
-    this._handle("cloud-billing-portal", (event) =>
-      fetchStripeUrl(event, "/api/stripe/portal", "Cloud billing portal error")
-    );
-
-    this._handle("cloud-switch-plan", async (event, opts) => {
+    this._handle("cloud-usage", async () => {
       try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
-
-        const authHeader = await getAuthHeader(event);
-        if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
-
-        const response = await proxyFetch(`${apiUrl}/api/stripe/switch-plan`, {
-          method: "POST",
-          headers: { ...authHeader, "Content-Type": "application/json" },
-          body: JSON.stringify(opts),
-        });
-
-        if (response.status === 401) {
-          return { success: false, error: "Session expired", code: "AUTH_EXPIRED" };
-        }
-        if (response.status === 503) {
-          return { success: false, error: "Request timed out", code: "SERVER_ERROR" };
-        }
-
-        const data = await response.json();
-        if (!response.ok) {
-          return { success: false, error: data.error || "Failed to switch plan" };
-        }
-        return data;
+        if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
+        const wallet = await this.voiceLabApiClient.getWallet({ force: true });
+        return { success: true, ...wallet };
       } catch (error) {
-        debugLogger.error(`Cloud switch plan error: ${error.message}`);
-        return { success: false, error: error.message };
+        return typeof error?.toPublic === "function"
+          ? error.toPublic()
+          : {
+              success: false,
+              error: error.message || "Wallet unavailable",
+              code: "WALLET_UNAVAILABLE",
+            };
       }
     });
 
-    this._handle("cloud-preview-switch", async (event, opts) => {
-      try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
+    const openVoiceLabBilling = async () => {
+      if (!this.voiceLabApiClient) return { success: false, error: "Billing unavailable" };
+      const url = this.voiceLabApiClient.getBillingUrl("desktop");
+      await shell.openExternal(url);
+      return { success: true, url };
+    };
 
-        const authHeader = await getAuthHeader(event);
-        if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
-
-        const response = await proxyFetch(`${apiUrl}/api/stripe/preview-switch`, {
-          method: "POST",
-          headers: { ...authHeader, "Content-Type": "application/json" },
-          body: JSON.stringify(opts),
-        });
-
-        if (response.status === 401) {
-          return { success: false, error: "Session expired", code: "AUTH_EXPIRED" };
-        }
-        if (response.status === 503) {
-          return { success: false, error: "Request timed out", code: "SERVER_ERROR" };
-        }
-
-        const data = await response.json();
-        if (!response.ok) {
-          return { success: false, error: data.error || "Failed to preview plan change" };
-        }
-        return { success: true, ...data };
-      } catch (error) {
-        debugLogger.error(`Cloud preview switch error: ${error.message}`);
-        return { success: false, error: error.message };
-      }
-    });
+    this._handle("cloud-checkout", openVoiceLabBilling);
+    this._handle("cloud-billing-portal", openVoiceLabBilling);
+    this._handle("cloud-switch-plan", openVoiceLabBilling);
+    this._handle("cloud-preview-switch", async () => ({
+      success: false,
+      code: "BILLING_MANAGED_ON_WEB",
+      error: "Plan changes are managed in VoiceLab Billing.",
+    }));
 
     this._handle("workspace-api-request", async (event, input) => {
       try {
@@ -6636,7 +5516,11 @@ this._handle("cloud-usage", async () => {
         if (!response.ok) {
           return {
             success: false,
-            error: data?.error?.message || data?.error || data?.detail || `API error: ${response.status}`,
+            error:
+              data?.error?.message ||
+              data?.error ||
+              data?.detail ||
+              `API error: ${response.status}`,
             code: data?.code || (response.status === 401 ? "AUTH_EXPIRED" : "BACKEND_FAILED"),
             status: response.status,
           };
@@ -6652,127 +5536,61 @@ this._handle("cloud-usage", async () => {
       }
     });
 
-    this._handle("get-stt-config", async (event) => {
+    this._handle("get-stt-config", async () => {
       try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
-
-        const authHeader = await getAuthHeader(event);
-        if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
-
-        const response = await proxyFetch(`${apiUrl}/api/stt-config`, {
-          headers: authHeader,
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            return { success: false, error: "Session expired", code: "AUTH_EXPIRED" };
-          }
-          if (response.status === 503) {
-            return { success: false, error: "Request timed out", code: "SERVER_ERROR" };
-          }
-          throw new Error(`API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return { success: true, ...data };
+        if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
+        const wallet = await this.voiceLabApiClient.getWallet();
+        return {
+          success: true,
+          dictation: { mode: "batch" },
+          notes: { mode: "batch" },
+          streamingProvider: "",
+          supportedLanguages: wallet.limits.supported_languages || [],
+          autoDetectionSupported: wallet.limits.auto_detection_supported === true,
+        };
       } catch (error) {
         debugLogger.error("STT config fetch error:", error);
-        return null;
+        return typeof error?.toPublic === "function" ? error.toPublic() : null;
       }
     });
 
-    this._handle("get-note-recording-config", async (event) => {
+    this._handle("get-note-recording-config", async () => ({
+      success: true,
+      providers: [],
+    }));
+
+    this._handle("transcribe-audio-file-cloud", async (event, filePath, options = {}) => {
       try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
-
-        const authHeader = await getAuthHeader(event);
-        if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
-
-        const response = await proxyFetch(`${apiUrl}/api/note-recording-config`, {
-          headers: authHeader,
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            return { success: false, error: "Session expired", code: "AUTH_EXPIRED" };
-          }
-          throw new Error(`API error: ${response.status}`);
+        const allowedPath = resolveAllowedAudioPath(filePath);
+        if (!allowedPath) {
+          return { success: false, error: "Audio path is not approved", code: "INVALID_REQUEST" };
         }
-
-        const data = await response.json();
-        return { success: true, ...data };
+        const sourceBuffer = fs.readFileSync(allowedPath);
+        const { prepareCloudSttAudio, getAudioDurationSeconds } = require("./ffmpegUtils");
+        const durationSeconds = await getAudioDurationSeconds(allowedPath);
+        const prepared = await prepareCloudSttAudio(sourceBuffer, {
+          hintExt: path.extname(allowedPath).slice(1) || "mp3",
+        });
+        await this._runDesktopSync({ pull: false, maxPushBatches: 2, bestEffort: true });
+        return await transcribeWithVoiceLab({
+          buffer: prepared.buffer,
+          source: "dictate-upload",
+          durationMs: Math.round(durationSeconds * 1000),
+          language: options.language ?? null,
+          contentType: prepared.contentType,
+          fileName: prepared.fileName,
+          onProgress: (payload) => event.sender.send("upload-transcription-progress", payload),
+        });
       } catch (error) {
-        debugLogger.error("Note recording config fetch error:", error);
-        return null;
+        return typeof error?.toPublic === "function"
+          ? error.toPublic()
+          : {
+              success: false,
+              error: error.message || "VoiceLab upload failed",
+              code: "BACKEND_FAILED",
+            };
       }
     });
-
-this._handle("transcribe-audio-file-cloud", async (event, filePath, options = {}) => {
-  let operation = null;
-  try {
-    if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
-    const allowedPath = resolveAllowedAudioPath(filePath);
-    if (!allowedPath) {
-      return { success: false, error: "Audio path is not approved", code: "INVALID_REQUEST" };
-    }
-    const sourceBuffer = fs.readFileSync(allowedPath);
-    const { prepareAishaSttAudio, getAudioDurationSeconds } = require("./ffmpegUtils");
-    const durationSeconds = await getAudioDurationSeconds(allowedPath);
-    const prepared = await prepareAishaSttAudio(sourceBuffer, {
-      hintExt: path.extname(allowedPath).slice(1) || "mp3",
-    });
-    await this._runDesktopSync({ pull: false, maxPushBatches: 2, bestEffort: true });
-    operation = await this.voiceLabApiClient.beginDictation({
-      audioBuffer: prepared.buffer,
-      source: "dictate-upload",
-      durationMs: Math.round(durationSeconds * 1000),
-      language: options.language ?? null,
-    });
-    let result;
-    if (prepared.buffer.length > CLOUD_INLINE_LIMIT) {
-      const chunked = await chunkedCloudTranscribe({
-        buffer: prepared.buffer,
-        apiUrl: "",
-        authHeader: {},
-        inputExt: prepared.fileName.split(".").pop(),
-        onProgress: (payload) => event.sender.send("upload-transcription-progress", payload),
-        concurrencyLimit: 1,
-        requestChunk: (chunkBuffer, index, total) =>
-          this.voiceLabApiClient.sendDictationChunk(
-            operation,
-            chunkBuffer,
-            {
-              source: "dictate-upload",
-              language: options.language ?? null,
-              contentType: "audio/mpeg",
-              fileName: `upload-${index}.mp3`,
-            },
-            index,
-            total
-          ),
-      });
-      const last = chunked.lastResponse || {};
-      result = { ...last, result: { ...(last.result || {}), text: chunked.text } };
-    } else {
-      result = await this.voiceLabApiClient.sendDictationChunk(operation, prepared.buffer, {
-        source: "dictate-upload",
-        language: options.language ?? null,
-        contentType: prepared.contentType,
-        fileName: prepared.fileName,
-      });
-    }
-    const response = await this.voiceLabApiClient.publicResult(result, operation.operationId);
-    this.voiceLabApiClient.finishDictation(operation);
-    return response;
-  } catch (error) {
-    if (operation) this.voiceLabApiClient?.failDictation(operation, error);
-    return typeof error?.toPublic === "function"
-      ? error.toPublic()
-      : { success: false, error: error.message || "VoiceLab upload failed", code: "BACKEND_FAILED" };
-  }
-});
 
     this._handle("get-referral-stats", async (event) => {
       try {
@@ -6884,7 +5702,7 @@ this._handle("transcribe-audio-file-cloud", async (event, filePath, options = {}
       }
     });
 
-    this._handle("open-whisper-models-folder", async () => {
+    this._handle("open-model-cache-folder", async () => {
       try {
         const { getCacheRoot } = require("./modelDirUtils");
         const cacheRoot = getCacheRoot();
@@ -7011,7 +5829,6 @@ this._handle("transcribe-audio-file-cloud", async (event, filePath, options = {}
 
     this._handle("assemblyai-streaming-warmup", async (event, options = {}) => {
       try {
-
         if (!this.assemblyAiStreaming) {
           this.assemblyAiStreaming = new AssemblyAiStreaming();
         }
@@ -7050,7 +5867,6 @@ this._handle("transcribe-audio-file-cloud", async (event, filePath, options = {}
 
       streamingStartInProgress = true;
       try {
-
         const win = BrowserWindow.fromWebContents(event.sender);
 
         if (!this.assemblyAiStreaming) {
@@ -7126,20 +5942,6 @@ this._handle("transcribe-audio-file-cloud", async (event, filePath, options = {}
       }
     });
 
-    ipcMain.on("assemblyai-streaming-send", (event, audioBuffer) => {
-      try {
-        if (!this.assemblyAiStreaming) return;
-        const buffer = Buffer.from(audioBuffer);
-        this.assemblyAiStreaming.sendAudio(buffer);
-      } catch (error) {
-        debugLogger.error("AssemblyAI streaming send error", { error: error.message });
-      }
-    });
-
-    ipcMain.on("assemblyai-streaming-force-endpoint", () => {
-      this.assemblyAiStreaming?.forceEndpoint();
-    });
-
     this._handle("assemblyai-streaming-stop", async () => {
       try {
         let result = { text: "" };
@@ -7179,7 +5981,6 @@ this._handle("transcribe-audio-file-cloud", async (event, filePath, options = {}
 
     this._handle("deepgram-streaming-warmup", async (event, options = {}) => {
       try {
-
         const win = BrowserWindow.fromWebContents(event.sender);
         if (win && !win.isDestroyed()) {
           deepgramTokenWindowId = win.id;
@@ -7219,7 +6020,6 @@ this._handle("transcribe-audio-file-cloud", async (event, filePath, options = {}
     });
 
     let deepgramStreamingStartInProgress = false;
-    let sendDropCount = 0;
 
     this._handle("deepgram-streaming-start", async (event, options = {}) => {
       if (deepgramStreamingStartInProgress) {
@@ -7233,7 +6033,6 @@ this._handle("transcribe-audio-file-cloud", async (event, filePath, options = {}
 
       deepgramStreamingStartInProgress = true;
       try {
-
         const win = BrowserWindow.fromWebContents(event.sender);
         if (win && !win.isDestroyed()) {
           deepgramTokenWindowId = win.id;
@@ -7289,7 +6088,6 @@ this._handle("transcribe-audio-file-cloud", async (event, filePath, options = {}
           }
         };
 
-        sendDropCount = 0;
         await this.deepgramStreaming.connect({ ...options, token });
         debugLogger.debug(
           "Deepgram streaming started",
@@ -7315,46 +6113,6 @@ this._handle("transcribe-audio-file-cloud", async (event, filePath, options = {}
       } finally {
         deepgramStreamingStartInProgress = false;
       }
-    });
-
-    ipcMain.on("deepgram-streaming-send", (event, audioBuffer) => {
-      try {
-        if (!this.deepgramStreaming) return;
-        const buffer = Buffer.from(audioBuffer);
-        const sent = this.deepgramStreaming.sendAudio(buffer);
-        if (!sent) {
-          sendDropCount++;
-          if (sendDropCount <= 3 || sendDropCount % 50 === 0) {
-            debugLogger.warn(
-              "Deepgram audio send dropped",
-              {
-                dropCount: sendDropCount,
-                hasWs: !!this.deepgramStreaming.ws,
-                isConnected: this.deepgramStreaming.isConnected,
-                wsReadyState: this.deepgramStreaming.ws?.readyState,
-              },
-              "streaming"
-            );
-          }
-        } else {
-          if (sendDropCount > 0) {
-            debugLogger.debug(
-              "Deepgram audio send resumed after drops",
-              {
-                previousDrops: sendDropCount,
-              },
-              "streaming"
-            );
-            sendDropCount = 0;
-          }
-        }
-      } catch (error) {
-        debugLogger.error("Deepgram streaming send error", { error: error.message });
-      }
-    });
-
-    ipcMain.on("deepgram-streaming-finalize", () => {
-      this.deepgramStreaming?.finalize();
     });
 
     this._handle("deepgram-streaming-stop", async () => {
@@ -7439,14 +6197,6 @@ this._handle("transcribe-audio-file-cloud", async (event, filePath, options = {}
         debugLogger.error("Corti streaming start error", { error: error.message }, "streaming");
         return { success: false, error: error.message, code: error.code };
       }
-    });
-
-    ipcMain.on("corti-streaming-send", (_event, audioBuffer) => {
-      this.cortiStreaming?.sendAudio(Buffer.from(audioBuffer));
-    });
-
-    ipcMain.on("corti-streaming-finalize", () => {
-      this.cortiStreaming?.finalize();
     });
 
     this._handle("corti-streaming-stop", async () => {

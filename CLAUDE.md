@@ -4,7 +4,7 @@ This document provides comprehensive technical details about the OpenWhispr proj
 
 ## Project Overview
 
-OpenWhispr is an Electron-based desktop dictation application that uses whisper.cpp for speech-to-text transcription. It supports both local (privacy-focused) and cloud (OpenAI API) processing modes.
+OpenWhispr is the Electron desktop client for VoiceLab. Speech transcription is account-based and cloud-only through the authenticated VoiceLab Desktop Dictate API.
 
 ## Architecture Overview
 
@@ -14,7 +14,7 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
 - **Desktop Framework**: Electron 41 with context isolation
 - **Database**: better-sqlite3 for local transcription history
 - **UI Components**: shadcn/ui with Radix primitives
-- **Speech Processing**: whisper.cpp + NVIDIA Parakeet (via sherpa-onnx) + OpenAI API
+- **Speech Processing**: VoiceLab Desktop Dictate operations charged to the signed-in account's AI Credits wallet
 - **Audio Processing**: FFmpeg (bundled via ffmpeg-static)
 - **Node.js**: 24 (pinned in `.nvmrc` — CI uses Node 24, do NOT regenerate `package-lock.json` with a different major version)
 
@@ -32,7 +32,8 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
    - ONNX Utility Process: hosts all `onnxruntime-node` inference (text embeddings, speaker embeddings, fbank). Lazy-spawned on first use via `src/helpers/onnxWorkerClient.js` → `src/workers/onnxWorker.js`. Native crashes (e.g., ORT `bad_alloc`) confine to the worker; main process rejects in-flight requests and respawns with backoff. Stopped in `will-quit`.
 
 3. **Audio Pipeline**:
-   - MediaRecorder API → Blob → ArrayBuffer → IPC → File → whisper.cpp
+   - MediaRecorder API → Blob → restricted IPC → FFmpeg normalization → VoiceLab Dictate operation
+   - Desktop bearer authentication and server-authoritative AI Credits billing
    - Automatic cleanup of temporary files after processing
 
 ## File Structure and Responsibilities
@@ -49,7 +50,7 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
 - **windows-system-audio-helper.c**: C source for WASAPI process-loopback system audio capture (meeting transcription). Excludes OpenWhispr's own process tree, so it hears every app on every output device. Requires Windows 10 2004+; falls back to Chromium display-media loopback when unavailable. Outputs 24 kHz mono s16le PCM on stdout, line-delimited JSON events on stderr (same protocol as linux-system-audio-helper)
 - **macos-mic-listener.swift**: Swift source for CoreAudio mic property listener (event-driven mic detection)
 - **globe-listener.swift**: Swift source for macOS Globe/Fn key detection
-- **bin/**: Directory for compiled native binaries (whisper-cpp, nircmd, key/mic listeners)
+- **bin/**: Directory for compiled native helpers (nircmd, key/mic listeners, diarization)
 
 ### Helper Modules (src/helpers/)
 
@@ -120,9 +121,8 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
   - Reset to normal interval on success
 - **menuManager.js**: Application menu management
 - **tray.js**: System tray icon and menu
-- **whisper.js**: Local whisper.cpp integration and model management
-- **parakeet.js**: NVIDIA Parakeet model management via sherpa-onnx
-- **parakeetServer.js**: sherpa-onnx CLI wrapper for transcription
+- **voiceLabApiClient.js**: authenticated wallet, Dictate operation, polling, retry, and idempotency boundary
+- **desktopAuthManager.js**: browser authorization-code flow, refresh rotation, and desktop bearer sessions
 - **qdrantManager.js**: Qdrant vector DB sidecar process lifecycle (spawn, health check, shutdown)
 - **localEmbeddings.js**: Local text embedding via ONNX Runtime + all-MiniLM-L6-v2 (384-dim vectors)
 - **vectorIndex.js**: Qdrant collection management — upsert, delete, search, batch reindex
@@ -153,7 +153,6 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
   - `openSoundInputSettings()`: Opens OS sound input device settings
   - `openAccessibilitySettings()`: Opens OS accessibility settings (macOS only)
 - **useSettings.ts**: Application settings management
-- **useWhisper.ts**: Whisper binary availability check
 
 ### Services
 
@@ -163,37 +162,11 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
   - Per-scope LLM config: 4 scopes (`dictationCleanup`, `dictationAgent`, `noteFormatting`, `chatIntelligence`) defined in `src/config/inferenceScopes.ts`
   - `selectResolvedLLMConfig(state, scope)` in `settingsStore.ts` resolves provider/model per scope with fallback chains
 
-### whisper.cpp Integration
+### VoiceLab Dictate Integration
 
-- **whisper.js**: Native binary wrapper for local transcription
-  - Bundled binaries in `resources/bin/whisper-cpp-{platform}-{arch}`
-  - Falls back to system installation (`brew install whisper-cpp`)
-  - GGML model downloads from HuggingFace
-  - Models stored in `~/.cache/openwhispr/whisper-models/`
-
-### NVIDIA Parakeet Integration (via sherpa-onnx)
-
-- **parakeet.js**: Model management for NVIDIA Parakeet ASR models
-  - Uses sherpa-onnx runtime for cross-platform ONNX inference
-  - Bundled binaries in `resources/bin/sherpa-onnx-{platform}-{arch}`
-  - INT8 quantized models for efficient CPU inference
-  - Models stored in `~/.cache/openwhispr/parakeet-models/`
-  - Server pre-warming on startup when `LOCAL_TRANSCRIPTION_PROVIDER=nvidia` is set
-  - Provider preference persisted to `.env` via `saveAllKeysToEnvFile()` on server start/stop
-
-- **Available Models**:
-  - `parakeet-tdt-0.6b-v3`: Multilingual (25 languages), ~680MB
-  - `parakeet-unified-en-0.6b`: English-only, ~631MB, state-of-the-art EN accuracy (5.91% avg WER on Open ASR Leaderboard)
-  - `nemotron-speech-streaming-en-0.6b`: English-only, ~632MB, cache-aware streaming FastConformer (`"runtime": "online"` in the registry)
-  - `nemotron-3.5-asr-streaming-0.6b`: Multilingual (15 transcription-ready languages, auto detection), ~650MB, cache-aware streaming FastConformer (`"runtime": "online"`)
-
-- **Runtimes**: Models are `offline` (default) or `online` per their registry `runtime` field. Offline models use the bundled `sherpa-onnx-ws-{platform}-{arch}` (offline websocket server); online models use `sherpa-onnx-online-ws-{platform}-{arch}` (online websocket server). Both are downloaded by `scripts/download-sherpa-onnx.js`. Partial/final JSON results are merged by `parakeetWsResult.js`.
-
-- **Streaming Commit (online models)**: For online-runtime models, dictation streams worklet PCM to a persistent websocket stream during capture (regardless of the preview toggle) and commits the flushed text at stop as the final transcript — no second decode of the recording. The stop flush is truncation-aware (`finish()` extends its deadline while results keep arriving and flags `truncated`); anything but a clean flush falls back to the record-then-transcribe path (`transcribe-local-parakeet`), which for online models decodes the whole recording over a single stream (no 15s segmentation; segments only bound memory for very long files).
-
-- **Live Transcription Preview**: When the preview toggle is on and an online-runtime model is selected, the preview shares the streaming-commit websocket: partial results update the preview window live (replacing text via `showTranscriptionPreview`). Offline models keep the 1.5s buffered-chunk path (appending via `appendTranscriptionPreview`). If the stream can't start or dies mid-dictation, the preview falls back to the chunked path and the final transcript falls back to the full decode. Tests: `test/helpers/parakeetOnlineStream.test.js` (mock websocket server).
-
-- **Download URLs**: Models from sherpa-onnx ASR models release on GitHub
+- Desktop speech transcription is cloud-only through the authenticated VoiceLab Desktop API.
+- No local STT server, speech model download, or transcription API key is supported.
+- sherpa-onnx remains available only for optional speaker diarization; its ASR websocket servers are not downloaded or packaged.
 
 ### Local Semantic Search (Qdrant + MiniLM)
 
@@ -226,12 +199,11 @@ Always-on offline semantic search that finds notes by meaning, not just keywords
 
 ### Build Scripts (scripts/)
 
-- **download-whisper-cpp.js**: Downloads whisper.cpp binaries from GitHub releases
 - **download-llama-server.js**: Downloads llama.cpp server for local LLM inference
 - **download-nircmd.js**: Downloads nircmd.exe for Windows clipboard operations
 - **download-windows-key-listener.js**: Downloads prebuilt Windows key listener binary
 - **download-windows-mic-listener.js**: Downloads prebuilt Windows mic listener binary
-- **download-sherpa-onnx.js**: Downloads sherpa-onnx binaries for Parakeet support
+- **download-sherpa-onnx.js**: Downloads sherpa-onnx binaries for speaker diarization
 - **download-qdrant.js**: Downloads Qdrant vector DB binary for local semantic search
 - **download-minilm.js**: Downloads all-MiniLM-L6-v2 ONNX model + tokenizer for local embeddings
 - **build-globe-listener.js**: Compiles macOS Globe key listener from Swift source
@@ -260,22 +232,16 @@ FFmpeg is bundled with the app and doesn't require system installation:
 1. User presses hotkey → MediaRecorder starts
 2. Audio chunks collected in array
 3. User presses hotkey again → Recording stops
-4. Blob created from chunks → Converted to ArrayBuffer
-5. Sent via IPC
-6. Main process writes to temporary file
-7. whisper.cpp processes file → Result sent back
-8. Temporary file deleted
+4. Blob created from chunks and sent through the restricted preload bridge
+5. Main process normalizes audio with FFmpeg
+6. `VoiceLabApiClient` reads the authoritative wallet, submits an idempotent Dictate operation, and polls it to completion
+7. Result is returned to the renderer; VoiceLab charges the signed-in account's AI Credits wallet
 
-### 3. Local Whisper Models (GGML format)
+### 3. VoiceLab Dictate
 
-Models stored in `~/.cache/openwhispr/whisper-models/`:
-
-- tiny: ~75MB (fastest, lowest quality)
-- base: ~142MB (recommended balance)
-- small: ~466MB (better quality)
-- medium: ~1.5GB (high quality)
-- large: ~3GB (best quality)
-- turbo: ~1.6GB (fast with good quality)
+- No local speech model or speech API key is supported.
+- The backend publishes language, duration, concurrency, device, and rolling-credit limits through `GET /api/v1/desktop/wallet/`.
+- Audio is submitted to `POST /api/v1/desktop/dictation/operations/`; long audio uses one logical operation with deterministic chunk idempotency keys.
 
 ### 4. Database Schema
 
@@ -296,8 +262,6 @@ CREATE TABLE transcriptions (
 
 Settings stored in localStorage with these keys:
 
-- `whisperModel`: Selected Whisper model
-- `useLocalWhisper`: Boolean for local vs cloud
 - `language`: Selected language code
 - `agentName`: User's custom agent name
 - `reasoningModel`: Selected AI model for processing
@@ -306,12 +270,7 @@ Settings stored in localStorage with these keys:
 - `hasCompletedOnboarding`: Onboarding completion flag
 - `customDictionary`: JSON array of words/phrases for improved transcription accuracy
 
-Secret env vars (12 total: 7 BYOK API keys + 5 enterprise cloud creds — see `SECRET_KEYS` in `environment.js`) are encrypted at rest via Electron `safeStorage` and stored as per-key files under `userData/secure-keys/`. They are loaded into `process.env` at startup by `EnvironmentManager.init()`. Renderer reads them via IPC (`get-*-key`) and writes via debounced IPC (`save-*-key`). On Linux without a keyring, secrets fall back to plaintext.
-
-Non-secret env vars persisted to `.env` (via `saveAllKeysToEnvFile()`):
-
-- `LOCAL_TRANSCRIPTION_PROVIDER`: Transcription engine (`nvidia` for Parakeet)
-- `PARAKEET_MODEL`: Selected Parakeet model name (e.g., `parakeet-tdt-0.6b-v3`)
+Optional reasoning-provider secrets are encrypted at rest via Electron `safeStorage` and remain behind main-process IPC boundaries. VoiceLab speech transcription uses the desktop bearer session instead of a provider key.
 
 ### 6. Language Support
 
@@ -319,7 +278,7 @@ Non-secret env vars persisted to `.env` (via `saveAllKeysToEnvFile()`):
 
 - Each language has a two-letter code and label
 - "auto" for automatic detection
-- Passed to whisper.cpp via -l parameter
+- Validated against the authoritative `supported_languages` wallet capability and sent unchanged to VoiceLab Dictate
 
 ### 7. Agent Naming System
 
@@ -472,15 +431,14 @@ Improve transcription accuracy for specific words, names, or technical terms:
 
 - User adds words/phrases through Settings → Custom Dictionary
 - Words stored as JSON array in localStorage (`customDictionary` key)
-- On transcription, words are joined and passed as `prompt` parameter to Whisper
-- Works with both local whisper.cpp and cloud OpenAI Whisper API
+- Active account dictionary entries are synchronized and attached through the VoiceLab desktop contract
 
 **Implementation**:
 
 - `src/hooks/useSettings.ts`: Manages `customDictionary` state
 - `src/components/SettingsPage.tsx`: UI for adding/removing dictionary words
-- `src/helpers/audioManager.js`: Reads dictionary and adds to transcription options
-- `src/helpers/whisperServer.js`: Includes dictionary as `prompt` in API request
+- `src/helpers/audioManager.js`: Selects the requested source language and cloud route
+- `src/helpers/voiceLabApiClient.js`: Owns authenticated Dictate requests
 
 **Whisper Prompt Parameter**:
 
@@ -665,12 +623,11 @@ const { t } = useTranslation();
 
 ### Testing Checklist
 
-- [ ] Test both local and cloud processing modes
+- [ ] Test signed-in VoiceLab dictation and signed-out authentication gating
 - [ ] Verify hotkey works globally
 - [ ] Check clipboard pasting on all platforms
 - [ ] Test with different audio input devices
-- [ ] Verify whisper.cpp binary detection
-- [ ] Test all Whisper models
+- [ ] Verify AI Credits and plan-limit errors open VoiceLab Billing
 - [ ] Check agent naming functionality
 - [ ] Test custom dictionary with uncommon words
 - [ ] Verify Windows Push-to-Talk with compound hotkeys
@@ -692,9 +649,9 @@ const { t } = useTranslation();
    - Check audio levels in debug logs
 
 2. **Transcription Fails**:
-   - Ensure whisper.cpp binary is available
-   - Check model is downloaded
-   - Check temporary file creation
+   - Verify the VoiceLab session is authenticated
+   - Check AI Credits and plan entitlement in Billing
+   - Check VoiceLab API reachability and temporary file creation
    - Verify FFmpeg is executable
 
 3. **Clipboard Not Working**:
@@ -709,8 +666,6 @@ const { t } = useTranslation();
    - Use `npm run pack` for unsigned builds (CSC_IDENTITY_AUTO_DISCOVERY=false)
    - Signing requires Apple Developer account
    - ASAR unpacking needed for FFmpeg
-   - Run `npm run download:whisper-cpp` before packaging (current platform)
-   - Use `npm run download:whisper-cpp:all` for multi-platform packaging
    - afterSign.js automatically skips signing when CSC_IDENTITY_AUTO_DISCOVERY=false
    - **Lockfile**: Always use Node 24 when running `npm install` (matches CI). If your local Node version differs, use `nvm exec 24 npm install`. Running `npm install` with a different major version will produce an incompatible `package-lock.json` that breaks `npm ci` in CI.
 
@@ -744,7 +699,7 @@ const { t } = useTranslation();
 - Uses AppleScript for reliable pasting
 - Notarization needed for distribution
 - Shows in dock with indicator dot when running (LSUIElement: false)
-- whisper.cpp bundled for both arm64 and x64
+- VoiceLab cloud transcription; no local STT binary is bundled
 - System settings accessible via `x-apple.systempreferences:` URL scheme
 
 **Windows**:
@@ -753,7 +708,7 @@ const { t } = useTranslation();
 - Microphone privacy settings at `ms-settings:privacy-microphone`
 - Sound settings at `ms-settings:sound`
 - NSIS installer for distribution
-- whisper.cpp bundled for x64
+- VoiceLab cloud transcription; no local STT binary is bundled
 - **Push-to-Talk**: Native key listener binary (`windows-key-listener.exe`) enables true push-to-talk
   - Uses Windows Low-Level Keyboard Hook (`WH_KEYBOARD_LL`)
   - Supports compound hotkeys (e.g., `Ctrl+Shift+F11`)
@@ -765,7 +720,7 @@ const { t } = useTranslation();
 - Multiple package manager support
 - Standard XDG directories
 - AppImage for distribution
-- whisper.cpp bundled for x64
+- VoiceLab cloud transcription; no local STT binary is bundled
 - No standardized URL scheme for system settings (user must open manually)
 - Privacy settings button hidden in UI (not applicable on Linux)
 - Recommend `pavucontrol` for audio device management

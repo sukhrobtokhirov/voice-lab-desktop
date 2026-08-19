@@ -15,18 +15,18 @@ export type RecordingRecoveryAction = "auth" | "billing" | "local" | "retry" | n
 
 const COPY: Record<string, Record<string, RecoveryCopy>> = {
   en: {
-    INSUFFICIENT_CREDITS: { title: "More AI Credits needed", description: "Add credits or use local transcription for this recording." },
+    INSUFFICIENT_CREDITS: { title: "More AI Credits needed", description: "Add credits or choose a plan, then try again." },
     ENTITLEMENT_REQUIRED: { title: "Dictate is not included", description: "Open billing to choose a plan that includes VoiceLab Dictate." },
     AUTH_EXPIRED: { title: "Sign in again", description: "Your session ended. Sign in again to continue with VoiceLab Cloud." },
-    AUTH_REQUIRED: { title: "Sign in to continue", description: "Connect your VoiceLab account, or switch to local transcription." },
+    AUTH_REQUIRED: { title: "Sign in to continue", description: "Connect your VoiceLab account to start dictating." },
     DEVICE_LIMIT: { title: "Too many connected devices", description: "Remove a device from your account, then try again." },
     CONCURRENCY_LIMIT: { title: "Another recording is being processed", description: "Wait for it to finish, then try again." },
-    DAILY_CAP_REACHED: { title: "Today’s cloud allowance is used", description: "Try again tomorrow or continue with local transcription." },
+    DAILY_CAP_REACHED: { title: "Today’s cloud allowance is used", description: "Try again tomorrow or manage your VoiceLab plan." },
     RATE_LIMITED: { title: "Please wait a moment", description: "VoiceLab received several requests at once. Try again shortly." },
     AUDIO_LIMIT_EXCEEDED: { title: "Recording is too long", description: "Shorten the recording or process it locally." },
     IDEMPOTENCY_CONFLICT: { title: "This recording could not be resumed", description: "Start a new recording and try again." },
     SERVICE_UNAVAILABLE: { title: "VoiceLab is temporarily unavailable", description: "Your recording was not charged. Try again shortly." },
-    VOICELAB_STREAMING_DISABLED: { title: "Cloud live mode is unavailable", description: "Use regular Dictate, local transcription, or your own provider." },
+    VOICELAB_STREAMING_DISABLED: { title: "Cloud live mode is unavailable", description: "Use regular VoiceLab Dictate." },
   },
   uz: {
     INSUFFICIENT_CREDITS: { title: "Ko‘proq AI Credit kerak", description: "Credit qo‘shing yoki bu yozuvni lokal rejimda ishlating." },
@@ -107,10 +107,11 @@ export function getRecordingErrorTitle(error: RecordingError, t: TFunction): str
   const copy = getCopy(error.code);
   if (copy) return copy.title;
   if (error.code === "NETWORK_ERROR") return t(error.title);
-  if (error.code === "API_KEY_MISSING") return t("settingsPage.account.aishaKey.missingTitle");
+  if (error.code === "API_KEY_MISSING")
+    return t("settingsPage.account.voiceLabAccount.missingTitle");
   if (error.code === "OFFLINE") return t("hooks.audioRecording.errorTitles.offline");
   if (error.code === "LIMIT_REACHED")
-    return t("hooks.audioRecording.errorTitles.aishaBillingFailed");
+    return t("hooks.audioRecording.errorTitles.walletInsufficient");
   if (error.code === "PROVIDER_RATE_LIMITED")
     return t("hooks.audioRecording.errorTitles.providerRateLimited");
   return error.title;

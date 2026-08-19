@@ -116,10 +116,11 @@ const getMeetingTranscriptionOptions = () => {
   const state = getSettings();
   const language = getBaseLanguageCode(state.preferredLanguage);
 
-  // Aisha realtime is not wired — buffer locally and send chunks to Aisha STT.
+  // VoiceLab Desktop currently exposes batch STT, so buffer meeting audio locally
+  // and submit short chunks through authenticated Desktop Dictate operations.
   return {
     provider: "local" as const,
-    localProvider: "aisha",
+    localProvider: "voicelab",
     localModel: "voicelab-cloud",
     language,
   };

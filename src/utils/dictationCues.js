@@ -8,6 +8,8 @@ const NOTE_GAP_SECONDS = 0.025;
 const NOTE_ATTACK_SECONDS = 0.015;
 const MAX_GAIN = 0.2;
 const MIN_GAIN = 0.0001;
+const CUE_START_DELAY_SECONDS = 0.005;
+const CUE_TAIL_SECONDS = 0.02;
 
 let audioContext = null;
 
@@ -71,7 +73,7 @@ const scheduleTone = (context, frequency, startTime) => {
 
 const isEnabled = () => getSettings().audioCuesEnabled;
 
-const playCue = async (notes) => {
+const playCue = async (notes, { waitForCompletion = false } = {}) => {
   try {
     if (!isEnabled()) return;
 
@@ -80,11 +82,20 @@ const playCue = async (notes) => {
       return;
     }
 
-    const baseTime = context.currentTime + 0.005;
+    const baseTime = context.currentTime + CUE_START_DELAY_SECONDS;
     notes.forEach((frequency, index) => {
       const noteStart = baseTime + index * (NOTE_DURATION_SECONDS + NOTE_GAP_SECONDS);
       scheduleTone(context, frequency, noteStart);
     });
+
+    if (waitForCompletion) {
+      const cueDurationSeconds =
+        CUE_START_DELAY_SECONDS +
+        (notes.length - 1) * (NOTE_DURATION_SECONDS + NOTE_GAP_SECONDS) +
+        NOTE_DURATION_SECONDS +
+        CUE_TAIL_SECONDS;
+      await new Promise((resolve) => setTimeout(resolve, Math.ceil(cueDurationSeconds * 1000)));
+    }
   } catch (error) {
     logger.debug(
       "Failed to play dictation cue",
@@ -94,6 +105,7 @@ const playCue = async (notes) => {
   }
 };
 
-export const playStartCue = () => playCue(START_NOTES);
+// Wait for the start cue so the microphone recording never contains the cue itself.
+export const playStartCue = () => playCue(START_NOTES, { waitForCompletion: true });
 
 export const playStopCue = () => playCue(STOP_NOTES);

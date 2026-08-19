@@ -104,6 +104,27 @@ function migrateMeetingFollowFlags() {
 
 migrateMeetingFollowFlags();
 
+// VoiceLab Desktop is cloud-only. Overwrite legacy local/BYOK choices before
+// the store hydrates so an existing installation cannot route audio elsewhere.
+function enforceVoiceLabCloudTranscription() {
+  if (!isBrowser) return;
+  for (const key of ["useLocalWhisper", "meetingUseLocalWhisper", "uploadUseLocalWhisper"]) {
+    localStorage.setItem(key, "false");
+  }
+  for (const key of ["transcriptionMode", "meetingTranscriptionMode", "uploadTranscriptionMode"]) {
+    localStorage.setItem(key, "openwhispr");
+  }
+  for (const key of [
+    "cloudTranscriptionMode",
+    "meetingCloudTranscriptionMode",
+    "uploadCloudTranscriptionMode",
+  ]) {
+    localStorage.setItem(key, "openwhispr");
+  }
+}
+
+enforceVoiceLabCloudTranscription();
+
 const BOOLEAN_SETTINGS = new Set([
   "useLocalWhisper",
   "meetingUseLocalWhisper",
@@ -899,7 +920,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     API_ENDPOINTS.TRANSCRIPTION_BASE
   ),
   cloudTranscriptionMode: readString("cloudTranscriptionMode", "openwhispr"),
-  useLocalWhisper: readBoolean("useLocalWhisper", false),
+  useLocalWhisper: false,
   cleanupCloudMode: readString("cleanupCloudMode", "openwhispr"),
   cleanupCloudBaseUrl: readString("cleanupCloudBaseUrl", API_ENDPOINTS.OPENAI_BASE),
   cortiEnvironment: readString("cortiEnvironment", "us"),
@@ -1067,13 +1088,13 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   })(),
   cleanupRemoteUrl: readString("cleanupRemoteUrl", ""),
 
-  meetingTranscriptionMode: readInferenceMode("meetingTranscriptionMode", "openwhispr"),
-  meetingUseLocalWhisper: readBoolean("meetingUseLocalWhisper", false),
+  meetingTranscriptionMode: "openwhispr",
+  meetingUseLocalWhisper: false,
   meetingWhisperModel: readString("meetingWhisperModel", ""),
-  meetingLocalTranscriptionProvider: (readString("meetingLocalTranscriptionProvider", "whisper") ===
-  "nvidia"
-    ? "nvidia"
-    : "whisper") as LocalTranscriptionProvider,
+  meetingLocalTranscriptionProvider: (() => {
+    const value = readString("meetingLocalTranscriptionProvider", "whisper");
+    return value === "nvidia" || value === "voicelab" ? value : "whisper";
+  })() as LocalTranscriptionProvider,
   meetingParakeetModel: readString("meetingParakeetModel", ""),
   meetingCloudTranscriptionProvider: readString("meetingCloudTranscriptionProvider", ""),
   meetingCloudTranscriptionModel: readString("meetingCloudTranscriptionModel", ""),
@@ -1085,8 +1106,8 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   })(),
   meetingRemoteTranscriptionUrl: readString("meetingRemoteTranscriptionUrl", ""),
 
-  uploadTranscriptionMode: readInferenceMode("uploadTranscriptionMode", "openwhispr"),
-  uploadUseLocalWhisper: readBoolean("uploadUseLocalWhisper", false),
+  uploadTranscriptionMode: "openwhispr",
+  uploadUseLocalWhisper: false,
   uploadWhisperModel: readString("uploadWhisperModel", ""),
   uploadLocalTranscriptionProvider: (readString("uploadLocalTranscriptionProvider", "whisper") ===
   "nvidia"
@@ -1147,7 +1168,10 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     return active ? [active] : [];
   })(),
 
-  setTranscriptionMode: createStringSetter("transcriptionMode") as (mode: InferenceMode) => void,
+  setTranscriptionMode: () => {
+    if (isBrowser) localStorage.setItem("transcriptionMode", "openwhispr");
+    set({ transcriptionMode: "openwhispr" });
+  },
   setRemoteTranscriptionType: createStringSetter("remoteTranscriptionType") as (
     type: SelfHostedType
   ) => void,
@@ -1156,10 +1180,14 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setCleanupMode: createStringSetter("cleanupMode") as (mode: InferenceMode) => void,
   setCleanupRemoteUrl: createStringSetter("cleanupRemoteUrl"),
 
-  setMeetingTranscriptionMode: createStringSetter("meetingTranscriptionMode") as (
-    mode: InferenceMode
-  ) => void,
-  setMeetingUseLocalWhisper: createBooleanSetter("meetingUseLocalWhisper"),
+  setMeetingTranscriptionMode: () => {
+    if (isBrowser) localStorage.setItem("meetingTranscriptionMode", "openwhispr");
+    set({ meetingTranscriptionMode: "openwhispr" });
+  },
+  setMeetingUseLocalWhisper: () => {
+    if (isBrowser) localStorage.setItem("meetingUseLocalWhisper", "false");
+    set({ meetingUseLocalWhisper: false });
+  },
   setMeetingWhisperModel: createStringSetter("meetingWhisperModel"),
   setMeetingLocalTranscriptionProvider: (value: LocalTranscriptionProvider) => {
     if (isBrowser) localStorage.setItem("meetingLocalTranscriptionProvider", value);
@@ -1169,16 +1197,23 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setMeetingCloudTranscriptionProvider: createStringSetter("meetingCloudTranscriptionProvider"),
   setMeetingCloudTranscriptionModel: createStringSetter("meetingCloudTranscriptionModel"),
   setMeetingCloudTranscriptionBaseUrl: createStringSetter("meetingCloudTranscriptionBaseUrl"),
-  setMeetingCloudTranscriptionMode: createStringSetter("meetingCloudTranscriptionMode"),
+  setMeetingCloudTranscriptionMode: () => {
+    if (isBrowser) localStorage.setItem("meetingCloudTranscriptionMode", "openwhispr");
+    set({ meetingCloudTranscriptionMode: "openwhispr" });
+  },
   setMeetingRemoteTranscriptionType: createStringSetter("meetingRemoteTranscriptionType") as (
     type: SelfHostedType
   ) => void,
   setMeetingRemoteTranscriptionUrl: createStringSetter("meetingRemoteTranscriptionUrl"),
 
-  setUploadTranscriptionMode: createStringSetter("uploadTranscriptionMode") as (
-    mode: InferenceMode
-  ) => void,
-  setUploadUseLocalWhisper: createBooleanSetter("uploadUseLocalWhisper"),
+  setUploadTranscriptionMode: () => {
+    if (isBrowser) localStorage.setItem("uploadTranscriptionMode", "openwhispr");
+    set({ uploadTranscriptionMode: "openwhispr" });
+  },
+  setUploadUseLocalWhisper: () => {
+    if (isBrowser) localStorage.setItem("uploadUseLocalWhisper", "false");
+    set({ uploadUseLocalWhisper: false });
+  },
   setUploadWhisperModel: createStringSetter("uploadWhisperModel"),
   setUploadLocalTranscriptionProvider: (value: LocalTranscriptionProvider) => {
     if (isBrowser) localStorage.setItem("uploadLocalTranscriptionProvider", value);
@@ -1188,7 +1223,10 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setUploadCloudTranscriptionProvider: createStringSetter("uploadCloudTranscriptionProvider"),
   setUploadCloudTranscriptionModel: createStringSetter("uploadCloudTranscriptionModel"),
   setUploadCloudTranscriptionBaseUrl: createStringSetter("uploadCloudTranscriptionBaseUrl"),
-  setUploadCloudTranscriptionMode: createStringSetter("uploadCloudTranscriptionMode"),
+  setUploadCloudTranscriptionMode: () => {
+    if (isBrowser) localStorage.setItem("uploadCloudTranscriptionMode", "openwhispr");
+    set({ uploadCloudTranscriptionMode: "openwhispr" });
+  },
 
   setNoteFormattingMode: createStringSetter("noteFormattingMode") as (mode: InferenceMode) => void,
   setNoteFormattingProvider: createStringSetter("noteFormattingProvider"),
@@ -1288,7 +1326,10 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setNoteFormattingDisableThinking: createBooleanSetter("noteFormattingDisableThinking"),
   setChatAgentDisableThinking: createBooleanSetter("chatAgentDisableThinking"),
 
-  setUseLocalWhisper: createBooleanSetter("useLocalWhisper"),
+  setUseLocalWhisper: () => {
+    if (isBrowser) localStorage.setItem("useLocalWhisper", "false");
+    set({ useLocalWhisper: false });
+  },
   setWhisperModel: createStringSetter("whisperModel"),
   setLocalTranscriptionProvider: (value: LocalTranscriptionProvider) => {
     if (isBrowser) localStorage.setItem("localTranscriptionProvider", value);
@@ -1302,7 +1343,10 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setCloudTranscriptionProvider: createStringSetter("cloudTranscriptionProvider"),
   setCloudTranscriptionModel: createStringSetter("cloudTranscriptionModel"),
   setCloudTranscriptionBaseUrl: createStringSetter("cloudTranscriptionBaseUrl"),
-  setCloudTranscriptionMode: createStringSetter("cloudTranscriptionMode"),
+  setCloudTranscriptionMode: () => {
+    if (isBrowser) localStorage.setItem("cloudTranscriptionMode", "openwhispr");
+    set({ cloudTranscriptionMode: "openwhispr" });
+  },
   setCleanupCloudMode: createStringSetter("cleanupCloudMode"),
   setCleanupCloudBaseUrl: createStringSetter("cleanupCloudBaseUrl"),
   setAssemblyAiStreaming: createBooleanSetter("assemblyAiStreaming"),
@@ -1827,9 +1871,8 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       s.setShowTranscriptionPreview(settings.showTranscriptionPreview);
   },
 
-  // Apply a transcription config to dictation, then mirror its cloud routing to
-  // note recording and audio upload — used when onboarding picks one provider
-  // for everything (e.g. Corti for medical providers).
+  // Apply the VoiceLab Cloud transcription config to dictation, note recording,
+  // and audio upload together.
   setCloudTranscriptionForAllScopes: (settings: Partial<TranscriptionSettings>) => {
     const s = useSettingsStore.getState();
     s.updateTranscriptionSettings(settings);
@@ -1839,9 +1882,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       cloudTranscriptionProvider,
       cloudTranscriptionModel,
     } = useSettingsStore.getState();
-    // Each Settings tab selects on its InferenceMode field, so set it for every
-    // scope — otherwise the UI keeps showing the previous mode (e.g. OpenWhispr
-    // Cloud) even though the cloud routing now points at the new provider.
+    // Keep every speech scope aligned with the one supported cloud route.
     const mode = deriveTranscriptionMode(
       useLocalWhisper,
       cloudTranscriptionMode,

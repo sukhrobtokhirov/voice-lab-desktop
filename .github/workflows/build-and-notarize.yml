@@ -49,11 +49,6 @@ jobs:
           path: resources/bin
           key: linux-x64-bin-${{ hashFiles('scripts/download-*.js') }}
 
-      - name: Download whisper.cpp binaries
-        run: node scripts/download-whisper-cpp.js --current
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-
       - name: Download llama-server binaries
         run: node scripts/download-llama-server.js --current
         env:
@@ -138,11 +133,6 @@ jobs:
         with:
           path: resources/bin
           key: windows-x64-bin-${{ hashFiles('scripts/download-*.js') }}
-
-      - name: Download whisper.cpp binaries
-        run: node scripts/download-whisper-cpp.js --current
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
 
       - name: Download llama-server binaries
         run: node scripts/download-llama-server.js --current
@@ -266,11 +256,6 @@ jobs:
 
       - name: Compile macos-audio-tap binary
         run: npm run compile:audio-tap -- --arch ${{ matrix.arch }}
-
-      - name: Download whisper.cpp binaries
-        run: node scripts/download-whisper-cpp.js --current --platform darwin --arch ${{ matrix.arch }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
 
       - name: Download llama-server binaries
         run: node scripts/download-llama-server.js --current --platform darwin --arch ${{ matrix.arch }}

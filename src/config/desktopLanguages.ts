@@ -1,5 +1,5 @@
 export type DesktopLanguageCode = "auto" | "uz" | "kk" | "ky" | "tg" | "tk" | "ru" | "en";
-export type DesktopLanguageProvider = "aisha" | "whisper" | "unknown";
+export type DesktopLanguageProvider = "voicelab" | "whisper" | "unknown";
 
 export interface DesktopLanguageDefinition {
   code: DesktopLanguageCode;
@@ -40,7 +40,7 @@ export function providerSupportsLanguage(
   code: DesktopLanguageCode,
   capabilities?: DesktopLanguageCapabilities
 ): boolean {
-  if (provider === "aisha") {
+  if (provider === "voicelab") {
     if (!capabilities) return true;
     if (code === "auto") {
       return capabilities.autoDetectionSupported === undefined
@@ -60,7 +60,7 @@ export function languageUnsupportedReason(
   capabilities?: DesktopLanguageCapabilities
 ): string | undefined {
   if (providerSupportsLanguage(provider, code, capabilities)) return undefined;
-  if (provider === "aisha") {
+  if (provider === "voicelab") {
     return code === "auto"
       ? "Automatic detection is not available for VoiceLab Cloud yet."
       : "This language is not available for the connected VoiceLab Cloud service.";

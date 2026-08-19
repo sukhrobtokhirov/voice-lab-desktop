@@ -1,7 +1,6 @@
 import { Dialog, DialogContent } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { useUsage } from "../hooks/useUsage";
-import { useSettingsStore } from "../stores/settingsStore";
 import { useTranslation } from "react-i18next";
 
 export interface CreditShortage {
@@ -30,7 +29,7 @@ export default function UpgradePrompt({ open, onOpenChange, shortage }: UpgradeP
           <p className="text-sm text-muted-foreground">
             {t("desktop.creditShortage.description", {
               defaultValue:
-                "There are not enough available credits for this recording. Add credits or continue locally.",
+                "There are not enough available credits for this recording. Add credits or choose a plan.",
             })}
           </p>
         </div>
@@ -53,19 +52,6 @@ export default function UpgradePrompt({ open, onOpenChange, shortage }: UpgradeP
         <div className="flex flex-col gap-2">
           <Button onClick={() => void usage?.openBillingPortal()}>
             {t("desktop.wallet.manage", { defaultValue: "Manage billing" })}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              const settings = useSettingsStore.getState();
-              settings.setTranscriptionMode("local");
-              settings.setUseLocalWhisper(true);
-              onOpenChange(false);
-            }}
-          >
-            {t("desktop.creditShortage.useLocal", {
-              defaultValue: "Use local transcription for 0 credits",
-            })}
           </Button>
         </div>
       </DialogContent>

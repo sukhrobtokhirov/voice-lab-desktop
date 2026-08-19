@@ -23,12 +23,10 @@ const {
   BrowserWindow,
   dialog,
   ipcMain,
-  net,
   session,
   systemPreferences,
 } = require("electron");
 const path = require("path");
-const fs = require("fs");
 const tls = require("tls");
 // Development may load local configuration. Packaged builds never load or ship
 // a project-level .env; user-provided credentials live in the encrypted user profile.
@@ -88,9 +86,7 @@ function resolveAppChannel() {
     return "production";
   }
 
-  const rawChannel = (process.env.OPENWHISPR_CHANNEL || "")
-    .trim()
-    .toLowerCase();
+  const rawChannel = (process.env.OPENWHISPR_CHANNEL || "").trim().toLowerCase();
 
   if (VALID_CHANNELS.has(rawChannel)) {
     return rawChannel;
@@ -113,9 +109,8 @@ function configureChannelUserDataPath() {
 
 configureChannelUserDataPath();
 
-// Load userData .env (contains DICTATION_KEY, API keys, etc.) early — before
-// hotkey registration, which needs DICTATION_KEY before the renderer loads.
-// override:true so the user's saved AISHA_API_KEY wins over any bundled fallback.
+// Load userData .env (contains DICTATION_KEY and optional BYOK provider keys) early —
+// before hotkey registration, which needs DICTATION_KEY before the renderer loads.
 require("dotenv").config({
   path: path.join(app.getPath("userData"), ".env"),
   override: true,
@@ -197,11 +192,19 @@ function resolveDesktopRuntimeAuthConfig() {
   const normalizedBrowserOrigins = browserOrigins.map((origin) =>
     validateOrigin(origin, "VOICELAB_DESKTOP_AUTH_ORIGINS")
   );
+  const authWebBaseUrl = validateOrigin(
+    (process.env.VOICELAB_DESKTOP_AUTH_URL || normalizedBrowserOrigins[0]).trim(),
+    "VOICELAB_DESKTOP_AUTH_URL"
+  );
+  if (!normalizedBrowserOrigins.includes(authWebBaseUrl)) {
+    throw new Error("VOICELAB_DESKTOP_AUTH_URL must be included in VOICELAB_DESKTOP_AUTH_ORIGINS");
+  }
   if (!/^[a-z][a-z0-9+.-]*$/.test(OAUTH_PROTOCOL)) {
     throw new Error("OPENWHISPR_PROTOCOL is invalid");
   }
   return {
     apiBaseUrl: normalizedApiOrigin,
+    authWebBaseUrl,
     authorizationOrigins: normalizedBrowserOrigins,
     billingOrigin: normalizedBrowserOrigins[0],
     scheme: OAUTH_PROTOCOL,
@@ -210,9 +213,7 @@ function resolveDesktopRuntimeAuthConfig() {
 
 const DESKTOP_AUTH_CONFIG = resolveDesktopRuntimeAuthConfig();
 
-const initialProtocolUrls = process.argv.filter((arg) =>
-  arg.startsWith(`${OAUTH_PROTOCOL}://`)
-);
+const initialProtocolUrls = process.argv.filter((arg) => arg.startsWith(`${OAUTH_PROTOCOL}://`));
 
 function shouldRegisterProtocolWithAppArg() {
   return Boolean(process.defaultApp) || isElectronBinaryExec();
@@ -331,8 +332,6 @@ const EnvironmentManager = require("./src/helpers/environment");
 const WindowManager = require("./src/helpers/windowManager");
 const DatabaseManager = require("./src/helpers/database");
 const ClipboardManager = require("./src/helpers/clipboard");
-const WhisperManager = require("./src/helpers/whisper");
-const ParakeetManager = require("./src/helpers/parakeet");
 const DiarizationManager = require("./src/helpers/diarization");
 const TrayManager = require("./src/helpers/tray");
 const DesktopAuthManager = require("./src/helpers/desktopAuthManager");
@@ -342,12 +341,9 @@ const IPCHandlers = require("./src/helpers/ipcHandlers");
 const CliBridge = require("./src/helpers/cliBridge");
 const UpdateManager = require("./src/updater");
 const GlobeKeyManager = require("./src/helpers/globeKeyManager");
-const DevServerManager = require("./src/helpers/devServerManager");
 const WindowsKeyManager = require("./src/helpers/windowsKeyManager");
 const LinuxKeyManager = require("./src/helpers/linuxKeyManager");
 const TextEditMonitor = require("./src/helpers/textEditMonitor");
-const WhisperCudaManager = require("./src/helpers/whisperCudaManager");
-const WhisperVulkanManager = require("./src/helpers/whisperVulkanManager");
 const GoogleCalendarManager = require("./src/helpers/googleCalendarManager");
 const MeetingProcessDetector = require("./src/helpers/meetingProcessDetector");
 const AudioActivityDetector = require("./src/helpers/audioActivityDetector");
@@ -368,8 +364,6 @@ let windowManager = null;
 let hotkeyManager = null;
 let databaseManager = null;
 let clipboardManager = null;
-let whisperManager = null;
-let parakeetManager = null;
 let diarizationManager = null;
 let trayManager = null;
 let desktopAuthManager = null;
@@ -379,8 +373,6 @@ let globeKeyManager = null;
 let windowsKeyManager = null;
 let linuxKeyManager = null;
 let textEditMonitor = null;
-let whisperCudaManager = null;
-let whisperVulkanManager = null;
 let googleCalendarManager = null;
 let meetingDetectionEngine = null;
 let audioTapManager = null;
@@ -394,8 +386,6 @@ let globeKeyAlertShown = false;
 let pendingNoteCloudId = null;
 let pendingNoteRetryTimer = null;
 let pendingNoteRetryCount = 0;
-const WHISPER_WAKE_REWARM_DELAY_MS = 3000;
-let wakeRewarmTimer = null;
 
 let protocolRouterReady = false;
 const pendingProtocolUrls = [];
@@ -459,6 +449,10 @@ function parseProtocolRoute(value) {
 }
 
 async function dispatchProtocolRoute(route) {
+  if (route.kind === "auth") {
+    await handleOAuthDeepLink(route.value);
+    return;
+  }
   if (route.kind === "upgrade") {
     handleUpgradeDeepLink();
     return;
@@ -471,7 +465,7 @@ async function dispatchProtocolRoute(route) {
     handleInvitationDeepLink(route.payload);
     return;
   }
-  await handleOAuthDeepLink(route.value);
+  throw protocolRouteError("DESKTOP_PROTOCOL_ROUTE_REJECTED");
 }
 
 function notifyProtocolFailure(error) {
@@ -513,7 +507,7 @@ async function flushPendingProtocolUrls() {
   }
 }
 
-// Set up PATH for production builds to find system tools (whisper.cpp, ffmpeg)
+// Set up PATH for production builds to find bundled audio and utility tools.
 function setupProductionPath() {
   if (process.platform === "darwin" && process.env.NODE_ENV !== "development") {
     const commonPaths = [
@@ -560,30 +554,25 @@ async function initializeCoreManagers() {
 
   windowManager = new WindowManager();
   const appVersion = require("./package.json").version;
-desktopAuthManager = new DesktopAuthManager({
-  channel: APP_CHANNEL,
-  scheme: DESKTOP_AUTH_CONFIG.scheme,
-  appVersion,
-  apiBaseUrl: DESKTOP_AUTH_CONFIG.apiBaseUrl,
-  authorizationOrigins: DESKTOP_AUTH_CONFIG.authorizationOrigins,
-});
-await desktopAuthManager.initialize();
-voiceLabApiClient = new VoiceLabApiClient({
-  authManager: desktopAuthManager,
-  apiBaseUrl: DESKTOP_AUTH_CONFIG.apiBaseUrl,
-  appVersion,
-  channel: APP_CHANNEL,
-  billingOrigin: DESKTOP_AUTH_CONFIG.billingOrigin,
-});
+  desktopAuthManager = new DesktopAuthManager({
+    channel: APP_CHANNEL,
+    scheme: DESKTOP_AUTH_CONFIG.scheme,
+    appVersion,
+    apiBaseUrl: DESKTOP_AUTH_CONFIG.apiBaseUrl,
+    authWebBaseUrl: DESKTOP_AUTH_CONFIG.authWebBaseUrl,
+    authorizationOrigins: DESKTOP_AUTH_CONFIG.authorizationOrigins,
+  });
+  await desktopAuthManager.initialize();
+  voiceLabApiClient = new VoiceLabApiClient({
+    authManager: desktopAuthManager,
+    apiBaseUrl: DESKTOP_AUTH_CONFIG.apiBaseUrl,
+    appVersion,
+    channel: APP_CHANNEL,
+    billingOrigin: DESKTOP_AUTH_CONFIG.billingOrigin,
+  });
   hotkeyManager = windowManager.hotkeyManager;
   databaseManager = new DatabaseManager();
   clipboardManager = new ClipboardManager();
-  whisperManager = new WhisperManager();
-  if (process.platform !== "darwin") {
-    whisperCudaManager = new WhisperCudaManager();
-    whisperVulkanManager = new WhisperVulkanManager();
-  }
-  parakeetManager = new ParakeetManager();
   diarizationManager = new DiarizationManager();
   googleCalendarManager = new GoogleCalendarManager(databaseManager, windowManager);
   meetingDetectionEngine = new MeetingDetectionEngine(
@@ -618,16 +607,12 @@ voiceLabApiClient = new VoiceLabApiClient({
     environmentManager,
     databaseManager,
     clipboardManager,
-    whisperManager,
-    parakeetManager,
     diarizationManager,
     windowManager,
     updateManager,
     windowsKeyManager,
     linuxKeyManager,
     textEditMonitor,
-    whisperCudaManager,
-    whisperVulkanManager,
     googleCalendarManager,
     meetingDetectionEngine,
     audioTapManager,
@@ -643,8 +628,6 @@ voiceLabApiClient = new VoiceLabApiClient({
 }
 
 function registerSidecars() {
-  if (whisperManager) sidecarRegistry.register("whisper", () => whisperManager.stopServer());
-  if (parakeetManager) sidecarRegistry.register("parakeet", () => parakeetManager.stopServer());
   if (diarizationManager) {
     sidecarRegistry.register("diarization", () => diarizationManager.shutdown());
   }
@@ -778,17 +761,15 @@ function handleInvitationDeepLink(token) {
 
 async function handleOAuthDeepLink(deepLinkUrl) {
   if (!desktopAuthManager) {
-    await acceptProtocolUrl(deepLinkUrl);
-    return;
+    throw protocolRouteError("AUTH_MANAGER_UNAVAILABLE");
   }
   await desktopAuthManager.handleCallback(deepLinkUrl);
-  if (windowManager) {
-    await windowManager.createControlPanelWindow();
-    if (isLiveWindow(windowManager.controlPanelWindow)) {
-      windowManager.controlPanelWindow.show();
-      windowManager.controlPanelWindow.focus();
-      dockManager.setControlPanelVisible(true);
-    }
+  if (!windowManager) return;
+  await windowManager.createControlPanelWindow();
+  if (isLiveWindow(windowManager.controlPanelWindow)) {
+    windowManager.controlPanelWindow.show();
+    windowManager.controlPanelWindow.focus();
+    dockManager.setControlPanelVisible(true);
   }
 }
 
@@ -983,37 +964,6 @@ async function startApp() {
     if (googleCalendarManager) {
       googleCalendarManager.onWakeFromSleep();
     }
-    // Sleep evicts the local GPU model from VRAM; reload it once the driver settles. See #766.
-    if (wakeRewarmTimer) clearTimeout(wakeRewarmTimer);
-    wakeRewarmTimer = setTimeout(() => {
-      wakeRewarmTimer = null;
-      whisperManager?.onWakeFromSleep().catch((err) => {
-        debugLogger.debug("whisper wake re-warm error (non-fatal)", { error: err.message });
-      });
-    }, WHISPER_WAKE_REWARM_DELAY_MS);
-  });
-
-  // Non-blocking server pre-warming. CUDA wins when both GPU backends are enabled.
-  const useCuda = process.env.WHISPER_CUDA_ENABLED === "true" && whisperCudaManager?.isDownloaded();
-  const whisperSettings = {
-    localTranscriptionProvider: process.env.LOCAL_TRANSCRIPTION_PROVIDER || "",
-    whisperModel: process.env.LOCAL_WHISPER_MODEL,
-    useCuda,
-    useVulkan:
-      !useCuda &&
-      process.env.WHISPER_VULKAN_ENABLED === "true" &&
-      whisperVulkanManager?.isDownloaded(),
-  };
-  whisperManager.initializeAtStartup(whisperSettings).catch((err) => {
-    debugLogger.debug("Whisper startup init error (non-fatal)", { error: err.message });
-  });
-
-  const parakeetSettings = {
-    localTranscriptionProvider: process.env.LOCAL_TRANSCRIPTION_PROVIDER || "",
-    parakeetModel: process.env.PARAKEET_MODEL,
-  };
-  parakeetManager.initializeAtStartup(parakeetSettings).catch((err) => {
-    debugLogger.debug("Parakeet startup init error (non-fatal)", { error: err.message });
   });
 
   // TODO: drop legacy REASONING_PROVIDER / LOCAL_REASONING_MODEL fallbacks after 2 releases.
@@ -1682,10 +1632,6 @@ if (gotSingleInstanceLock) {
 }
 
 function performSyncTeardown() {
-  if (wakeRewarmTimer) {
-    clearTimeout(wakeRewarmTimer);
-    wakeRewarmTimer = null;
-  }
   clearPendingNoteDeepLink();
   if (cliBridge) {
     cliBridge.stop().catch(() => {});

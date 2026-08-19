@@ -63,33 +63,13 @@ export default function LocalModelPicker({
 
     try {
       let downloaded = new Set<string>();
-      if (modelType === "whisper") {
-        const result = await window.electronAPI?.listWhisperModels();
-        if (result?.success) {
-          downloaded = new Set(
-            result.models
-              .filter((m: { downloaded?: boolean }) => m.downloaded)
-              .map((m: { model: string }) => m.model)
-          );
-        }
-      } else if (modelType === "parakeet") {
-        const result = await window.electronAPI?.listParakeetModels();
-        if (result?.success) {
-          downloaded = new Set(
-            result.models
-              .filter((m: { downloaded?: boolean }) => m.downloaded)
-              .map((m: { model: string }) => m.model)
-          );
-        }
-      } else {
-        const result = await window.electronAPI?.modelGetAll?.();
-        if (result && Array.isArray(result)) {
-          downloaded = new Set(
-            result
-              .filter((m: { isDownloaded?: boolean }) => m.isDownloaded)
-              .map((m: { id: string }) => m.id)
-          );
-        }
+      const result = await window.electronAPI?.modelGetAll?.();
+      if (result && Array.isArray(result)) {
+        downloaded = new Set(
+          result
+            .filter((m: { isDownloaded?: boolean }) => m.isDownloaded)
+            .map((m: { id: string }) => m.id)
+        );
       }
       if (requestId === loadDownloadedModelsRequestRef.current) {
         setDownloadedModels(downloaded);
@@ -100,7 +80,7 @@ export default function LocalModelPicker({
       console.error("Failed to load downloaded models:", error);
       return null;
     }
-  }, [modelType]);
+  }, []);
 
   useEffect(() => {
     const initAndValidate = async () => {

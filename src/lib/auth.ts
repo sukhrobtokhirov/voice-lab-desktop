@@ -2,8 +2,7 @@
 export const AUTH_URL = import.meta.env.VITE_AUTH_URL || "https://voicelab.uz";
 
 /**
- * Account/session API (JWT login/me/refresh).
- * Separate from Aisha STT base (`back.aisha.group` + X-Api-Key).
+ * Account/session API (JWT login/me/refresh) and VoiceLab Desktop API origin.
  */
 export const API_URL =
   (import.meta.env.VITE_AUTH_API_URL as string) ||
@@ -19,6 +18,17 @@ export type VoiceLabUser = {
   image?: string | null;
   [key: string]: unknown;
 };
+
+function desktopAuthError(error: unknown, fallback: string): Error {
+  const raw = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  const message = raw
+    .replace(/^Error invoking remote method '[^']+':\s*/i, "")
+    .replace(/^DesktopAuthError:\s*/i, "")
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .trim()
+    .slice(0, 500);
+  return new Error(message || fallback);
+}
 
 const LAST_SIGN_IN_STORAGE_KEY = "voicelab:lastSignInTime";
 const GRACE_PERIOD_MS = 60_000;
@@ -219,7 +229,9 @@ export async function withSessionRefresh<T>(operation: () => Promise<T>): Promis
   }
 }
 
-export async function signInWithSocial(provider: SocialProvider): Promise<{ error?: Error }> {
+export async function signInWithSocial(
+  provider: SocialProvider
+): Promise<{ error?: Error; errorCode?: string | null }> {
   try {
     if (provider !== "google") {
       return {
@@ -231,12 +243,42 @@ export async function signInWithSocial(provider: SocialProvider): Promise<{ erro
 
     const status = await window.electronAPI?.authStartBrowser?.("google");
     if (!status || status.status === "error") {
-      throw new Error(status?.errorCode || "Social sign-in failed");
+      return {
+        error: new Error(status?.errorMessage || "Social sign-in failed"),
+        errorCode: status?.errorCode || null,
+      };
     }
     return {};
   } catch (error) {
-    return { error: error instanceof Error ? error : new Error("Social sign-in failed") };
+    const status = await window.electronAPI?.authGetStatus?.().catch(() => null);
+    return {
+      error: desktopAuthError(error, "Social sign-in failed"),
+      errorCode: status?.errorCode || null,
+    };
   }
+}
+
+export async function reopenBrowserSignIn(): Promise<{ error?: Error; errorCode?: string | null }> {
+  try {
+    const status = await window.electronAPI?.authReopenBrowser?.();
+    if (!status || status.status === "error" || status.status === "expired") {
+      return {
+        error: new Error(status?.errorMessage || "Unable to reopen browser sign-in"),
+        errorCode: status?.errorCode || null,
+      };
+    }
+    return {};
+  } catch (error) {
+    const status = await window.electronAPI?.authGetStatus?.().catch(() => null);
+    return {
+      error: desktopAuthError(error, "Unable to reopen browser sign-in"),
+      errorCode: status?.errorCode || null,
+    };
+  }
+}
+
+export async function cancelBrowserSignIn(): Promise<void> {
+  await window.electronAPI?.authCancelBrowser?.();
 }
 
 export async function signInWithSSO(_email: string): Promise<{ error?: Error }> {

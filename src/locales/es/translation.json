@@ -173,7 +173,8 @@
       "useCase": "Sobre ti",
       "meeting": "Reuniones",
       "finish": "Listo",
-      "voiceAgent": "Agente de voz"
+      "voiceAgent": "Agente de voz",
+      "voiceLabAccount": "cuenta de VoiceLab"
     },
     "hotkey": {
       "couldNotRegisterTitle": "No se pudo registrar ese atajo",
@@ -300,6 +301,21 @@
         "step1": "Regístrate en corti.ai",
         "step2": "Abre la consola de Corti y crea credenciales de API",
         "step3": "Pega tu Client ID y Secret abajo"
+      }
+    },
+    "voiceLabAccount": {
+      "title": "Iniciar sesión en VoiceLab",
+      "description": "Conecte su cuenta VoiceLab una vez. La transcripción en la nube se inicia automáticamente y utiliza su billetera AI Credit.",
+      "getKeyHint": "¿Aún no tienes una llave?",
+      "openSpace": "Abrir laboratorio de voz",
+      "inputLabel": "cuenta de VoiceLab",
+      "placeholder": "Pega tu clave API",
+      "helpText": "Almacenado solo en este dispositivo. Puede cambiarlo más tarde en Configuración → Cuenta.",
+      "validating": "Comprobando clave…",
+      "errors": {
+        "required": "Inicie sesión en su cuenta VoiceLab para continuar.",
+        "invalid": "VoiceLab no pudo autorizar esta sesión. Intente iniciar sesión nuevamente.",
+        "saveFailed": "No se pudo guardar la clave. Intentar otra vez."
       }
     }
   },
@@ -556,7 +572,9 @@
         "sessionExpired": "Sesión expirada",
         "offline": "Sin conexión",
         "dailyLimitReached": "Límite diario alcanzado",
-        "providerRateLimited": "Límite de tasa del proveedor"
+        "providerRateLimited": "Límite de tasa del proveedor",
+        "walletInsufficient": "Problema de facturación de VoiceLab",
+        "walletChargeFailed": "Error de transcripción"
       },
       "fallback": {
         "title": "Modo de respaldo",
@@ -589,7 +607,10 @@
         "sessionExpired": "Tu sesión de VoiceLab Cloud no está disponible. Vuelve a iniciar sesión desde Ajustes.",
         "offline": "Estás sin conexión. La transcripción en la nube requiere conexión a Internet.",
         "dailyLimitReached": "Has alcanzado el límite de transcripción de hoy. Inténtalo mañana o mejora tu plan.",
-        "providerRateLimited": "Tu proveedor de transcripción limitó la solicitud. Espera un momento e inténtalo de nuevo."
+        "providerRateLimited": "Tu proveedor de transcripción limitó la solicitud. Espera un momento e inténtalo de nuevo.",
+        "walletInsufficient": "El saldo de su crédito VoiceLab AI es insuficiente. Abre Facturación para recargar y vuelve a intentarlo.",
+        "walletChargeFailed": "La facturación de VoiceLab no pudo completar el cargo. Inténtelo de nuevo en un momento.",
+        "authRequired": "Inicie sesión en su cuenta VoiceLab para usar VoiceLab Cloud."
       }
     },
     "clipboard": {
@@ -718,6 +739,27 @@
     }
   },
   "auth": {
+    "desktopTitle": "Inicia sesión en VoiceLab Desktop",
+    "desktopBrowserHint": "El inicio de sesión seguro se abrirá en tu navegador y volverá automáticamente a la aplicación.",
+    "desktopWaiting": "Completa el inicio de sesión en el navegador. VoiceLab Desktop continuará automáticamente.",
+    "desktopSecurity": "Tu contraseña nunca entra en la aplicación de escritorio. El sistema operativo protege el token de sesión.",
+    "desktopOpenBrowser": "Continuar en el navegador",
+    "desktopOpening": "Abriendo el inicio de sesión seguro…",
+    "desktopReopen": "Abrir el navegador de nuevo",
+    "desktopCancel": "Cancelar inicio de sesión",
+    "desktopCancelled": "El inicio de sesión se canceló. Puedes intentarlo de nuevo.",
+    "desktopExpired": "Esta solicitud de inicio de sesión caducó. Inicia sesión de nuevo.",
+    "desktopFailed": "No se pudo completar el inicio de sesión. Inténtalo de nuevo.",
+    "desktopNetworkTimeout": "El servidor de autenticación tardó demasiado en responder. Comprueba tu conexión e inténtalo de nuevo.",
+    "desktopInvalidResponse": "El servidor de autenticación devolvió una respuesta no válida. Inténtalo de nuevo más tarde.",
+    "desktopCallbackInvalid": "No se pudo verificar el enlace de retorno. Inicia sesión de nuevo.",
+    "desktopSecurityError": "El enlace de inicio de sesión no superó las comprobaciones de seguridad de VoiceLab. Inicia sesión de nuevo.",
+    "desktopReplayDetected": "Este enlace de inicio de sesión ya se utilizó. Crea una nueva solicitud.",
+    "desktopUnauthorized": "Tu sesión de VoiceLab ya no es válida. Inicia sesión de nuevo.",
+    "desktopUnavailable": "La autenticación de escritorio no está disponible en esta sesión. Reinicia VoiceLab Desktop.",
+    "desktopServerRejected": "El servidor de autenticación rechazó la solicitud. Inténtalo de nuevo o contacta con soporte indicando el código de error de abajo.",
+    "desktopReopenFailed": "No se pudo volver a abrir el navegador. Cancela e inicia sesión de nuevo.",
+    "desktopProtocolUnavailable": "El enlace de retorno seguro no está registrado. Reinicia o reinstala VoiceLab Desktop.",
     "cloudNotConfigured": "Nube no configurada",
     "common": {
       "back": "Atrás",
@@ -1334,6 +1376,24 @@
         "successDescription": "Tu cuenta y todos los datos han sido eliminados. La aplicación se recargará ahora.",
         "failedTitle": "Error al eliminar",
         "failedDescription": "Algo salió mal al eliminar tu cuenta. Es posible que tus datos locales se hayan eliminado parcialmente. Inténtalo de nuevo."
+      },
+      "voiceLabAccount": {
+        "sectionDescription": "VoiceLab Cloud utiliza su cuenta iniciada y su billetera de crédito AI compartida.",
+        "label": "cuenta de VoiceLab",
+        "description": "Inicie sesión una vez; no se requiere ninguna clave API de voz separada.",
+        "openSpace": "Abrir laboratorio de voz",
+        "helpText": "Almacenado solo en este dispositivo.",
+        "placeholder": "Pega tu clave API",
+        "validating": "Comprobando clave…",
+        "valid": "La llave se ve bien.",
+        "invalid": "Esa clave fue rechazada.",
+        "billing": "El saldo de su crédito VoiceLab AI es bajo. Abra Facturación para recargar.",
+        "saved": "Cuenta VoiceLab conectada",
+        "cleared": "La sesión de VoiceLab finalizó.",
+        "saveFailed": "No se pudo guardar la clave.",
+        "missingTitle": "Es necesario iniciar sesión en VoiceLab",
+        "missingBody": "Inicie sesión para utilizar el dictado de VoiceLab Cloud. No se requiere ninguna clave API separada.",
+        "missingCta": "Abrir configuración de cuenta"
       }
     },
     "agentConfig": {
@@ -1744,7 +1804,8 @@
         "dictationTranslation": "Traducción",
         "noteFormatting": "Formato de notas",
         "chatIntelligence": "Chat"
-      }
+      },
+      "temporarilyDisabled": "La configuración del proveedor de LLM está temporalmente deshabilitada. Speech utiliza únicamente VoiceLab Cloud."
     },
     "noteFormatting": {
       "autoGenerateTitle": "Generar títulos de notas automáticamente",
@@ -3017,5 +3078,149 @@
     },
     "start": "Tomar notas",
     "join": "Unirse y transcribir"
+  },
+  "desktop": {
+    "offline": "Desconectado. El dictado local todavía funciona.",
+    "nav": {
+      "history": "Historia",
+      "vocabulary": "Vocabulario",
+      "more": "Más"
+    },
+    "wallet": {
+      "title": "Cartera de crédito AI",
+      "shared": "Un saldo para todos los productos VoiceLab",
+      "balance": "Balance",
+      "available": "Disponible",
+      "reserved": "Reservado",
+      "unavailable": "La billetera no está disponible temporalmente.",
+      "updated": "Actualizado {{time}}",
+      "live": "Saldo en vivo",
+      "manage": "Administrar facturación"
+    },
+    "creditShortage": {
+      "title": "Se necesitan más créditos de IA",
+      "description": "No hay suficientes créditos disponibles para esta grabación. Agrega créditos o elige un plan.",
+      "required": "Necesario",
+      "useLocal": "Administrar la facturación de VoiceLab"
+    },
+    "dictation": {
+      "ready": "Listo"
+    },
+    "languages": {
+      "choose": "Elige idioma",
+      "search": "Idiomas de búsqueda",
+      "searchPlaceholder": "Buscar idioma o código",
+      "clearSearch": "Borrar búsqueda",
+      "empty": "No se encontraron idiomas.",
+      "autoUnsupported": "La detección automática no está disponible para este servicio.",
+      "languageUnsupported": "Este idioma no está disponible para el servicio seleccionado.",
+      "groups": {
+        "automatic": "Automático",
+        "centralAsia": "Asia Central",
+        "other": "ruso e ingles"
+      }
+    },
+    "onboarding": {
+      "progress": {
+        "welcome": "Bienvenido",
+        "mode": "Cuenta",
+        "language-permissions": "Idioma",
+        "hotkey": "Atajo",
+        "ready": "Listo"
+      },
+      "welcome": {
+        "title": "Dictar VoiceLab",
+        "description": "Habla con naturalidad. Tu texto aparece donde lo necesitas."
+      },
+      "advanced": {
+        "title": "Configuración avanzada",
+        "description": "Utilice un modelo local o su propio proveedor sin una cuenta de VoiceLab Cloud.",
+        "localTitle": "modelo local",
+        "localDescription": "El audio permanece en este dispositivo y utiliza 0 créditos AI.",
+        "providerTitle": "mi proveedor",
+        "providerDescription": "Conecte su clave API más tarde en Configuración avanzada.",
+        "useCloud": "Continuar con VoiceLab Cloud"
+      },
+      "mode": {
+        "localTitle": "modo local",
+        "localDescription": "Se encuentran disponibles idiomas susurrados y detección automática.",
+        "providerTitle": "Modo proveedor",
+        "providerDescription": "Conecte su proveedor y clave API después de la configuración."
+      },
+      "language": {
+        "title": "Idioma y permisos",
+        "description": "Elija el idioma en el que suele dictar.",
+        "loadingCapabilities": "Comprobando los idiomas disponibles para su cuenta...",
+        "capabilitiesUnavailable": "No se pudieron verificar las capacidades de la nube. Aún puedes elegir un idioma.",
+        "unsupported": "Este idioma no es compatible con el modo seleccionado. Elija otro idioma para continuar.",
+        "microphoneRequired": "Se requiere acceso al micrófono para continuar."
+      },
+      "hotkey": {
+        "title": "Atajo y prueba rápida",
+        "description": "Establece un atajo, habla y comprueba el resultado a continuación.",
+        "placeholder": "Su resultado aparecerá aquí..."
+      },
+      "ready": {
+        "title": "Listo",
+        "account": "Su cuenta VoiceLab y su billetera AI Credit están conectadas.",
+        "local": "Se selecciona la transcripción local.",
+        "provider": "Abra Configuración avanzada para conectar su proveedor.",
+        "start": "Empezar a dictar"
+      }
+    },
+    "dictionary": {
+      "actionFailed": "No se pudo finalizar el cambio",
+      "tryAgain": "Intentar otra vez. Una palabra guardada localmente permanecerá en este dispositivo.",
+      "duplicateTitle": "Ya en tu vocabulario",
+      "duplicateDescription": "Esa palabra ya está guardada.",
+      "saved": "Vocabulario actualizado",
+      "duplicatesSkipped": "{{count}} duplicado omitido",
+      "duplicatesSkipped_other": "Duplicados {{count}} omitidos",
+      "status": {
+        "synced": "Sincronizado",
+        "conflict": "Necesita revisión",
+        "syncError": "Guardado localmente, la sincronización falló",
+        "syncing": "Sincronización",
+        "savedLocal": "Guardado en este dispositivo"
+      }
+    },
+    "privacy": {
+      "notesSync": "Sincronización de notas",
+      "notesSyncDescription": "Sincroniza notas en tus dispositivos en los que hayas iniciado sesión.",
+      "accountSync": "Vocabulario y preferencias",
+      "accountSyncDescription": "La configuración de la cuenta y el vocabulario se sincronizan automáticamente al iniciar sesión.",
+      "alwaysOn": "En",
+      "transcriptBackup": "Copia de seguridad de la transcripción",
+      "transcriptBackupDescription": "Esta versión de escritorio no carga el texto de la transcripción.",
+      "audioBackup": "Copia de seguridad de audio",
+      "audioBackupDescription": "Las grabaciones permanecen en este dispositivo y no se cargan.",
+      "notEnabled": "Apagado",
+      "notAvailable": "Indisponible",
+      "localAudio": "Audio local",
+      "localAudioDescription": "Elija cuánto tiempo permanecerán las grabaciones en este dispositivo."
+    },
+    "settings": {
+      "account": "Cuenta y créditos",
+      "accountDescription": "Perfil, sesión y billetera de crédito AI",
+      "dictation": "Dictado",
+      "dictationDescription": "Comportamiento de lenguaje, micrófono y pegado",
+      "shortcuts": "Atajos",
+      "shortcutsDescription": "Atajos de dictado y VoiceLab",
+      "privacy": "Datos y privacidad",
+      "privacyDescription": "Copia de seguridad en la nube, audio local y retención",
+      "advanced": "Avanzado",
+      "advancedDescription": "VoiceLab Cloud y herramientas para desarrolladores",
+      "advancedSetup": "Transcripción en la nube",
+      "advancedSetupDescription": "VoiceLab Dictate utiliza automáticamente su cuenta iniciada."
+    },
+    "session": {
+      "active": "Iniciado sesión",
+      "device": "Dispositivo",
+      "thisDevice": "Este escritorio VoiceLab Dictate",
+      "status": "Sesión",
+      "protected": "Activo y protegido",
+      "signedOut": "No iniciado sesión",
+      "signedOutDescription": "Inicie sesión para utilizar VoiceLab Cloud y su billetera AI Credit."
+    }
   }
 }

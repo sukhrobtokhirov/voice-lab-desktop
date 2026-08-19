@@ -38,7 +38,7 @@ test("sha256 verification fails closed", () => {
 
 test("owned sidecar manifest verifies the checked-in macOS ARM64 baseline", () => {
   const manifest = loadManifest();
-  const file = path.join(__dirname, "..", "..", "resources", "bin", "whisper-server-darwin-arm64");
+  const file = path.join(__dirname, "..", "..", "resources", "bin", "llama-server-darwin-arm64");
   const entry = manifestEntryFor(file, "darwin", "arm64", manifest);
   assert.ok(entry);
   assert.equal(verifyOwnedSidecar(file, "darwin", "arm64", manifest), entry.sha256);

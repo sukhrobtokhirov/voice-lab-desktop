@@ -18,20 +18,12 @@ const GITHUB_RELEASE_URL = `https://github.com/k2-fsa/sherpa-onnx/releases/downl
 const BINARIES = {
   "darwin-arm64": {
     archiveName: `sherpa-onnx-v${SHERPA_ONNX_VERSION}-osx-universal2-shared.tar.bz2`,
-    binaryPath: "sherpa-onnx-offline-websocket-server",
-    outputName: "sherpa-onnx-ws-darwin-arm64",
-    onlineBinaryPath: "sherpa-onnx-online-websocket-server",
-    onlineOutputName: "sherpa-onnx-online-ws-darwin-arm64",
     diarizeBinaryPath: "sherpa-onnx-offline-speaker-diarization",
     diarizeOutputName: "sherpa-onnx-diarize-darwin-arm64",
     libPattern: "*.dylib",
   },
   "darwin-x64": {
     archiveName: `sherpa-onnx-v${SHERPA_ONNX_VERSION}-osx-universal2-shared.tar.bz2`,
-    binaryPath: "sherpa-onnx-offline-websocket-server",
-    outputName: "sherpa-onnx-ws-darwin-x64",
-    onlineBinaryPath: "sherpa-onnx-online-websocket-server",
-    onlineOutputName: "sherpa-onnx-online-ws-darwin-x64",
     diarizeBinaryPath: "sherpa-onnx-offline-speaker-diarization",
     diarizeOutputName: "sherpa-onnx-diarize-darwin-x64",
     libPattern: "*.dylib",
@@ -39,20 +31,12 @@ const BINARIES = {
   "win32-x64": {
     // Since 1.13.4 the Windows assets carry an MSVC runtime/build-type suffix
     archiveName: `sherpa-onnx-v${SHERPA_ONNX_VERSION}-win-x64-shared-MD-Release.tar.bz2`,
-    binaryPath: "sherpa-onnx-offline-websocket-server.exe",
-    outputName: "sherpa-onnx-ws-win32-x64.exe",
-    onlineBinaryPath: "sherpa-onnx-online-websocket-server.exe",
-    onlineOutputName: "sherpa-onnx-online-ws-win32-x64.exe",
     diarizeBinaryPath: "sherpa-onnx-offline-speaker-diarization.exe",
     diarizeOutputName: "sherpa-onnx-diarize-win32-x64.exe",
     libPattern: "*.dll",
   },
   "linux-x64": {
     archiveName: `sherpa-onnx-v${SHERPA_ONNX_VERSION}-linux-x64-shared.tar.bz2`,
-    binaryPath: "sherpa-onnx-offline-websocket-server",
-    outputName: "sherpa-onnx-ws-linux-x64",
-    onlineBinaryPath: "sherpa-onnx-online-websocket-server",
-    onlineOutputName: "sherpa-onnx-online-ws-linux-x64",
     diarizeBinaryPath: "sherpa-onnx-offline-speaker-diarization",
     diarizeOutputName: "sherpa-onnx-diarize-linux-x64",
     libPattern: "*.so*",
@@ -155,12 +139,10 @@ async function downloadBinary(platformArch, config, isForce = false) {
     return false;
   }
 
-  const outputPath = path.join(BIN_DIR, config.outputName);
-  const onlineOutputPath = path.join(BIN_DIR, config.onlineOutputName);
   const diarizeOutputPath = path.join(BIN_DIR, config.diarizeOutputName);
   const installMarkerPath = path.join(BIN_DIR, `.sherpa-onnx-${platformArch}.json`);
 
-  if (!isForce && isCompleteInstall(installMarkerPath, [outputPath, onlineOutputPath, diarizeOutputPath])) {
+  if (!isForce && isCompleteInstall(installMarkerPath, [diarizeOutputPath])) {
     console.log(`  ${platformArch}: Already exists (use --force to re-download)`);
     return true;
   }
@@ -178,12 +160,8 @@ async function downloadBinary(platformArch, config, isForce = false) {
     fs.mkdirSync(extractDir, { recursive: true });
     extractTarBz2(archivePath, extractDir);
 
-    for (const [binaryName, destPath] of [
-      [config.binaryPath, outputPath],
-      [config.onlineBinaryPath, onlineOutputPath],
-      [config.diarizeBinaryPath, diarizeOutputPath],
-    ]) {
-      if (!copyBinary(extractDir, binaryName, destPath, platformArch)) return false;
+    if (!copyBinary(extractDir, config.diarizeBinaryPath, diarizeOutputPath, platformArch)) {
+      return false;
     }
 
     // Copy shared libraries
@@ -247,7 +225,7 @@ async function downloadBinary(platformArch, config, isForce = false) {
 }
 
 async function main() {
-  console.log(`\nDownloading sherpa-onnx binaries (v${SHERPA_ONNX_VERSION})...\n`);
+  console.log(`\nDownloading sherpa-onnx speaker diarization runtime (v${SHERPA_ONNX_VERSION})...\n`);
 
   fs.mkdirSync(BIN_DIR, { recursive: true });
 
@@ -269,22 +247,8 @@ async function main() {
       return;
     }
 
-    // Remove old CLI-style binaries replaced by WS server binaries
-    const oldBinaryName = args.platformArch.startsWith("win32")
-      ? `sherpa-onnx-${args.platformArch}.exe`
-      : `sherpa-onnx-${args.platformArch}`;
-    const oldBinaryPath = path.join(BIN_DIR, oldBinaryName);
-    if (fs.existsSync(oldBinaryPath)) {
-      console.log(`  Removing old CLI binary: ${oldBinaryName}`);
-      fs.unlinkSync(oldBinaryPath);
-    }
-
     if (args.shouldCleanup) {
-      cleanupFiles(BIN_DIR, "sherpa-onnx", [
-        `sherpa-onnx-ws-${args.platformArch}`,
-        `sherpa-onnx-online-ws-${args.platformArch}`,
-        `sherpa-onnx-diarize-${args.platformArch}`,
-      ]);
+      cleanupFiles(BIN_DIR, "sherpa-onnx", `sherpa-onnx-diarize-${args.platformArch}`);
     }
   } else {
     console.log("Downloading binaries for all platforms:");

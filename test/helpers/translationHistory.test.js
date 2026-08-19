@@ -107,6 +107,29 @@ test("discarded save keeps its routeKind", (t) => {
   assert.equal(row.route_kind, "translation");
 });
 
+test("authentication failures are hidden from workspace history", (t) => {
+  const db = createDb(t);
+  if (!db) return;
+
+  const { id: authFailureId } = db.saveTranscription("", null, {
+    status: "failed",
+    errorMessage: "VoiceLab session expired. Sign in again.",
+    errorCode: "AUTH_EXPIRED",
+  });
+  const { id: retryableFailureId } = db.saveTranscription("", null, {
+    status: "failed",
+    errorMessage: "Temporarily offline",
+    errorCode: "OFFLINE",
+  });
+
+  assert.equal(findById(db.getTranscriptions(), authFailureId), null);
+  assert.equal(
+    findById(db.getTranscriptions(50, { includeDiscarded: true }), authFailureId),
+    null
+  );
+  assert.ok(findById(db.getTranscriptions(), retryableFailureId));
+});
+
 test("updateTranscriptionText does not clobber route_kind", (t) => {
   const db = createDb(t);
   if (!db) return;

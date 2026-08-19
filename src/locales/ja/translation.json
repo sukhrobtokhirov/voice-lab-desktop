@@ -173,7 +173,8 @@
       "useCase": "あなたについて",
       "meeting": "会議",
       "finish": "完了",
-      "voiceAgent": "ボイスエージェント"
+      "voiceAgent": "ボイスエージェント",
+      "voiceLabAccount": "VoiceLab アカウント"
     },
     "hotkey": {
       "couldNotRegisterTitle": "ホットキーを登録できませんでした",
@@ -300,6 +301,21 @@
         "step1": "corti.ai でアカウントを作成",
         "step2": "Corti コンソールで API 認証情報を作成",
         "step3": "Client ID と Secret を下に貼り付け"
+      }
+    },
+    "voiceLabAccount": {
+      "title": "VoiceLab にサインインする",
+      "description": "VoiceLab アカウントを一度接続します。クラウド文字起こしは自動的に開始され、AI クレジット ウォレットを使用します。",
+      "getKeyHint": "まだ鍵をお持ちではありませんか?",
+      "openSpace": "ボイスラボを開く",
+      "inputLabel": "VoiceLab アカウント",
+      "placeholder": "API キーを貼り付けます",
+      "helpText": "このデバイスにのみ保存されます。後から「設定」→「アカウント」で変更できます。",
+      "validating": "キーを確認中…",
+      "errors": {
+        "required": "続行するには、VoiceLab アカウントにサインインしてください。",
+        "invalid": "VoiceLab はこのセッションを承認できませんでした。もう一度サインインしてみてください。",
+        "saveFailed": "キーを保存できませんでした。もう一度やり直してください。"
       }
     }
   },
@@ -556,7 +572,9 @@
         "sessionExpired": "セッション期限切れ",
         "offline": "オフラインです",
         "dailyLimitReached": "1 日の上限に達しました",
-        "providerRateLimited": "プロバイダーのレート制限"
+        "providerRateLimited": "プロバイダーのレート制限",
+        "walletInsufficient": "VoiceLab の請求に関する問題",
+        "walletChargeFailed": "転写に失敗しました"
       },
       "fallback": {
         "title": "フォールバックモード",
@@ -589,7 +607,10 @@
         "sessionExpired": "VoiceLab Cloud のセッションが利用できません。「設定」から再度サインインしてください。",
         "offline": "オフラインです。クラウド文字起こしにはインターネット接続が必要です。",
         "dailyLimitReached": "本日の文字起こし上限に達しました。明日もう一度お試しいただくか、プランをアップグレードしてください。",
-        "providerRateLimited": "文字起こしプロバイダーがリクエストを制限しました。しばらく待ってからもう一度お試しください。"
+        "providerRateLimited": "文字起こしプロバイダーがリクエストを制限しました。しばらく待ってからもう一度お試しください。",
+        "walletInsufficient": "VoiceLab AI クレジットの残高が不足しています。 Billing を開いてチャージしてから、もう一度お試しください。",
+        "walletChargeFailed": "VoiceLab の請求で請求を完了できませんでした。しばらくしてからもう一度お試しください。",
+        "authRequired": "VoiceLab アカウントにサインインして、VoiceLab Cloud を使用します。"
       }
     },
     "clipboard": {
@@ -784,7 +805,28 @@
       "protocolUnavailable": "ブラウザでのサインインを利用できません — システムの「既定のアプリ」設定で openwhispr:// プロトコルを再登録してください。"
     },
     "welcomeSubtitle": "音声でどこでもディクテーション",
-    "welcomeTitle": "VoiceLab へようこそ"
+    "welcomeTitle": "VoiceLab へようこそ",
+    "desktopTitle": "VoiceLab デスクトップにサインインする",
+    "desktopBrowserHint": "安全なサインインはブラウザで開き、完了するとここに戻ります。",
+    "desktopWaiting": "ブラウザでサインインを完了します。 VoiceLab Desktop は自動的に続行されます。",
+    "desktopSecurity": "パスワードがデスクトップ アプリに入力されることはありません。セッション トークンはオペレーティング システムによって保護されています。",
+    "desktopOpenBrowser": "ブラウザで続行",
+    "desktopOpening": "安全なサインインを開いています…",
+    "desktopReopen": "ブラウザを再度開く",
+    "desktopCancel": "サインインをキャンセルする",
+    "desktopCancelled": "サインインがキャンセルされました。もう一度試すことができます。",
+    "desktopExpired": "このサインイン要求は期限切れになりました。続行するには、もう一度開始してください。",
+    "desktopFailed": "サインインを完了できませんでした。もう一度試してください。",
+    "desktopNetworkTimeout": "認証サーバーの応答に時間がかかりすぎました。接続を確認して、もう一度試してください。",
+    "desktopInvalidResponse": "認証サーバーが無効な応答を返しました。しばらくしてからもう一度お試しください。",
+    "desktopCallbackInvalid": "戻りリンクを確認できませんでした。再度サインインを開始します。",
+    "desktopSecurityError": "サインイン リンクは VoiceLab のセキュリティ チェックに失敗しました。再度サインインを開始します。",
+    "desktopReplayDetected": "このサインイン リンクはすでに使用されています。新しいサインイン要求を開始します。",
+    "desktopUnauthorized": "VoiceLab セッションは無効になりました。再度サインインします。",
+    "desktopUnavailable": "このアプリセッションではデスクトップ認証は利用できません。 VoiceLab デスクトップを再起動します。",
+    "desktopServerRejected": "認証サーバーがリクエストを拒否しました。もう一度試すか、以下のエラー コードを添えてサポートにお問い合わせください。",
+    "desktopReopenFailed": "ブラウザを再度開くことができませんでした。キャンセルして、再度サインインを開始してください。",
+    "desktopProtocolUnavailable": "安全なリターン リンクが登録されていません。 VoiceLab Desktop を再起動または再インストールします。"
   },
   "cleanupPrompt": "クリーンアップ",
   "developerSection": {
@@ -1286,6 +1328,24 @@
         "successDescription": "アカウントとすべてのデータが削除されました。アプリが再読み込みされます。",
         "failedTitle": "削除に失敗しました",
         "failedDescription": "アカウントの削除中にエラーが発生しました。ローカルデータが部分的に削除された可能性があります。もう一度お試しください。"
+      },
+      "voiceLabAccount": {
+        "sectionDescription": "VoiceLab Cloud は、サインインしたアカウントと共有 AI クレジット ウォレットを使用します。",
+        "label": "VoiceLab アカウント",
+        "description": "一度サインインしてください。個別の音声 API キーは必要ありません。",
+        "openSpace": "ボイスラボを開く",
+        "helpText": "このデバイスにのみ保存されます。",
+        "placeholder": "API キーを貼り付けます",
+        "validating": "キーを確認中…",
+        "valid": "キーはいい感じです。",
+        "invalid": "そのキーは拒否されました。",
+        "billing": "VoiceLab AI クレジットの残高が少なくなっています。チャージするには「Billing」を開いてください。",
+        "saved": "VoiceLab アカウントが接続されました",
+        "cleared": "VoiceLab セッションが終了しました。",
+        "saveFailed": "キーを保存できませんでした。",
+        "missingTitle": "VoiceLab へのサインインが必要です",
+        "missingBody": "VoiceLab Cloud ディクテーションを使用するには、サインインしてください。個別の API キーは必要ありません。",
+        "missingCta": "アカウント設定を開く"
       }
     },
     "agentConfig": {
@@ -1696,7 +1756,8 @@
         "dictationTranslation": "翻訳",
         "noteFormatting": "ノートのフォーマット",
         "chatIntelligence": "チャット"
-      }
+      },
+      "temporarilyDisabled": "LLM プロバイダー設定は一時的に無効になっています。音声ではVoiceLab Cloudのみを使用します。"
     },
     "noteFormatting": {
       "autoGenerateTitle": "ノートのタイトルを自動生成",
@@ -3017,5 +3078,149 @@
     },
     "start": "メモを取る",
     "join": "参加して文字起こし"
+  },
+  "desktop": {
+    "offline": "オフライン。ローカルディクテーションはまだ機能します。",
+    "nav": {
+      "history": "歴史",
+      "vocabulary": "語彙",
+      "more": "もっと"
+    },
+    "wallet": {
+      "title": "AIクレジットウォレット",
+      "shared": "VoiceLab 製品間で 1 つのバランス",
+      "balance": "バランス",
+      "available": "利用可能",
+      "reserved": "予約済み",
+      "unavailable": "ウォレットが一時的に利用できなくなりました。",
+      "updated": "{{time}} を更新しました",
+      "live": "ライブバランス",
+      "manage": "請求の管理"
+    },
+    "creditShortage": {
+      "title": "さらに多くの AI クレジットが必要です",
+      "description": "この録音には利用可能なクレジットが不足しています。クレジットを追加するか、プランを選択します。",
+      "required": "必要です",
+      "useLocal": "VoiceLab の請求を管理する"
+    },
+    "dictation": {
+      "ready": "準備ができて"
+    },
+    "languages": {
+      "choose": "言語を選択してください",
+      "search": "検索言語",
+      "searchPlaceholder": "言語またはコードを検索する",
+      "clearSearch": "検索をクリア",
+      "empty": "言語が見つかりません。",
+      "autoUnsupported": "このサービスでは自動検出は利用できません。",
+      "languageUnsupported": "この言語は、選択したサービスでは利用できません。",
+      "groups": {
+        "automatic": "自動",
+        "centralAsia": "中央アジア",
+        "other": "ロシア語と英語"
+      }
+    },
+    "onboarding": {
+      "progress": {
+        "welcome": "いらっしゃいませ",
+        "mode": "アカウント",
+        "language-permissions": "言語",
+        "hotkey": "ショートカット",
+        "ready": "準備ができて"
+      },
+      "welcome": {
+        "title": "VoiceLab ディクテート",
+        "description": "自然に話しましょう。テキストは必要な場所に表示されます。"
+      },
+      "advanced": {
+        "title": "高度なセットアップ",
+        "description": "VoiceLab Cloud アカウントなしでローカル モデルまたは独自のプロバイダーを使用します。",
+        "localTitle": "ローカルモデル",
+        "localDescription": "音声はこのデバイスに残り、AI クレジットは 0 個使用されます。",
+        "providerTitle": "私のプロバイダー",
+        "providerDescription": "後で詳細設定で API キーを接続します。",
+        "useCloud": "VoiceLab クラウドを続ける"
+      },
+      "mode": {
+        "localTitle": "ローカルモード",
+        "localDescription": "ささやき言語と自動検出が利用可能です。",
+        "providerTitle": "プロバイダーモード",
+        "providerDescription": "セットアップ後にプロバイダーと API キーを接続します。"
+      },
+      "language": {
+        "title": "言語と権限",
+        "description": "普段ディクテーションを行う言語を選択します。",
+        "loadingCapabilities": "アカウントで利用可能な言語を確認しています…",
+        "capabilitiesUnavailable": "クラウドの機能を確認できませんでした。言語を選択することもできます。",
+        "unsupported": "この言語は、選択したモードではサポートされていません。続行するには別の言語を選択してください。",
+        "microphoneRequired": "続行するにはマイクへのアクセスが必要です。"
+      },
+      "hotkey": {
+        "title": "ショートカットとクイックテスト",
+        "description": "ショートカットを設定して発話し、以下の結果を確認してください。",
+        "placeholder": "結果がここに表示されます…"
+      },
+      "ready": {
+        "title": "準備ができて",
+        "account": "VoiceLab アカウントと AI Credit ウォレットが接続されています。",
+        "local": "ローカル転写が選択されています。",
+        "provider": "詳細設定を開いてプロバイダーに接続します。",
+        "start": "ディクテーションを開始する"
+      }
+    },
+    "dictionary": {
+      "actionFailed": "変更を完了できませんでした",
+      "tryAgain": "もう一度やり直してください。ローカルに保存された単語はこのデバイスに残ります。",
+      "duplicateTitle": "すでにあなたの語彙の中にあります",
+      "duplicateDescription": "その言葉はすでに保存されています。",
+      "saved": "語彙を更新しました",
+      "duplicatesSkipped": "{{count}} 重複がスキップされました",
+      "duplicatesSkipped_other": "{{count}} 重複はスキップされました",
+      "status": {
+        "synced": "同期済み",
+        "conflict": "見直しが必要",
+        "syncError": "ローカルに保存されましたが、同期に失敗しました",
+        "syncing": "同期中",
+        "savedLocal": "このデバイスに保存されました"
+      }
+    },
+    "privacy": {
+      "notesSync": "メモの同期",
+      "notesSyncDescription": "サインインしているデバイス間でメモを同期します。",
+      "accountSync": "語彙と好み",
+      "accountSyncDescription": "アカウント設定と語彙は、サインイン中に自動的に同期されます。",
+      "alwaysOn": "の上",
+      "transcriptBackup": "トランスクリプトのバックアップ",
+      "transcriptBackupDescription": "このデスクトップ ビルドではトランスクリプト テキストはアップロードされません。",
+      "audioBackup": "オーディオのバックアップ",
+      "audioBackupDescription": "録音はこのデバイスに残り、アップロードされません。",
+      "notEnabled": "オフ",
+      "notAvailable": "利用不可",
+      "localAudio": "ローカルオーディオ",
+      "localAudioDescription": "このデバイスに録音を残す期間を選択します。"
+    },
+    "settings": {
+      "account": "アカウントとクレジット",
+      "accountDescription": "プロフィール、セッション、AI クレジット ウォレット",
+      "dictation": "ディクテーション",
+      "dictationDescription": "言語、マイク、およびペーストの動作",
+      "shortcuts": "ショートカット",
+      "shortcutsDescription": "ディクテーションと VoiceLab のショートカット",
+      "privacy": "データとプライバシー",
+      "privacyDescription": "クラウドバックアップ、ローカルオーディオと保存",
+      "advanced": "高度な",
+      "advancedDescription": "VoiceLab Cloud と開発者ツール",
+      "advancedSetup": "クラウド転写",
+      "advancedSetupDescription": "VoiceLab Dictate は、サインインしたアカウントを自動的に使用します。"
+    },
+    "session": {
+      "active": "サインインしました",
+      "device": "デバイス",
+      "thisDevice": "この VoiceLab Dictate デスクトップ",
+      "status": "セッション",
+      "protected": "アクティブで保護されている",
+      "signedOut": "サインインしていません",
+      "signedOutDescription": "サインインして、VoiceLab Cloud と AI クレジット ウォレットを使用します。"
+    }
   }
 }

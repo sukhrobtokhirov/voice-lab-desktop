@@ -37,6 +37,16 @@ function registerAuthIpc({ handle, host }) {
       errorCode: "AUTH_MANAGER_UNAVAILABLE",
     }
   );
+  handle("auth-reopen-browser", async () =>
+    host.desktopAuthManager
+      ? host.desktopAuthManager.reopenAuthorization()
+      : { status: "error", user: null, errorCode: "AUTH_MANAGER_UNAVAILABLE" }
+  );
+  handle("auth-cancel-browser", () =>
+    host.desktopAuthManager
+      ? host.desktopAuthManager.cancelAuthorization()
+      : { status: "signed-out", user: null, errorCode: null }
+  );
   handle("auth-refresh-session", async () =>
     host.desktopAuthManager
       ? host.desktopAuthManager.refreshSession({ force: true })

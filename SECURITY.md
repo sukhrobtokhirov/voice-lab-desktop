@@ -36,9 +36,10 @@ Out of scope:
 
 ## Security Model
 
-- **Local-first audio processing** — Audio is transcribed on-device using
-  whisper.cpp or nvidia parakeet. Recordings are not sent to external servers unless explicitly
-  configured by the user.
+- **Authenticated cloud transcription** — Dictation, meeting, retry, and upload audio are sent to
+  the VoiceLab Desktop Dictate API over TLS. The signed-in account authorizes each request and the
+  server charges the account's AI Credits wallet. The desktop does not accept a speech API key and
+  does not include a local speech-to-text runtime. Optional speaker diarization runs locally.
 - **Credential storage** — API keys provided by users (BYOK) and enterprise
   cloud credentials (AWS, Azure, Vertex) are encrypted at rest using
   Electron's `safeStorage` API, which delegates to the OS keychain (Keychain

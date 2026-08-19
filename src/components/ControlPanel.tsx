@@ -36,7 +36,10 @@ import {
   useIsNarrowWindow,
   useMeetingRecordingStore,
 } from "../stores/meetingRecordingStore";
-import ControlPanelSidebar, { type ControlPanelView } from "./ControlPanelSidebar";
+import ControlPanelSidebar, {
+  CONTROL_PANEL_SIDEBAR_WIDTH_PX,
+  type ControlPanelView,
+} from "./ControlPanelSidebar";
 import MeetingRecordingMount from "./MeetingRecordingMount";
 import MeetingRecordingPill from "./notes/MeetingRecordingPill";
 import WindowControls from "./WindowControls";
@@ -65,8 +68,6 @@ import { WORKSPACES_ENABLED } from "../lib/features";
 
 const platform = getCachedPlatform();
 
-const SIDEBAR_WIDTH_PX = 192;
-
 const toggleIconClass =
   "text-foreground/60 group-hover:text-foreground/75 dark:text-foreground/50 dark:group-hover:text-foreground/65 transition-colors duration-150";
 
@@ -81,7 +82,11 @@ const CommandSearch = React.lazy(() => import("./CommandSearch"));
 
 function PanelLoadingFallback() {
   return (
-    <div className="flex min-h-48 w-full items-center justify-center" role="status" aria-label="Loading">
+    <div
+      className="flex min-h-48 w-full items-center justify-center"
+      role="status"
+      aria-label="Loading"
+    >
       <div className="flex items-center gap-3 rounded-full border border-border/60 bg-card/80 px-4 py-2 text-sm text-muted-foreground shadow-sm">
         <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#e55347]" />
         Loading…
@@ -135,13 +140,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     folderId: number;
     event: any;
   } | null>(null);
-  const [gpuAccelAvailable, setGpuAccelAvailable] = useState<{
-    transcription: boolean;
-    intelligence: boolean;
-  }>({
-    transcription: false,
-    intelligence: false,
-  });
+  const [gpuAccelAvailable, setGpuAccelAvailable] = useState(false);
   const [gpuBannerDismissed, setGpuBannerDismissed] = useState(
     () => localStorage.getItem("gpuBannerDismissedUnified") === "true"
   );
@@ -150,13 +149,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   const updateErrorToastShown = useRef<Error | null>(null);
   const { hotkey } = useHotkey();
   const { toast } = useToast();
-  const {
-    useLocalWhisper,
-    localTranscriptionProvider,
-    useCleanupModel,
-    setUseLocalWhisper,
-    setCloudTranscriptionMode,
-  } = useSettings();
+  const { useCleanupModel, setUseLocalWhisper, setCloudTranscriptionMode } = useSettings();
   const { isSignedIn, isLoaded: authLoaded, user } = useAuth();
   const usage = useUsage();
 
@@ -314,31 +307,20 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   useEffect(() => {
     if (platform === "darwin" || gpuBannerDismissed) return;
     const detect = async () => {
-      const results = { transcription: false, intelligence: false };
-      if (useLocalWhisper && localTranscriptionProvider === "whisper") {
-        try {
-          const status = await window.electronAPI?.getCudaWhisperStatus?.();
-          if (status?.gpuInfo.hasNvidiaGpu) {
-            if (!status.downloaded) results.transcription = true;
-          } else {
-            const vulkan = await window.electronAPI?.getVulkanWhisperStatus?.();
-            if (vulkan?.vulkan.available && !vulkan.downloaded) results.transcription = true;
-          }
-        } catch {}
-      }
+      let available = false;
       if (useCleanupModel) {
         try {
           const [gpu, vulkan] = await Promise.all([
             window.electronAPI?.detectVulkanGpu?.(),
             window.electronAPI?.getLlamaVulkanStatus?.(),
           ]);
-          if (gpu?.available && !vulkan?.downloaded) results.intelligence = true;
+          available = Boolean(gpu?.available && !vulkan?.downloaded);
         } catch {}
       }
-      setGpuAccelAvailable(results);
+      setGpuAccelAvailable(available);
     };
     detect();
-  }, [useLocalWhisper, localTranscriptionProvider, useCleanupModel, gpuBannerDismissed]);
+  }, [useCleanupModel, gpuBannerDismissed]);
 
   useEffect(() => {
     const drain = async () => {
@@ -403,33 +385,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       });
     });
     return () => cleanup?.();
-  }, [toast, t]);
-
-  // One-shot prompt when onboarding is done but no Aisha key is saved yet.
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      if (localStorage.getItem("onboardingCompleted") !== "true") return;
-      if (sessionStorage.getItem("aishaKeyPromptShown") === "true") return;
-      try {
-        const status = await window.electronAPI?.providerCredentialStatus?.();
-        if (cancelled || status?.credentials?.aishaApiKey) return;
-        sessionStorage.setItem("aishaKeyPromptShown", "true");
-        setSettingsSection("account");
-        setShowSettings(true);
-        toast({
-          title: t("settingsPage.account.aishaKey.missingTitle"),
-          description: t("settingsPage.account.aishaKey.missingBody"),
-          duration: 12000,
-        });
-      } catch {
-        /* ignore */
-      }
-    };
-    void run();
-    return () => {
-      cancelled = true;
-    };
   }, [toast, t]);
 
   useEffect(() => {
@@ -553,19 +508,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       try {
         const s = useSettingsStore.getState();
         const result = await window.electronAPI.retryTranscription(id, {
-          useLocalWhisper: s.useLocalWhisper,
-          localTranscriptionProvider: s.localTranscriptionProvider,
-          cloudTranscriptionMode: s.cloudTranscriptionMode,
-          cloudTranscriptionProvider: s.cloudTranscriptionProvider,
-          cloudTranscriptionModel: s.cloudTranscriptionModel,
-          cloudTranscriptionBaseUrl: s.cloudTranscriptionBaseUrl,
-          parakeetModel: s.parakeetModel,
-          whisperModel: s.whisperModel,
           preferredLanguage: s.preferredLanguage,
-          transcriptionMode: s.transcriptionMode,
-          remoteTranscriptionType: s.remoteTranscriptionType,
-          remoteTranscriptionUrl: s.remoteTranscriptionUrl,
-          remoteTranscriptionModel: s.remoteTranscriptionModel,
         });
         if (result.success && result.transcription) {
           const rawText = result.transcription.text;
@@ -858,7 +801,9 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       <div className="flex flex-1 overflow-hidden relative">
         <div
           className="shrink-0 transition-[width] duration-300 ease-out"
-          style={{ width: sidebarCollapsed || isSidePanelLayout ? 0 : SIDEBAR_WIDTH_PX }}
+          style={{
+            width: sidebarCollapsed || isSidePanelLayout ? 0 : CONTROL_PANEL_SIDEBAR_WIDTH_PX,
+          }}
         />
         <div
           className={`absolute inset-y-0 left-0 z-30 transition-transform duration-300 ease-out${
@@ -909,7 +854,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
         </div>
         <main className="flex-1 flex flex-col overflow-hidden">
           <div
-            className="flex items-center justify-between w-full h-10 shrink-0"
+            className="flex h-12 w-full shrink-0 items-center justify-between border-b border-black/10 bg-white dark:border-white/12 dark:bg-[#0f0f0f]"
             style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
           >
             {isSidePanelLayout && (
@@ -936,51 +881,47 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
             )}
           </div>
           <div className="flex-1 overflow-y-auto pt-1">
-            {(gpuAccelAvailable.transcription || gpuAccelAvailable.intelligence) &&
-              activeView === "home" &&
-              !gpuBannerDismissed && (
-                <div className="max-w-3xl mx-auto w-full mb-3">
-                  <div className="rounded-lg border border-primary/20 dark:border-primary/15 bg-primary/5 p-3">
-                    <div className="flex items-start gap-3">
-                      <div className="shrink-0 w-8 h-8 rounded-md bg-primary/10 dark:bg-primary/15 flex items-center justify-center">
-                        <Zap size={16} className="text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-foreground mb-0.5">
-                          {t("controlPanel.gpu.bannerTitle")}
-                        </p>
-                        <p className="text-xs text-muted-foreground mb-2">
-                          {t("controlPanel.gpu.bannerDescription")}
-                        </p>
-                        <div className="flex items-center gap-3">
-                          <Button
-                            variant="default"
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={() => {
-                              setSettingsSection(
-                                gpuAccelAvailable.transcription ? "transcription" : "intelligence"
-                              );
-                              setShowSettings(true);
-                            }}
-                          >
-                            {t("controlPanel.gpu.enableButton")}
-                          </Button>
-                          <button
-                            onClick={() => {
-                              setGpuBannerDismissed(true);
-                              localStorage.setItem("gpuBannerDismissedUnified", "true");
-                            }}
-                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            {t("controlPanel.gpu.dismissButton")}
-                          </button>
-                        </div>
+            {gpuAccelAvailable && activeView === "home" && !gpuBannerDismissed && (
+              <div className="max-w-3xl mx-auto w-full mb-3">
+                <div className="rounded-lg border border-primary/20 dark:border-primary/15 bg-primary/5 p-3">
+                  <div className="flex items-start gap-3">
+                    <div className="shrink-0 w-8 h-8 rounded-md bg-primary/10 dark:bg-primary/15 flex items-center justify-center">
+                      <Zap size={16} className="text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground mb-0.5">
+                        {t("controlPanel.gpu.bannerTitle")}
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        {t("controlPanel.gpu.bannerDescription")}
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            setSettingsSection("intelligence");
+                            setShowSettings(true);
+                          }}
+                        >
+                          {t("controlPanel.gpu.enableButton")}
+                        </Button>
+                        <button
+                          onClick={() => {
+                            setGpuBannerDismissed(true);
+                            localStorage.setItem("gpuBannerDismissedUnified", "true");
+                          }}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {t("controlPanel.gpu.dismissButton")}
+                        </button>
                       </div>
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
             {activeView === "home" && (
               <HistoryView
                 history={history}
@@ -1045,7 +986,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
             {activeView === "integrations" && (
               <Suspense fallback={<PanelLoadingFallback />}>
                 <IntegrationsView
-                  isPaid={!!(usage?.isSubscribed)}
+                  isPaid={!!usage?.isSubscribed}
                   onUpgrade={() => {
                     setSettingsSection("account");
                     setShowSettings(true);
@@ -1057,7 +998,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
         </main>
         {!isSidePanelLayout && (
           <div
-            className={`absolute z-40 flex h-10 items-center ${
+            className={`absolute z-40 flex h-12 items-center ${
               platform === "darwin" ? "left-21 top-2" : "left-2 top-0"
             }`}
             style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}

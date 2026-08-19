@@ -167,7 +167,7 @@
   "onboarding": {
     "steps": {
       "welcome": "Xush kelibsiz",
-      "aishaKey": "Aisha kaliti",
+      "voiceLabAccount": "VoiceLab hisobi",
       "setup": "Sozlash",
       "permissions": "Ruxsatlar",
       "activation": "Diktant",
@@ -176,18 +176,18 @@
       "finish": "Yakunlash",
       "voiceAgent": "Ovozli agent"
     },
-    "aishaKey": {
-      "title": "Aisha API kalitingizni ulang",
-      "description": "VoiceLab Cloud nutqni matnga aylantirish uchun Aisha’dan foydalanadi. space.aisha.group da shaxsiy API kalit yarating va quyiga joylashtiring.",
+    "voiceLabAccount": {
+      "title": "VoiceLab hisobiga kiring",
+      "description": "VoiceLab hisobingizni bir marta ulang. Bulut transkripsiyasi avtomatik ishlaydi va AI Credit hamyoningizdan foydalanadi.",
       "getKeyHint": "Hali kalitingiz yo‘qmi?",
-      "openSpace": "space.aisha.group ni ochish",
-      "inputLabel": "Aisha API kaliti",
+      "openSpace": "VoiceLab’ni ochish",
+      "inputLabel": "VoiceLab hisobi",
       "placeholder": "API kalitingizni joylashtiring",
       "helpText": "Faqat shu qurilmada saqlanadi. Keyinroq Sozlamalar → Hisob orqali o‘zgartirish mumkin.",
       "validating": "Kalit tekshirilmoqda…",
       "errors": {
-        "required": "Davom etish uchun Aisha API kalitini kiriting.",
-        "invalid": "Kalit rad etildi. space.aisha.group da yangisini yarating.",
+        "required": "Davom etish uchun VoiceLab hisobiga kiring.",
+        "invalid": "VoiceLab sessiyani tasdiqlay olmadi. Qayta kirib ko‘ring.",
         "saveFailed": "Kalitni saqlab bo‘lmadi. Qayta urinib ko‘ring."
       }
     },
@@ -220,7 +220,7 @@
     },
     "transcription": {
       "title": "Transkripsiya sozlamalari",
-      "description": "VoiceLab Cloud (Aisha) — tilni tanlang",
+      "description": "VoiceLab Cloud — tilni tanlang",
       "preferredLanguage": "Afzal til"
     },
     "activation": {
@@ -402,7 +402,7 @@
       "failedCtaSettings": "Set up your transcription provider",
       "failedCtaAndRetry": "then click retry",
       "failedCtaSettingsOnly": "Set up your transcription provider in Settings",
-      "failedLimitReached": "Aisha balansi yetarli emas — space.aisha.group da to‘ldiring",
+      "failedLimitReached": "VoiceLab AI Credit yetarli emas — Billing orqali to‘ldiring",
       "failedOffline": "You're offline",
       "rawTranscript": "Raw Transcript",
       "clearAll": "Hammasini tozalash",
@@ -573,14 +573,14 @@
       "errorTitles": {
         "sessionExpired": "Session Expired",
         "offline": "You're Offline",
-        "dailyLimitReached": "Aisha to‘lov/balans xatosi",
-        "aishaBillingFailed": "Aisha to‘lov/balans xatosi",
-        "aishaBillingRetry": "Transkripsiya muvaffaqiyatsiz",
+        "dailyLimitReached": "VoiceLab to‘lov/balans xatosi",
+        "walletInsufficient": "VoiceLab to‘lov/balans xatosi",
+        "walletChargeFailed": "Transkripsiya muvaffaqiyatsiz",
         "providerRateLimited": "Provider Rate Limited"
       },
       "fallback": {
-        "title": "Fallback Mode",
-        "description": "Local Whisper failed. Used OpenAI API instead."
+        "title": "VoiceLab qayta urinishi",
+        "description": "Dastlabki so‘rov bajarilmadi va VoiceLab uni xavfsiz qayta yubordi."
       },
       "translationFallback": {
         "unreachableTitle": "Translation unavailable",
@@ -608,10 +608,10 @@
       "errorDescriptions": {
         "sessionExpired": "Your VoiceLab Cloud session is unavailable. Please sign in again from Settings.",
         "offline": "You're offline. Cloud transcription requires an internet connection.",
-        "dailyLimitReached": "Aisha to‘lovi muvaffaqiyatsiz yoki balans yetarli emas. Qayta urinib ko‘ring yoki space.aisha.group da to‘ldiring.",
-        "aishaBillingFailed": "Aisha balansi yetarli emas. space.aisha.group da to‘ldiring, so‘ng qayta urinib ko‘ring.",
-        "aishaBillingRetry": "Aisha to‘lov tranzaksiyasi muvaffaqiyatsiz. Birozdan keyin qayta urinib ko‘ring.",
-        "aishaKeyMissing": "Sozlamalar → Hisob bo‘limida Aisha API kalitini qo‘shing (space.aisha.group).",
+        "dailyLimitReached": "VoiceLab limitingiz tugagan yoki AI Credit balansingiz yetarli emas. Billing’ni ochib, qayta urinib ko‘ring.",
+        "walletInsufficient": "VoiceLab AI Credit balansingiz yetarli emas. Billing orqali to‘ldirib, qayta urinib ko‘ring.",
+        "walletChargeFailed": "VoiceLab to‘lovni yakunlay olmadi. Birozdan keyin qayta urinib ko‘ring.",
+        "authRequired": "VoiceLab Cloud uchun VoiceLab hisobiga kiring.",
         "providerRateLimited": "Your transcription provider rate-limited the request. Wait a moment and try again."
       }
     },
@@ -742,6 +742,27 @@
   },
   "auth": {
     "cloudNotConfigured": "Cloud Not Configured",
+    "desktopTitle": "VoiceLab Desktop hisobiga kiring",
+    "desktopBrowserHint": "Xavfsiz kirish brauzerda ochiladi va tugagach ilovaga avtomatik qaytadi.",
+    "desktopWaiting": "Brauzerda kirishni yakunlang. VoiceLab Desktop avtomatik davom etadi.",
+    "desktopSecurity": "Parolingiz desktop ilovasiga kiritilmaydi. Sessiya tokeni operatsion tizim tomonidan himoyalanadi.",
+    "desktopOpenBrowser": "Brauzerda davom etish",
+    "desktopOpening": "Xavfsiz kirish ochilmoqda…",
+    "desktopReopen": "Brauzerni qayta ochish",
+    "desktopCancel": "Kirishni bekor qilish",
+    "desktopCancelled": "Kirish bekor qilindi. Qayta urinishingiz mumkin.",
+    "desktopExpired": "Kirish so‘rovi muddati tugadi. Davom etish uchun qayta boshlang.",
+    "desktopFailed": "Kirish yakunlanmadi. Qayta urinib ko‘ring.",
+    "desktopNetworkTimeout": "Autentifikatsiya serveri vaqtida javob bermadi. Internetni tekshirib, qayta urining.",
+    "desktopInvalidResponse": "Autentifikatsiya serveri noto‘g‘ri javob qaytardi. Birozdan so‘ng qayta urining.",
+    "desktopCallbackInvalid": "Qaytish havolasini tekshirib bo‘lmadi. Kirishni qayta boshlang.",
+    "desktopSecurityError": "Kirish havolasi VoiceLab xavfsizlik tekshiruvidan o‘tmadi. Kirishni qayta boshlang.",
+    "desktopReplayDetected": "Bu kirish havolasi avval ishlatilgan. Yangi kirish so‘rovini boshlang.",
+    "desktopUnauthorized": "VoiceLab sessiyangiz endi yaroqsiz. Qayta kiring.",
+    "desktopUnavailable": "Bu ilova sessiyasida desktop autentifikatsiya ishlamayapti. VoiceLab Desktop’ni qayta ishga tushiring.",
+    "desktopServerRejected": "Autentifikatsiya serveri so‘rovni rad etdi. Qayta urining yoki quyidagi xato kodi bilan yordam xizmatiga murojaat qiling.",
+    "desktopReopenFailed": "Brauzerni qayta ochib bo‘lmadi. Bekor qilib, kirishni qayta boshlang.",
+    "desktopProtocolUnavailable": "Xavfsiz qaytish havolasi ro‘yxatdan o‘tmagan. VoiceLab Desktop’ni qayta ishga tushiring yoki o‘rnating.",
     "common": {
       "back": "Back",
       "continue": "Continue",
@@ -1308,22 +1329,22 @@
       }
     },
     "account": {
-      "aishaKey": {
-        "sectionDescription": "VoiceLab Cloud shaxsiy Aisha API kalitingizdan foydalanadi. VoiceLab hisobiga kirish shart emas.",
-        "label": "Aisha API kaliti",
-        "description": "space.aisha.group da kalit yarating va bu yerga joylashtiring.",
-        "openSpace": "space.aisha.group ni ochish",
+      "voiceLabAccount": {
+        "sectionDescription": "VoiceLab Cloud kirilgan hisobingiz va umumiy AI Credit hamyoningizdan foydalanadi.",
+        "label": "VoiceLab hisobi",
+        "description": "Bir marta kiring; alohida nutq API kaliti kerak emas.",
+        "openSpace": "VoiceLab’ni ochish",
         "helpText": "Faqat shu qurilmada saqlanadi.",
         "placeholder": "API kalitingizni joylashtiring",
         "validating": "Kalit tekshirilmoqda…",
         "valid": "Kalit mos keladi.",
         "invalid": "Kalit rad etildi.",
-        "billing": "Kalit qabul qilindi, lekin Aisha balansi past. space.aisha.group da to‘ldiring.",
-        "saved": "Aisha API kaliti saqlandi",
-        "cleared": "Aisha API kaliti o‘chirildi.",
+        "billing": "VoiceLab AI Credit balansingiz kam. Billing orqali to‘ldiring.",
+        "saved": "VoiceLab hisobi ulandi",
+        "cleared": "VoiceLab sessiyasi yakunlandi.",
         "saveFailed": "Kalitni saqlab bo‘lmadi.",
-        "missingTitle": "Aisha API kaliti kerak",
-        "missingBody": "VoiceLab Cloud diktantsidan foydalanish uchun shaxsiy Aisha API kalitini qo‘shing. Kalitni space.aisha.group dan oling.",
+        "missingTitle": "VoiceLab hisobiga kirish kerak",
+        "missingBody": "VoiceLab Cloud diktanti uchun hisobingizga kiring. Alohida API kaliti kerak emas.",
         "missingCta": "Hisob sozlamalarini ochish"
       },
       "badges": {
@@ -1535,7 +1556,7 @@
         "local": "Local",
         "selfHosted": "Self-Hosted",
         "enterprise": "Enterprise",
-        "openwhisprDesc": "Aisha nutqni matnga. Ishonchli aniqlik — sozlash shart emas.",
+        "openwhisprDesc": "VoiceLab nutqni matnga aylantiradi va hisobingizdagi AI Credit’dan foydalanadi.",
         "providersDesc": "Bring your own API key.",
         "localDesc": "On-device models. Fully private.",
         "selfHostedDesc": "Your own server on your network.",
@@ -1904,7 +1925,7 @@
     "llms": {
       "title": "Til modellari",
       "description": "Tozalash, eslatma formatlash va chat uchun modellarni sozlang",
-      "temporarilyDisabled": "LLM provayder sozlamalari vaqtincha o‘chirilgan. Nutq faqat VoiceLab Cloud (Aisha) orqali ishlaydi.",
+      "temporarilyDisabled": "LLM provayder sozlamalari vaqtincha o‘chirilgan. Nutq faqat VoiceLab Cloud orqali ishlaydi.",
       "tabs": {
         "dictationCleanup": "Dictation Cleanup",
         "dictationAgent": "Voice Agent",
@@ -1926,7 +1947,7 @@
         "providers": "Cloud Providers",
         "local": "Local",
         "selfHosted": "Self-Hosted",
-        "openwhisprDesc": "Aisha nutqni matnga. Ishonchli aniqlik — sozlash shart emas.",
+        "openwhisprDesc": "VoiceLab nutqni matnga aylantiradi va hisobingizdagi AI Credit’dan foydalanadi.",
         "providersDesc": "Bring your own API key.",
         "localDesc": "On-device models. Fully private.",
         "selfHostedDesc": "Your own server on your network."
@@ -1970,7 +1991,7 @@
       "transcriptionPreviewDescription": "Show transcription in a floating window before cleanup",
       "vad": {
         "title": "Voice Activity Detection",
-        "description": "Configure how Silero VAD detects and segments speech for local Whisper transcription",
+        "description": "Silero VAD audio yozishda nutqni qanday aniqlashi va bo‘lishini sozlang",
         "toggles": {
           "dictation": {
             "title": "Silero VAD for Dictation",
@@ -2428,9 +2449,9 @@
       "transcriptionFailed": "Transcription failed",
       "errorOccurred": "An error occurred",
       "noSpeechDetected": "No speech detected in this audio.",
-      "noProviderTitle": "No transcription provider set up",
-      "noProviderDescription": "Add an API key or download a local model to start transcribing.",
-      "noProviderAction": "Open Transcription Settings",
+      "noProviderTitle": "Hisobga kirish kerak",
+      "noProviderDescription": "VoiceLab bilan transkripsiya qilish uchun hisobingizga kiring. Xarajat AI Credits balansingizdan yechiladi.",
+      "noProviderAction": "Kirish",
       "fileTooLarge": "This file exceeds the 500 MB limit.",
       "paidPlanRequired": "Cloud transcription for files over 25 MB requires a paid plan. Large files are processed with VoiceLab Cloud for reliable, high-quality results.",
       "largeFileNote": "Large files are split and transcribed in parallel.",
@@ -2804,7 +2825,7 @@
         "local": "Local",
         "selfHosted": "Self-Hosted",
         "enterprise": "Enterprise",
-        "openwhisprDesc": "Aisha nutqni matnga. Ishonchli aniqlik — sozlash shart emas.",
+        "openwhisprDesc": "VoiceLab nutqni matnga aylantiradi va hisobingizdagi AI Credit’dan foydalanadi.",
         "providersDesc": "Bring your own API key.",
         "localDesc": "On-device models. Fully private.",
         "selfHostedDesc": "Your own server on your network.",
@@ -3080,9 +3101,9 @@
     },
     "creditShortage": {
       "title": "Ko‘proq AI Credit kerak",
-      "description": "Bu yozuv uchun mavjud credit yetmaydi. Credit qo‘shing yoki lokal rejimda davom eting.",
+      "description": "Bu yozuv uchun mavjud credit yetmaydi. Credit qo‘shing yoki tarifni tanlang.",
       "required": "Kerak",
-      "useLocal": "0 credit bilan lokal rejimda ishlatish"
+      "useLocal": "VoiceLab billingni boshqarish"
     },
     "dictation": {
       "ready": "Tayyor"
@@ -3186,13 +3207,13 @@
       "dictation": "Diktant",
       "dictationDescription": "Til, mikrofon va matn joylash",
       "shortcuts": "Tugmalar",
-      "shortcutsDescription": "Diktant va Aisha tugmalari",
+      "shortcutsDescription": "Diktant va VoiceLab tugmalari",
       "privacy": "Ma’lumot va maxfiylik",
       "privacyDescription": "Cloud backup, lokal audio va saqlash muddati",
       "advanced": "Advanced",
-      "advancedDescription": "Lokal modellar, BYOK va developer vositalari",
-      "advancedSetup": "Advanced transkripsiya",
-      "advancedSetupDescription": "VoiceLab Cloud standart rejim. Lokal model va BYOK faqat shu qurilmada saqlanadi."
+      "advancedDescription": "VoiceLab Cloud va developer vositalari",
+      "advancedSetup": "Cloud transkripsiya",
+      "advancedSetupDescription": "VoiceLab Dictate kirilgan hisobingizdan avtomatik foydalanadi."
     },
     "session": {
       "active": "Kirilgan",

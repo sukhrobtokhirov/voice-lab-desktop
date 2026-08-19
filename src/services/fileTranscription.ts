@@ -16,20 +16,7 @@ export interface DiarizationSettings {
 }
 
 export interface FileTranscriptionConfig {
-  useLocalWhisper: boolean;
-  localTranscriptionProvider: string;
-  whisperModel: string;
-  parakeetModel: string;
-  isOpenWhisprCloud: boolean;
-  cloudTranscriptionProvider: string;
-  cloudTranscriptionBaseUrl: string;
-  cloudTranscriptionModel: string;
   language: string;
-  cortiEnvironment?: string;
-  cortiTenant?: string;
-  transcriptionMode?: string;
-  remoteTranscriptionUrl?: string;
-  remoteTranscriptionModel?: string;
 }
 
 function explicitLanguage(language: string): string | undefined {
@@ -39,53 +26,26 @@ function explicitLanguage(language: string): string | undefined {
 export async function transcribeFile(
   filePath: string,
   cfg: FileTranscriptionConfig,
-  diarize: boolean
+  _diarize: boolean
 ): Promise<FileTranscriptionResult> {
-  if (cfg.isOpenWhisprCloud) {
-    return withSessionRefresh(async () => {
-      const result = await window.electronAPI.transcribeAudioFileCloud!(filePath, {
-        language: explicitLanguage(cfg.language) ?? null,
+  return withSessionRefresh(async () => {
+    const result = await window.electronAPI.transcribeAudioFileCloud!(filePath, {
+      language: explicitLanguage(cfg.language) ?? null,
+    });
+    if (!result.success && result.code) {
+      throw Object.assign(new Error(result.error || "Cloud transcription failed"), {
+        code: result.code,
       });
-      if (!result.success && result.code) {
-        throw Object.assign(new Error(result.error || "Cloud transcription failed"), {
-          code: result.code,
-        });
-      }
-      return result;
-    });
-  }
-
-  if (cfg.useLocalWhisper) {
-    return window.electronAPI.transcribeAudioFile(filePath, {
-      provider: cfg.localTranscriptionProvider === "nvidia" ? "nvidia" : "whisper",
-      model: cfg.localTranscriptionProvider === "nvidia" ? cfg.parakeetModel : cfg.whisperModel,
-      language: explicitLanguage(cfg.language),
-    });
-  }
-
-  const result = await window.electronAPI.providerTranscribeFile?.({
-    filePath,
-    baseUrl: cfg.cloudTranscriptionBaseUrl,
-    model: cfg.cloudTranscriptionModel,
-    diarize,
-    provider: cfg.cloudTranscriptionProvider,
-    language: explicitLanguage(cfg.language),
-    environment: cfg.cortiEnvironment,
-    tenant: cfg.cortiTenant,
-    transcriptionMode: cfg.transcriptionMode,
-    remoteTranscriptionUrl: cfg.remoteTranscriptionUrl,
-    remoteTranscriptionModel: cfg.remoteTranscriptionModel,
+    }
+    return result;
   });
-  return result ?? { success: false, error: "Selected transcription provider is unavailable" };
 }
 
 export function shouldUseByokDiarize(
-  cfg: FileTranscriptionConfig,
-  diarizationEnabled: boolean
+  _cfg: FileTranscriptionConfig,
+  _diarizationEnabled: boolean
 ): boolean {
-  if (!diarizationEnabled || cfg.useLocalWhisper || cfg.isOpenWhisprCloud) return false;
-  if (cfg.transcriptionMode === "self-hosted") return false;
-  return cfg.cloudTranscriptionProvider === "openai" || cfg.cloudTranscriptionProvider === "mistral";
+  return false;
 }
 
 export async function transcribeFileWithSpeakers(

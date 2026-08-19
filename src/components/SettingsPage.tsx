@@ -16,8 +16,6 @@ import {
   Moon,
   Monitor,
   Cloud,
-  Key,
-  Cpu,
   Network,
   Sparkles,
   AlertTriangle,
@@ -38,7 +36,6 @@ import {
   Languages,
   ExternalLink,
 } from "lucide-react";
-import ApiKeyInput from "./ui/ApiKeyInput";
 import { useAuth } from "../hooks/useAuth";
 import { AUTH_URL, signOut, deleteAccount } from "../lib/auth";
 import MicPermissionWarning from "./ui/MicPermissionWarning";
@@ -59,7 +56,6 @@ import {
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import { useSettings } from "../hooks/useSettings";
 import { useDialogs } from "../hooks/useDialogs";
-import { useWhisper } from "../hooks/useWhisper";
 import { usePermissions } from "../hooks/usePermissions";
 import { useSystemAudioPermission } from "../hooks/useSystemAudioPermission";
 import { useClipboard } from "../hooks/useClipboard";
@@ -86,11 +82,12 @@ import InferenceConfigEditor from "./settings/InferenceConfigEditor";
 import { MeetingTranscriptionPanel } from "./settings/MeetingSettings";
 import { UploadTranscriptionPanel } from "./settings/UploadSettings";
 import LanguageSelector from "./ui/LanguageSelector";
+import type { LanguageOption } from "../config/desktopLanguageOptions";
 import { Skeleton } from "./ui/skeleton";
 import { Progress } from "./ui/progress";
 import { useToast } from "./ui/useToast";
 import { useTheme } from "../hooks/useTheme";
-import type { GpuDevice, LocalTranscriptionProvider, InferenceMode } from "../types/electron";
+import type { GpuDevice, InferenceMode } from "../types/electron";
 import logger from "../utils/logger";
 import { SettingsRow } from "./ui/SettingsSection";
 import { useSettingsLayout } from "./ui/useSettingsLayout";
@@ -126,7 +123,7 @@ interface SettingsPageProps {
   initialSubTab?: string;
 }
 
-const UI_LANGUAGE_OPTIONS: import("./ui/LanguageSelector").LanguageOption[] = [
+const UI_LANGUAGE_OPTIONS: LanguageOption[] = [
   { value: "uz", label: "Oʻzbekcha", flag: "🇺🇿" },
   { value: "en", label: "English", flag: "🇺🇸" },
   { value: "es", label: "Español", flag: "🇪🇸" },
@@ -151,7 +148,7 @@ function SettingsPanel({
 }) {
   return (
     <div
-      className={`rounded-lg border border-border/50 dark:border-border-subtle/70 bg-card/50 dark:bg-surface-2/50 backdrop-blur-sm divide-y divide-border/30 dark:divide-border-subtle/50 ${className}`}
+      className={`divide-y divide-border/60 border-y border-border/60 bg-transparent ${className}`}
     >
       {children}
     </div>
@@ -167,9 +164,7 @@ function SettingsPanelRow({
 }) {
   const { isCompact } = useSettingsLayout();
 
-  return (
-    <div className={`${isCompact ? "px-3 py-2.5" : "px-4 py-3"} ${className}`}>{children}</div>
-  );
+  return <div className={`${isCompact ? "py-3" : "min-h-20 py-4"} ${className}`}>{children}</div>;
 }
 
 function SectionHeader({
@@ -182,12 +177,10 @@ function SectionHeader({
   note?: string;
 }) {
   return (
-    <div className="mb-3">
-      <h3 className="text-xs font-semibold text-foreground tracking-tight">{title}</h3>
-      {description && (
-        <p className="text-xs text-muted-foreground/80 mt-0.5 leading-relaxed">{description}</p>
-      )}
-      {note && <p className="text-xs text-muted-foreground/80 mt-0.5 leading-relaxed">{note}</p>}
+    <div className="mb-4">
+      <h3 className="text-sm font-semibold tracking-[-0.015em] text-foreground">{title}</h3>
+      {description && <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>}
+      {note && <p className="mt-1 text-sm leading-6 text-muted-foreground">{note}</p>}
     </div>
   );
 }
@@ -201,7 +194,7 @@ function TranscriptionSection({
 }) {
   const { t } = useTranslation();
 
-  // Aisha-only STT — other modes/pickers removed from product surface.
+  // VoiceLab Cloud is the only desktop speech transcription route.
   return (
     <div className="space-y-4">
       <SettingsPanel>
@@ -215,7 +208,7 @@ function TranscriptionSection({
                 <p className="text-sm font-medium text-foreground">
                   {t("settingsPage.transcription.modes.openwhispr")}
                 </p>
-                <Badge variant="success">Aisha</Badge>
+                <Badge variant="success">VoiceLab</Badge>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 {t("settingsPage.transcription.modes.openwhisprDesc")}
@@ -469,7 +462,7 @@ function LlmsTabs({
   );
 }
 
-function GpuDeviceSelector({ purpose }: { purpose: "transcription" | "intelligence" }) {
+function GpuDeviceSelector({ purpose }: { purpose: "intelligence" }) {
   const { t } = useTranslation();
   const [gpus, setGpus] = useState<GpuDevice[]>([]);
   const [selectedUuid, setSelectedUuid] = useState("");
@@ -549,15 +542,8 @@ export default function SettingsPage({
   } = useDialogs();
 
   const {
-    useLocalWhisper,
-    whisperModel,
-    localTranscriptionProvider,
-    parakeetModel,
     uiLanguage,
     preferredLanguage,
-    cloudTranscriptionProvider,
-    cloudTranscriptionModel,
-    cloudTranscriptionBaseUrl,
     useCleanupModel,
     dictationKey,
     activationMode,
@@ -567,14 +553,7 @@ export default function SettingsPage({
     selectedMicDeviceLabel,
     setPreferBuiltInMic,
     setSelectedMicDevice,
-    setUseLocalWhisper,
     setUiLanguage,
-    setWhisperModel,
-    setLocalTranscriptionProvider,
-    setParakeetModel,
-    setCloudTranscriptionProvider,
-    setCloudTranscriptionModel,
-    setCloudTranscriptionBaseUrl,
     setUseCleanupModel,
     setDictationKey,
     meetingKey,
@@ -585,14 +564,6 @@ export default function SettingsPage({
     setAutoLearnCorrections,
     updateTranscriptionSettings,
     updateCleanupSettings,
-    cloudTranscriptionMode,
-    setCloudTranscriptionMode,
-    transcriptionMode,
-    setTranscriptionMode,
-    remoteTranscriptionUrl,
-    setRemoteTranscriptionUrl,
-    remoteTranscriptionModel,
-    setRemoteTranscriptionModel,
     notificationsEnabled,
     setNotificationsEnabled,
     notifyMeetingDetection,
@@ -690,7 +661,6 @@ export default function SettingsPage({
 
   const migration = useMigration();
 
-  const { checkWhisperInstallation } = useWhisper();
   const permissionsHook = usePermissions(showAlertDialog);
   const systemAudio = useSystemAudioPermission();
   useClipboard(showAlertDialog);
@@ -708,53 +678,6 @@ export default function SettingsPage({
       })
       .catch(() => {});
   }, [activeSection]);
-
-  const [aishaApiKey, setAishaApiKey] = useState("");
-  const [aishaKeyStatus, setAishaKeyStatus] = useState<string | null>(null);
-  const [aishaKeyBusy, setAishaKeyBusy] = useState(false);
-
-  useEffect(() => {
-    if (activeSection !== "system") return;
-    let cancelled = false;
-    void window.electronAPI?.providerCredentialStatus?.().then((status) => {
-      if (!cancelled) setAishaApiKey(status?.credentials?.aishaApiKey ? "••••••••" : "");
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeSection]);
-
-  const saveAishaApiKey = useCallback(
-    async (key: string) => {
-      const trimmed = key.trim();
-      setAishaApiKey(trimmed);
-      setAishaKeyBusy(true);
-      setAishaKeyStatus(null);
-      try {
-        if (trimmed === "••••••••") return;
-        await window.electronAPI?.providerSaveCredential?.("aishaApiKey", trimmed);
-        if (!trimmed) {
-          setAishaKeyStatus(t("settingsPage.account.aishaKey.cleared"));
-          return;
-        }
-        const result = await window.electronAPI?.validateAishaApiKey?.(trimmed);
-        if (result?.ok) {
-          setAishaKeyStatus(t("settingsPage.account.aishaKey.valid"));
-          toast({ title: t("settingsPage.account.aishaKey.saved"), variant: "default" });
-        } else if (result?.keyAccepted) {
-          setAishaKeyStatus(result.message || t("settingsPage.account.aishaKey.billing"));
-          toast({ title: t("settingsPage.account.aishaKey.saved"), variant: "default" });
-        } else {
-          setAishaKeyStatus(result?.message || t("settingsPage.account.aishaKey.invalid"));
-        }
-      } catch {
-        setAishaKeyStatus(t("settingsPage.account.aishaKey.saveFailed"));
-      } finally {
-        setAishaKeyBusy(false);
-      }
-    },
-    [t, toast]
-  );
 
   // Lazy keep-alive: mount AI sections only after the user has visited them once,
   // then keep them mounted so model-download progress and IPC listeners survive
@@ -1041,17 +964,13 @@ export default function SettingsPage({
 
       const version = await getAppVersion();
       if (version && mounted) setCurrentVersion(version);
-
-      if (mounted) {
-        checkWhisperInstallation();
-      }
     }, 100);
 
     return () => {
       mounted = false;
       clearTimeout(timer);
     };
-  }, [checkWhisperInstallation, getAppVersion]);
+  }, [getAppVersion]);
 
   useEffect(() => {
     if (isUsingNativeShortcut && !supportsPushToTalk) {
@@ -1142,11 +1061,7 @@ export default function SettingsPage({
       onConfirm: async () => {
         setIsRemovingModels(true);
         try {
-          const results = await Promise.allSettled([
-            window.electronAPI?.deleteAllWhisperModels?.(),
-            window.electronAPI?.deleteAllParakeetModels?.(),
-            window.electronAPI?.modelDeleteAll?.(),
-          ]);
+          const results = await Promise.allSettled([window.electronAPI?.modelDeleteAll?.()]);
 
           const anyFailed = results.some(
             (r) =>
@@ -1372,116 +1287,119 @@ export default function SettingsPage({
 
   const renderSectionContent = () => {
     switch (activeSection) {
-case "account":
-case "plansBilling":
-  return (
-    <div className="space-y-5">
-      <SectionHeader
-        title={t("desktop.settings.account", { defaultValue: "Account & Credits" })}
-        description={t("desktop.settings.accountDescription", {
-          defaultValue: "Your VoiceLab profile, desktop session and shared AI Credit wallet.",
-        })}
-      />
+      case "account":
+      case "plansBilling":
+        return (
+          <div className="space-y-5">
+            <SectionHeader
+              title={t("desktop.settings.account", { defaultValue: "Account & Credits" })}
+              description={t("desktop.settings.accountDescription", {
+                defaultValue: "Your VoiceLab profile, desktop session and shared AI Credit wallet.",
+              })}
+            />
 
-      {!isLoaded ? (
-        <SettingsPanel>
-          <SettingsPanelRow>
-            <div className="flex items-center gap-3">
-              <Skeleton className="h-11 w-11 rounded-full" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-36" />
-                <Skeleton className="h-3 w-52" />
-              </div>
-            </div>
-          </SettingsPanelRow>
-        </SettingsPanel>
-      ) : isSignedIn && user ? (
-        <>
-          <SettingsPanel>
-            <SettingsPanelRow>
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#e55347]/10">
-                  {user.image ? (
-                    <img
-                      src={user.image}
-                      alt=""
-                      className="h-11 w-11 rounded-full object-cover"
-                    />
-                  ) : (
-                    <UserCircle className="h-6 w-6 text-[#e55347]" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-foreground">
-                    {user.name || t("settingsPage.account.user", { defaultValue: "VoiceLab user" })}
-                  </p>
-                  <p className="truncate text-sm text-muted-foreground">{user.email}</p>
-                </div>
-                <Badge variant="success">
-                  {t("desktop.session.active", { defaultValue: "Signed in" })}
-                </Badge>
-              </div>
-            </SettingsPanelRow>
-            <SettingsPanelRow>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg bg-muted/45 p-3">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    {t("desktop.session.device", { defaultValue: "Device" })}
-                  </p>
-                  <p className="mt-1 text-sm font-medium">
-                    {t("desktop.session.thisDevice", { defaultValue: "This VoiceLab Dictate desktop" })}
-                  </p>
-                </div>
-                <div className="rounded-lg bg-muted/45 p-3">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    {t("desktop.session.status", { defaultValue: "Session" })}
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                    {t("desktop.session.protected", { defaultValue: "Active and protected" })}
-                  </p>
-                </div>
-              </div>
-            </SettingsPanelRow>
-          </SettingsPanel>
+            {!isLoaded ? (
+              <SettingsPanel>
+                <SettingsPanelRow>
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-11 w-11 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-36" />
+                      <Skeleton className="h-3 w-52" />
+                    </div>
+                  </div>
+                </SettingsPanelRow>
+              </SettingsPanel>
+            ) : isSignedIn && user ? (
+              <>
+                <SettingsPanel>
+                  <SettingsPanelRow>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#e55347]/10">
+                        {user.image ? (
+                          <img
+                            src={user.image}
+                            alt=""
+                            className="h-11 w-11 rounded-full object-cover"
+                          />
+                        ) : (
+                          <UserCircle className="h-6 w-6 text-[#e55347]" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-foreground">
+                          {user.name ||
+                            t("settingsPage.account.user", { defaultValue: "VoiceLab user" })}
+                        </p>
+                        <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+                      </div>
+                      <Badge variant="success">
+                        {t("desktop.session.active", { defaultValue: "Signed in" })}
+                      </Badge>
+                    </div>
+                  </SettingsPanelRow>
+                  <SettingsPanelRow>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-lg bg-muted/45 p-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {t("desktop.session.device", { defaultValue: "Device" })}
+                        </p>
+                        <p className="mt-1 text-sm font-medium">
+                          {t("desktop.session.thisDevice", {
+                            defaultValue: "This VoiceLab Dictate desktop",
+                          })}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-muted/45 p-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {t("desktop.session.status", { defaultValue: "Session" })}
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                          {t("desktop.session.protected", { defaultValue: "Active and protected" })}
+                        </p>
+                      </div>
+                    </div>
+                  </SettingsPanelRow>
+                </SettingsPanel>
 
-          <UsageDisplay />
+                <UsageDisplay />
 
-          <Button
-            onClick={handleSignOut}
-            variant="outline"
-            disabled={isSigningOut}
-            className="w-full"
-          >
-            <LogOut className="mr-2 h-4 w-4" />
-            {isSigningOut
-              ? t("settingsPage.account.signOut.signingOut", { defaultValue: "Signing out…" })
-              : t("settingsPage.account.signOut.signOut", { defaultValue: "Sign out" })}
-          </Button>
-        </>
-      ) : (
-        <SettingsPanel>
-          <SettingsPanelRow>
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm font-semibold">
-                  {t("desktop.session.signedOut", { defaultValue: "Not signed in" })}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {t("desktop.session.signedOutDescription", {
-                    defaultValue: "Sign in to use VoiceLab Cloud and your AI Credit wallet.",
-                  })}
-                </p>
-              </div>
-              <Button onClick={startOnboarding} className="w-full">
-                <UserCircle className="mr-2 h-4 w-4" />
-                {t("auth.signIn", { defaultValue: "Sign in to VoiceLab" })}
-              </Button>
-            </div>
-          </SettingsPanelRow>
-        </SettingsPanel>
-      )}
-    </div>
-  );
+                <Button
+                  onClick={handleSignOut}
+                  variant="outline"
+                  disabled={isSigningOut}
+                  className="w-full"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  {isSigningOut
+                    ? t("settingsPage.account.signOut.signingOut", { defaultValue: "Signing out…" })
+                    : t("settingsPage.account.signOut.signOut", { defaultValue: "Sign out" })}
+                </Button>
+              </>
+            ) : (
+              <SettingsPanel>
+                <SettingsPanelRow>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold">
+                        {t("desktop.session.signedOut", { defaultValue: "Not signed in" })}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {t("desktop.session.signedOutDescription", {
+                          defaultValue: "Sign in to use VoiceLab Cloud and your AI Credit wallet.",
+                        })}
+                      </p>
+                    </div>
+                    <Button onClick={startOnboarding} className="w-full">
+                      <UserCircle className="mr-2 h-4 w-4" />
+                      {t("auth.signIn", { defaultValue: "Sign in to VoiceLab" })}
+                    </Button>
+                  </div>
+                </SettingsPanelRow>
+              </SettingsPanel>
+            )}
+          </div>
+        );
 
       case "workspace":
         return WORKSPACES_ENABLED ? <WorkspaceSection initialSubTab={initialSubTab} /> : null;
@@ -2838,102 +2756,35 @@ EOF`,
           </div>
         );
 
-case "system":
-  return (
-    <div className="space-y-6">
-      <div>
-        <SectionHeader
-          title={t("desktop.settings.advancedSetup", { defaultValue: "Advanced transcription" })}
-          description={t("desktop.settings.advancedSetupDescription", {
-            defaultValue: "VoiceLab Cloud is the default. Local models and BYOK stay on this device.",
-          })}
-        />
-        <SettingsPanel>
-          <SettingsPanelRow>
-            <div className="grid gap-2 sm:grid-cols-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setUseLocalWhisper(false);
-                  setCloudTranscriptionMode("openwhispr");
-                  setTranscriptionMode("openwhispr");
-                }}
-                className={cn(
-                  "rounded-xl border p-3 text-left transition-colors",
-                  !useLocalWhisper && cloudTranscriptionMode === "openwhispr"
-                    ? "border-[#e55347]/45 bg-[#e55347]/8"
-                    : "border-border hover:bg-muted/50"
-                )}
-              >
-                <Cloud className="mb-2 h-5 w-5 text-[#e55347]" />
-                <strong className="block text-sm">VoiceLab Cloud</strong>
-                <span className="mt-1 block text-xs text-muted-foreground">AI Credits</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setUseLocalWhisper(true);
-                  setTranscriptionMode("local");
-                }}
-                className={cn(
-                  "rounded-xl border p-3 text-left transition-colors",
-                  useLocalWhisper
-                    ? "border-[#e55347]/45 bg-[#e55347]/8"
-                    : "border-border hover:bg-muted/50"
-                )}
-              >
-                <Cpu className="mb-2 h-5 w-5" />
-                <strong className="block text-sm">Local</strong>
-                <span className="mt-1 block text-xs text-muted-foreground">0 credits</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setUseLocalWhisper(false);
-                  setCloudTranscriptionMode("byok");
-                  setTranscriptionMode("providers");
-                }}
-                className={cn(
-                  "rounded-xl border p-3 text-left transition-colors",
-                  !useLocalWhisper && cloudTranscriptionMode === "byok"
-                    ? "border-[#e55347]/45 bg-[#e55347]/8"
-                    : "border-border hover:bg-muted/50"
-                )}
-              >
-                <Key className="mb-2 h-5 w-5" />
-                <strong className="block text-sm">BYOK</strong>
-                <span className="mt-1 block text-xs text-muted-foreground">Your provider</span>
-              </button>
-            </div>
-          </SettingsPanelRow>
-          <SettingsPanelRow>
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm font-medium">Personal provider key</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Stored only on this device. VoiceLab AI Credits are not used in BYOK mode.
-                </p>
-              </div>
-              <ApiKeyInput
-                apiKey={aishaApiKey}
-                setApiKey={(key) => void saveAishaApiKey(key)}
-                label=""
-                helpText="Use a key issued by your provider."
-                placeholder="Paste API key"
+      case "system":
+        return (
+          <div className="space-y-6">
+            <div>
+              <SectionHeader
+                title={t("desktop.settings.cloudTranscription", {
+                  defaultValue: "Cloud transcription",
+                })}
+                description={t("desktop.settings.cloudTranscriptionDescription", {
+                  defaultValue: "VoiceLab Dictate uses your signed-in account automatically.",
+                })}
               />
-              {aishaKeyBusy && (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Checking key…
-                </p>
-              )}
-              {aishaKeyStatus && !aishaKeyBusy && (
-                <p className="text-sm text-muted-foreground">{aishaKeyStatus}</p>
-              )}
+              <SettingsPanel>
+                <SettingsPanelRow>
+                  <div className="rounded-xl border border-[#e55347]/45 bg-[#e55347]/8 p-4">
+                    <div className="flex items-start gap-3">
+                      <Cloud className="mb-2 h-5 w-5 text-[#e55347]" />
+                      <div>
+                        <strong className="block text-sm">VoiceLab Cloud</strong>
+                        <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                          No API key is required. Dictation starts after sign-in and usage is
+                          charged from your VoiceLab AI Credits balance.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </SettingsPanelRow>
+              </SettingsPanel>
             </div>
-          </SettingsPanelRow>
-        </SettingsPanel>
-      </div>
             {/* Software Updates */}
             <div>
               <SectionHeader title={t("settingsPage.general.updates.title")} />
@@ -3150,7 +3001,7 @@ case "system":
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => window.electronAPI?.openWhisperModelsFolder?.()}
+                          onClick={() => window.electronAPI?.openModelCacheFolder?.()}
                         >
                           <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
                           {t("settingsPage.developer.open")}
@@ -3249,57 +3100,59 @@ case "system":
         onOk={() => {}}
       />
 
-      {/* Mounted on first visit and kept alive so model-download progress and IPC listeners survive section switches. */}
-      {hasMountedSpeechToText && (
-        <TabPanel active={activeSection === "speechToText"}>
-          <SpeechToTextTabs
-            initialTab={
-              activeSection === "speechToText"
-                ? (initialSubTab as SpeechTab | undefined)
-                : undefined
-            }
-            renderDictation={() => (
-              <div className="space-y-6">
-                <TranscriptionSection
-                  showTranscriptionPreview={showTranscriptionPreview}
-                  setShowTranscriptionPreview={setShowTranscriptionPreview}
-                />
-              </div>
-            )}
-            renderNoteRecording={() => (
-              <div className="space-y-6">
-                <MeetingTranscriptionPanel />
-              </div>
-            )}
-            renderUpload={() => (
-              <div className="space-y-6">
-                <UploadTranscriptionPanel />
-              </div>
-            )}
-          />
-        </TabPanel>
-      )}
-      {hasMountedLlms && (
-        <TabPanel active={activeSection === "llms"}>
-          <div className="space-y-4">
-            <SectionHeader
-              title={t("settingsPage.llms.title")}
-              description={t("settingsPage.llms.description")}
+      <div className="mx-auto w-full max-w-3xl pb-6">
+        {/* Mounted on first visit and kept alive so model-download progress and IPC listeners survive section switches. */}
+        {hasMountedSpeechToText && (
+          <TabPanel active={activeSection === "speechToText"}>
+            <SpeechToTextTabs
+              initialTab={
+                activeSection === "speechToText"
+                  ? (initialSubTab as SpeechTab | undefined)
+                  : undefined
+              }
+              renderDictation={() => (
+                <div className="space-y-6">
+                  <TranscriptionSection
+                    showTranscriptionPreview={showTranscriptionPreview}
+                    setShowTranscriptionPreview={setShowTranscriptionPreview}
+                  />
+                </div>
+              )}
+              renderNoteRecording={() => (
+                <div className="space-y-6">
+                  <MeetingTranscriptionPanel />
+                </div>
+              )}
+              renderUpload={() => (
+                <div className="space-y-6">
+                  <UploadTranscriptionPanel />
+                </div>
+              )}
             />
-            <SettingsPanel>
-              <SettingsPanelRow>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {t("settingsPage.llms.temporarilyDisabled", {
-                    defaultValue:
-                      "LLM provider settings are temporarily disabled. Speech uses VoiceLab Cloud (Aisha) only.",
-                  })}
-                </p>
-              </SettingsPanelRow>
-            </SettingsPanel>
-          </div>
-        </TabPanel>
-      )}
-      {renderSectionContent()}
+          </TabPanel>
+        )}
+        {hasMountedLlms && (
+          <TabPanel active={activeSection === "llms"}>
+            <div className="space-y-4">
+              <SectionHeader
+                title={t("settingsPage.llms.title")}
+                description={t("settingsPage.llms.description")}
+              />
+              <SettingsPanel>
+                <SettingsPanelRow>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {t("settingsPage.llms.temporarilyDisabled", {
+                      defaultValue:
+                        "LLM provider settings are temporarily disabled. Speech uses VoiceLab Cloud only.",
+                    })}
+                  </p>
+                </SettingsPanelRow>
+              </SettingsPanel>
+            </div>
+          </TabPanel>
+        )}
+        {renderSectionContent()}
+      </div>
     </>
   );
 }

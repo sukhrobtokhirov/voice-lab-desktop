@@ -40,11 +40,11 @@ OPENWHISPR_LOG_LEVEL=debug
 | --------------------- | ---------------------------------------------------------------- |
 | FFmpeg                | Path resolution, permissions, ASAR unpacking                     |
 | Audio Recording       | Permission requests, chunk sizes, audio levels                   |
-| Audio Processing      | File creation, Whisper command, process output                   |
+| Audio Processing      | Audio preparation and VoiceLab Dictate request timing            |
 | IPC                   | Messages between renderer and main process                       |
 | Agent Mode            | Streaming responses, conversation management, model selection    |
 | Meeting Detection     | Process monitoring, audio activity, calendar event matching      |
-| Meeting Transcription | WebSocket connection, Realtime API session, audio buffering      |
+| Meeting Transcription | PCM buffering, VoiceLab chunk submission, speaker attribution    |
 | Google Calendar       | OAuth flow, token refresh, event sync                            |
 | Media Control         | Pause/resume events, player detection (MediaRemote/GSMTC/MPRIS2) |
 | Audio Storage         | File retention, cleanup cycles, storage usage                    |
@@ -61,11 +61,9 @@ Look for:
 
 ### Transcription Fails
 
-Look for:
-
-- `Whisper stderr:` → whisper.cpp/FFmpeg errors
-- `Process closed with code: [non-zero]` → Process failure
-- `Failed to parse Whisper output` → Invalid JSON
+Look for VoiceLab request status, `AUTH_*`, `INSUFFICIENT_CREDITS`,
+`AUDIO_*`, or `SERVICE_UNAVAILABLE` error codes. FFmpeg errors can indicate
+that the recorded audio could not be prepared for upload.
 
 ### Permission Issues
 

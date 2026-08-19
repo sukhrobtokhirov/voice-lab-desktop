@@ -82,6 +82,10 @@ export async function initializeTranscriptions(
 
 export function addTranscription(item: TranscriptionItem) {
   if (!item) return;
+  if (
+    item.status === "failed" &&
+    (item.error_code === "AUTH_EXPIRED" || item.error_code === "AUTH_REQUIRED")
+  ) return;
   if (item.status === "discarded" && !useTranscriptionStore.getState().includeDiscarded) return;
   const { transcriptions } = useTranscriptionStore.getState();
   const withoutDuplicate = transcriptions.filter((existing) => existing.id !== item.id);

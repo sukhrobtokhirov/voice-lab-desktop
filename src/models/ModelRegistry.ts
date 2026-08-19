@@ -76,25 +76,6 @@ export interface TranscriptionProviderData {
   batchModel?: string;
 }
 
-export interface WhisperModelInfo {
-  name: string;
-  description: string;
-  descriptionKey?: string;
-  size: string;
-  sizeMb: number;
-  fileName: string;
-  downloadUrl: string;
-  recommended?: boolean;
-}
-
-export interface WhisperModelConfig {
-  url: string;
-  size: number;
-  fileName: string;
-}
-
-export type WhisperModelsMap = Record<string, WhisperModelInfo>;
-
 export interface ParakeetModelInfo {
   name: string;
   description: string;
@@ -113,7 +94,6 @@ export type ParakeetModelsMap = Record<string, ParakeetModelInfo>;
 
 interface ModelRegistryData {
   parakeetModels: ParakeetModelsMap;
-  whisperModels: WhisperModelsMap;
   transcriptionProviders: TranscriptionProviderData[];
   cloudProviders: CloudProviderData[];
   enterpriseProviders: EnterpriseProviderData[];
@@ -418,16 +398,6 @@ export function getDefaultTranscriptionModel(providerId: string): string {
   return models[0]?.id || "gpt-4o-mini-transcribe";
 }
 
-export function getWhisperModels(): WhisperModelsMap {
-  return modelData.whisperModels;
-}
-
-export function getWhisperModelInfo(modelId: string): WhisperModelInfo | undefined {
-  return modelData.whisperModels[modelId];
-}
-
-export const WHISPER_MODEL_INFO = modelData.whisperModels;
-
 export function getCloudModel(modelId: string): CloudModelDefinition | undefined {
   for (const provider of modelData.cloudProviders) {
     const model = provider.models.find((m) => m.id === modelId);
@@ -498,17 +468,3 @@ export function isOnlineParakeetModel(modelId: string): boolean {
 }
 
 export const PARAKEET_MODEL_INFO = modelData.parakeetModels;
-
-export function getWhisperModelConfig(modelId: string): WhisperModelConfig | null {
-  const modelInfo = modelData.whisperModels[modelId];
-  if (!modelInfo) return null;
-  return {
-    url: modelInfo.downloadUrl,
-    size: modelInfo.sizeMb * 1_000_000,
-    fileName: modelInfo.fileName,
-  };
-}
-
-export function getValidWhisperModelNames(): string[] {
-  return Object.keys(modelData.whisperModels);
-}

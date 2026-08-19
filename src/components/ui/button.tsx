@@ -6,113 +6,70 @@ import { cn } from "../lib/utils";
 
 const buttonVariants = cva(
   [
-    "inline-flex items-center justify-center gap-2 whitespace-nowrap",
-    "rounded text-sm font-medium cursor-pointer select-none",
-    "transition-[background-color,border-color,color,transform] duration-200 ease-out",
-    "outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+    "group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap",
+    "rounded-lg border border-transparent bg-clip-padding text-sm font-medium cursor-pointer select-none",
+    "transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 [transition-timing-function:cubic-bezier(0.23,1,0.32,1)]",
+    "outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+    "active:not-aria-[haspopup]:translate-y-px",
     "disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed",
-    "[&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0 shrink-0",
+    "aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+    "[&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
   ].join(" "),
   {
     variants: {
       variant: {
-        // Primary CTA — ultra-premium with subtle depth
-        default: [
-          "relative text-primary-foreground font-semibold tracking-[0.005em]",
-          "bg-primary",
-          "border border-primary/60",
-          "shadow-sm",
-          "hover:bg-primary/95 hover:shadow",
-          "active:bg-primary/85 active:scale-[0.985]",
-          "transition-[background-color,border-color,color,transform] duration-200 ease-out",
-        ].join(" "),
+        default: "bg-primary text-primary-foreground hover:bg-primary/80",
 
-        // Success — uses design tokens
-        success: [
-          "relative text-success-foreground font-semibold tracking-[0.01em]",
-          "bg-success",
-          "border border-success/70",
-          "shadow-sm",
-          "hover:bg-success/90",
-          "active:bg-success/80 active:scale-[0.98]",
-        ].join(" "),
+        // App-specific semantic variant retained for existing callers.
+        success: ["bg-success text-success-foreground", "hover:bg-success/80"].join(" "),
 
-        // Destructive — uses design tokens
         destructive: [
-          "relative text-destructive-foreground font-semibold tracking-[0.01em]",
-          "bg-destructive",
-          "border border-destructive/70",
-          "shadow-sm",
-          "hover:bg-destructive/90",
-          "active:bg-destructive/80 active:scale-[0.98]",
+          "bg-destructive/10 text-destructive",
+          "hover:bg-destructive/20",
+          "focus-visible:border-destructive/40 focus-visible:ring-destructive/20",
+          "dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         ].join(" "),
 
-        // Outline — refined with subtle glassmorphism
         outline: [
-          "relative font-medium",
-          "text-foreground bg-muted/70 backdrop-blur-sm",
-          "border border-border/70",
-          "shadow-sm",
-          "hover:bg-muted hover:border-border-hover",
-          "active:scale-[0.985]",
-          "dark:bg-surface-raised/90 dark:border-border-hover dark:hover:bg-surface-raised",
-          "transition-[background-color,border-color,color,transform] duration-200 ease-out",
+          "border-border bg-background",
+          "hover:bg-muted hover:text-foreground",
+          "aria-expanded:bg-muted aria-expanded:text-foreground",
+          "dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         ].join(" "),
 
-        // Outline flat — transparent with thin border, no fill or shadow
+        // App-specific flat outline retained for existing callers.
         "outline-flat": [
-          "font-medium",
-          "text-muted-foreground/70 bg-transparent",
-          "border border-border/50",
-          "hover:text-foreground/80 hover:border-border hover:bg-foreground/3",
-          "active:scale-[0.98]",
-          "dark:border-white/10 dark:hover:bg-white/5 dark:hover:border-white/15",
+          "border-border bg-transparent text-muted-foreground",
+          "hover:bg-muted hover:text-foreground",
+          "dark:border-input dark:hover:bg-input/50",
         ].join(" "),
 
-        // Secondary — uses design tokens
         secondary: [
-          "relative font-medium",
-          "text-foreground bg-secondary",
-          "border border-border/50",
-          "hover:bg-muted",
-          "active:scale-[0.98]",
-          "dark:text-foreground/90 dark:bg-white/8 dark:border-white/5 dark:hover:bg-white/12",
+          "bg-secondary text-secondary-foreground",
+          "hover:bg-[color-mix(in_oklch,var(--color-secondary),var(--color-foreground)_5%)]",
+          "aria-expanded:bg-[color-mix(in_oklch,var(--color-secondary),var(--color-foreground)_5%)]",
         ].join(" "),
 
-        // Ghost — uses design tokens
         ghost: [
-          "font-medium",
-          "text-foreground",
-          "hover:bg-muted",
-          "active:scale-[0.98]",
-          "dark:text-foreground/90 dark:hover:bg-white/8",
+          "hover:bg-muted hover:text-foreground",
+          "aria-expanded:bg-muted aria-expanded:text-foreground",
+          "dark:hover:bg-muted/50 dark:aria-expanded:bg-muted/50",
         ].join(" "),
 
-        // Link — uses design tokens
-        link: [
-          "font-medium",
-          "text-primary",
-          "hover:text-primary/80 hover:underline",
-          "underline-offset-4",
-        ].join(" "),
+        link: "text-primary underline-offset-4 hover:underline",
 
-        // Social button for auth flows - ultra-premium glassmorphism
+        // App-specific auth variant retained for existing callers.
         social: [
-          "relative font-medium",
-          "text-foreground bg-surface-1/80 backdrop-blur-xl",
-          "border border-border/60",
-          "shadow-sm gap-2",
-          "hover:bg-surface-2/90 hover:border-border-hover hover:shadow",
-          "active:scale-[0.985] active:shadow-sm",
-          "dark:bg-surface-raised/80 dark:border-border-hover dark:hover:bg-surface-raised/95",
-          "transition-[background-color,border-color,color,transform] duration-200 ease-out",
+          "border-border bg-background text-foreground",
+          "hover:bg-muted",
+          "dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         ].join(" "),
       },
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-8 px-3 text-xs gap-1.5",
-        lg: "h-12 px-6 text-sm",
-        icon: "size-10",
+        default: "h-8 gap-1.5 px-2.5 has-[>svg]:px-2",
+        sm: "h-7 gap-1 rounded-lg px-2 text-[0.8rem] has-[>svg]:px-1.5",
+        lg: "h-9 gap-1.5 rounded-lg px-3 has-[>svg]:px-2.5",
+        icon: "size-8",
       },
     },
     defaultVariants: {

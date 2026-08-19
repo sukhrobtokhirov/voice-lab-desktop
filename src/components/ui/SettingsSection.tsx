@@ -17,11 +17,11 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
   className = "",
 }) => {
   return (
-    <div className={`space-y-3 ${className}`}>
+    <div className={`space-y-4 ${className}`}>
       <div>
-        <h3 className="text-xs font-semibold text-foreground tracking-tight">{title}</h3>
+        <h3 className="text-sm font-semibold tracking-[-0.015em] text-foreground">{title}</h3>
         {description && (
-          <p className="text-xs text-muted-foreground/80 mt-0.5 leading-relaxed">{description}</p>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
         )}
       </div>
       {children}
@@ -42,15 +42,15 @@ export const SettingsGroup: React.FC<SettingsGroupProps> = ({
   variant = "default",
   className = "",
 }) => {
-  const baseClasses = "space-y-3 p-3 rounded-lg border";
+  const baseClasses = "space-y-4 border-y py-4";
   const variantClasses = {
-    default: "bg-card/50 dark:bg-surface-2/50 border-border/50 dark:border-border-subtle",
-    highlighted: "bg-primary/5 dark:bg-primary/10 border-primary/20 dark:border-primary/30",
+    default: "border-border/60 bg-transparent",
+    highlighted: "border-foreground/15 bg-foreground/[0.025]",
   };
 
   return (
     <div className={`${baseClasses} ${variantClasses[variant]} ${className}`}>
-      {title && <h4 className="text-xs font-medium text-foreground">{title}</h4>}
+      {title && <h4 className="text-sm font-semibold text-foreground">{title}</h4>}
       {children}
     </div>
   );
@@ -73,14 +73,14 @@ export const SettingsRow: React.FC<SettingsRowProps> = ({
 
   return (
     <div
-      className={`flex ${
-        isCompact ? "flex-col items-start gap-2" : "items-center justify-between gap-4"
+      className={`flex min-h-14 ${
+        isCompact ? "flex-col items-stretch gap-3" : "items-center justify-between gap-6"
       } ${className}`}
     >
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-foreground">{label}</p>
+        <p className="text-sm font-semibold text-foreground">{label}</p>
         {description && (
-          <p className="text-xs text-muted-foreground/80 mt-0.5 leading-relaxed">{description}</p>
+          <p className="mt-1 text-sm leading-5 text-muted-foreground">{description}</p>
         )}
       </div>
       <div className={isCompact ? "" : "shrink-0"}>{children}</div>
@@ -97,7 +97,7 @@ export function SettingsPanel({
 }) {
   return (
     <div
-      className={`rounded-lg border border-border/50 dark:border-border-subtle/70 bg-card/50 dark:bg-surface-2/50 backdrop-blur-sm divide-y divide-border/30 dark:divide-border-subtle/50 ${className}`}
+      className={`divide-y divide-border/60 border-y border-border/60 bg-transparent ${className}`}
     >
       {children}
     </div>
@@ -113,18 +113,14 @@ export function SettingsPanelRow({
 }) {
   const { isCompact } = useSettingsLayout();
 
-  return (
-    <div className={`${isCompact ? "px-3 py-2.5" : "px-4 py-3"} ${className}`}>{children}</div>
-  );
+  return <div className={`${isCompact ? "py-3" : "min-h-20 py-4"} ${className}`}>{children}</div>;
 }
 
 export function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
-    <div className="mb-3">
-      <h3 className="text-xs font-semibold text-foreground tracking-tight">{title}</h3>
-      {description && (
-        <p className="text-xs text-muted-foreground/80 mt-0.5 leading-relaxed">{description}</p>
-      )}
+    <div className="mb-4">
+      <h3 className="text-sm font-semibold tracking-[-0.015em] text-foreground">{title}</h3>
+      {description && <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>}
     </div>
   );
 }

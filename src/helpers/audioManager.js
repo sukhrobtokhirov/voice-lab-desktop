@@ -814,50 +814,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         micCaptureStatus: "active",
       });
 
-      const {
-        showTranscriptionPreview,
-        useLocalWhisper,
-        localTranscriptionProvider,
-        whisperModel,
-        parakeetModel,
-      } = getSettings();
-      const isNvidia = localTranscriptionProvider === "nvidia";
-      // Online models stream+commit during capture, so PCM runs even with preview off.
-      const streamingCommit = useLocalWhisper && isNvidia && isOnlineParakeetModel(parakeetModel);
       this._streamingCommitActive = false;
-      if (useLocalWhisper && (showTranscriptionPreview || streamingCommit)) {
-        try {
-          this._previewAudioContext = new AudioContext({ sampleRate: 16000 });
-          this._previewSource = this._previewAudioContext.createMediaStreamSource(micStream);
-          await this._previewAudioContext.audioWorklet.addModule(this.getWorkletBlobUrl());
-
-          this._previewProcessor = new AudioWorkletNode(
-            this._previewAudioContext,
-            "pcm-streaming-processor"
-          );
-          this._previewProcessor.port.onmessage = (event) => {
-            if (event.data === "flushed") {
-              this._previewFlushResolve?.();
-              return;
-            }
-            window.electronAPI?.sendDictationPreviewAudio?.(event.data);
-          };
-          this._previewSource.connect(this._previewProcessor);
-
-          const provider = isNvidia ? "nvidia" : "whisper";
-          const model = isNvidia ? parakeetModel : whisperModel;
-          const language = getBaseLanguageCode(getSettings().preferredLanguage);
-          window.electronAPI?.startDictationPreview?.({
-            provider,
-            model,
-            language,
-            display: showTranscriptionPreview,
-          });
-          this._streamingCommitActive = streamingCommit;
-        } catch (e) {
-          logger.warn("Preview worklet setup failed", { error: e.message }, "audio");
-        }
-      }
 
       await this.beginMicRecovery(micStream);
 
@@ -1196,22 +1153,14 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
   async processAudio(audioBlob, metadata = {}) {
     const pipelineStart = performance.now();
-    const settings = getSettings();
     const speechGateDecision = getLocalSpeechGateDecision(this._localSpeechGateState);
     this._localSpeechGateState = null;
 
-    const shouldUseStrongLocalWhisperGate =
-      settings.useLocalWhisper && settings.localTranscriptionProvider === "whisper";
-    if (
-      speechGateDecision.skip &&
-      (speechGateDecision.reason === "silence" || shouldUseStrongLocalWhisperGate)
-    ) {
+    if (speechGateDecision.skip) {
       logger.info(
         "Speech gate skipped transcription",
         {
           reason: speechGateDecision.reason,
-          useLocalWhisper: settings.useLocalWhisper,
-          localProvider: settings.localTranscriptionProvider,
           peakRms: speechGateDecision.peakRms?.toFixed(4),
           peakAmplitude: speechGateDecision.peakAmplitude?.toFixed(4),
           speechWindowCount: speechGateDecision.speechWindowCount,
@@ -1226,25 +1175,9 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     }
 
     try {
-      let activeModel = settings.cloudTranscriptionModel || "cloud";
-      let result;
-      let mode = "cloud";
-      if (settings.useLocalWhisper) {
-        mode = "local";
-        if (settings.localTranscriptionProvider === "nvidia") {
-          activeModel = settings.parakeetModel;
-          result = await this.processWithLocalParakeet(audioBlob, activeModel, metadata);
-        } else {
-          activeModel = settings.whisperModel || "base";
-          result = await this.processWithLocalWhisper(audioBlob, activeModel, metadata);
-        }
-      } else if (settings.transcriptionMode === "openwhispr" || settings.cloudTranscriptionMode === "openwhispr") {
-        activeModel = "voicelab-cloud";
-        result = await this.processWithOpenWhisprCloud(audioBlob, metadata);
-      } else {
-        activeModel = settings.cloudTranscriptionModel || settings.cloudTranscriptionProvider;
-        result = await this.processWithOpenAIAPI(audioBlob, metadata);
-      }
+      const activeModel = "voicelab-cloud";
+      const mode = "cloud";
+      const result = await this.processWithOpenWhisprCloud(audioBlob, metadata);
       if (!this.isProcessing) return;
       this.lastAudioMetadata = {
         durationMs: metadata?.durationSeconds ? Math.round(metadata.durationSeconds * 1000) : Math.round(performance.now() - pipelineStart),
@@ -1252,7 +1185,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         model: activeModel || null,
       };
       this.onTranscriptionComplete?.(result);
-      if (result?.source === "openwhispr" || result?.source === "aisha") window.dispatchEvent(new Event("usage-changed"));
+      if (result?.source === "openwhispr" || result?.source === "voicelab") window.dispatchEvent(new Event("usage-changed"));
       const roundTripDurationMs = Math.round(performance.now() - pipelineStart);
       logger.info("Pipeline timing", {
         mode,
@@ -1285,9 +1218,16 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           messageKey: error.messageKey,
         });
 
-        // Save failed transcription with audio so the user can retry later
-        if (this.lastAudioBlob) {
+        const isAuthenticationFailure =
+          error.code === "AUTH_EXPIRED" || error.code === "AUTH_REQUIRED";
+
+        // Authentication failures are account state, not useful workspace items.
+        // Keep retryable transcription failures with audio for the existing retry flow.
+        if (this.lastAudioBlob && !isAuthenticationFailure) {
           this.saveFailedTranscription(error.message, error.code || null, metadata);
+        } else if (isAuthenticationFailure) {
+          this.lastAudioBlob = null;
+          this.lastAudioMetadata = null;
         }
       }
     } finally {
@@ -1803,6 +1743,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     const opts = {};
     if (language) opts.language = language;
     if (audioFormat) opts.mimeType = audioFormat;
+    if (Number.isFinite(metadata.durationSeconds)) opts.durationSeconds = metadata.durationSeconds;
     const cleanupCloudMode = settings.cleanupCloudMode || "openwhispr";
     if (
       (settings.useCleanupModel && !this.skipReasoning && cleanupCloudMode === "openwhispr") ||
@@ -1827,7 +1768,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         if (res.messageKey) err.messageKey = res.messageKey;
         else if (res.code === "LIMIT_REACHED") {
           err.messageKey =
-            res.messageKey || "hooks.audioRecording.errorDescriptions.aishaBillingFailed";
+            res.messageKey || "hooks.audioRecording.errorDescriptions.walletInsufficient";
         }
         throw err;
       }
@@ -2152,7 +2093,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       const provider = String(this.lastAudioMetadata?.provider || "").toLowerCase();
       const syncSource = provider.startsWith("local")
         ? "local"
-        : provider && !["aisha", "voicelab", "voicelab-cloud", "openwhispr"].includes(provider)
+        : provider && !["voicelab", "voicelab-cloud", "openwhispr"].includes(provider)
           ? "byok"
           : null;
       const result = await window.electronAPI.saveTranscription(text, rawText, {
@@ -2293,12 +2234,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
   }
 
   shouldUseStreaming(_isSignedInOverride) {
-    const settings = getSettings();
-    if (settings.useLocalWhisper || settings.transcriptionMode === "local" || settings.transcriptionMode === "self-hosted") return false;
-    if (settings.transcriptionMode === "openwhispr" || settings.cloudTranscriptionMode === "openwhispr") return false;
-    if (settings.cloudTranscriptionProvider === "corti") return !!(settings.cortiApiKey || (settings.cortiClientId && settings.cortiClientSecret));
-    if (settings.cloudTranscriptionProvider === "tinfoil") return !!settings.tinfoilApiKey;
-    if (settings.cloudTranscriptionProvider === "openai") return !!settings.openaiApiKey;
+    // VoiceLab Desktop currently supports server-metered batch Dictate only.
     return false;
   }
 

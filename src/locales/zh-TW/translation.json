@@ -173,7 +173,8 @@
       "useCase": "關於你",
       "meeting": "會議",
       "finish": "完成",
-      "voiceAgent": "語音助手"
+      "voiceAgent": "語音助手",
+      "voiceLabAccount": "語音實驗室帳戶"
     },
     "hotkey": {
       "couldNotRegisterTitle": "無法註冊該快捷鍵",
@@ -300,6 +301,21 @@
         "step1": "在 corti.ai 註冊",
         "step2": "開啟 Corti 控制台並建立 API 憑證",
         "step3": "在下方貼上 Client ID 和 Secret"
+      }
+    },
+    "voiceLabAccount": {
+      "title": "登入 VoiceLab",
+      "description": "連結您的 VoiceLab 帳戶一次。雲端轉錄會自動啟動並使用您的 AI Credit 錢包。",
+      "getKeyHint": "還沒有鑰匙嗎？",
+      "openSpace": "開啟語音實驗室",
+      "inputLabel": "語音實驗室帳戶",
+      "placeholder": "貼上您的 API 金鑰",
+      "helpText": "僅儲存在此裝置上。您可以稍後在「設定」→「帳戶」中變更它。",
+      "validating": "正在檢查密鑰...",
+      "errors": {
+        "required": "登入您的 VoiceLab 帳戶以繼續。",
+        "invalid": "VoiceLab 無法授權此會話。嘗試重新登入。",
+        "saveFailed": "無法保存密鑰。再試一次。"
       }
     }
   },
@@ -556,7 +572,9 @@
         "sessionExpired": "工作階段已過期",
         "offline": "你目前離線",
         "dailyLimitReached": "已達每日上限",
-        "providerRateLimited": "服務商速率限制"
+        "providerRateLimited": "服務商速率限制",
+        "walletInsufficient": "VoiceLab 計費問題",
+        "walletChargeFailed": "轉錄失敗"
       },
       "fallback": {
         "title": "備援模式",
@@ -589,7 +607,10 @@
         "sessionExpired": "VoiceLab Cloud 工作階段無法使用。請至「設定」重新登入。",
         "offline": "你目前離線。雲端轉錄需要網際網路連線。",
         "dailyLimitReached": "已達今日的轉錄上限。請明天再試或升級你的方案。",
-        "providerRateLimited": "你的轉錄服務商限制了請求頻率。請稍候再試。"
+        "providerRateLimited": "你的轉錄服務商限制了請求頻率。請稍候再試。",
+        "walletInsufficient": "您的 VoiceLab AI 積分餘額不足。開啟「結算」儲值，然後重試。",
+        "walletChargeFailed": "VoiceLab 計費無法完成計費。請稍後重試。",
+        "authRequired": "登入您的 VoiceLab 帳戶以使用 VoiceLab Cloud。"
       }
     },
     "clipboard": {
@@ -784,7 +805,28 @@
     },
     "welcomeSubtitle": "隨時隨地用語音輸入文字",
     "welcomeTitle": "歡迎使用 VoiceLab",
-    "sessionExpired": "工作階段已過期，請重新登入。"
+    "sessionExpired": "工作階段已過期，請重新登入。",
+    "desktopTitle": "登入 VoiceLab 桌面版",
+    "desktopBrowserHint": "安全登入將在您的瀏覽器中打開，並在完成後返回此處。",
+    "desktopWaiting": "在瀏覽器中完成登入。 VoiceLab Desktop 將會自動繼續。",
+    "desktopSecurity": "您的密碼永遠不會進入桌面應用程式。會話令牌受您的作業系統保護。",
+    "desktopOpenBrowser": "在瀏覽器中繼續",
+    "desktopOpening": "正在開啟安全登入...",
+    "desktopReopen": "再次打開瀏覽器",
+    "desktopCancel": "取消登入",
+    "desktopCancelled": "登入已取消。你可以再試一次。",
+    "desktopExpired": "此登入請求已過期。重新開始繼續。",
+    "desktopFailed": "無法完成登入。請再試一次。",
+    "desktopNetworkTimeout": "身份驗證伺服器回應時間過長。檢查您的連線並重試。",
+    "desktopInvalidResponse": "身份驗證伺服器傳回無效回應。請稍後重試。",
+    "desktopCallbackInvalid": "無法驗證返回連結。重新開始登入。",
+    "desktopSecurityError": "登入連結未通過 VoiceLab 的安全檢查。重新開始登入。",
+    "desktopReplayDetected": "該登入連結已被使用。啟動新的登入請求。",
+    "desktopUnauthorized": "您的 VoiceLab 會話不再有效。再次登入。",
+    "desktopUnavailable": "桌面身份驗證在此應用程式會話中不可用。重新啟動 VoiceLab 桌面。",
+    "desktopServerRejected": "身份驗證伺服器拒絕了該請求。請重試或聯絡支援人員並提供以下錯誤代碼。",
+    "desktopReopenFailed": "無法重新開啟瀏覽器。取消並重新開始登入。",
+    "desktopProtocolUnavailable": "安全返回連結未註冊。重新啟動或重新安裝 VoiceLab Desktop。"
   },
   "cleanupPrompt": "文字整理",
   "developerSection": {
@@ -1286,6 +1328,24 @@
         "successDescription": "您的帳戶和所有資料已被刪除。應用程式將立即重新載入。",
         "failedTitle": "刪除失敗",
         "failedDescription": "刪除您的帳戶時發生錯誤。您的本地資料可能已被部分刪除。請重試。"
+      },
+      "voiceLabAccount": {
+        "sectionDescription": "VoiceLab Cloud 使用您的登入帳號和共用的 AI Credit 錢包。",
+        "label": "語音實驗室帳戶",
+        "description": "登入一次；不需要單獨的語音 API 金鑰。",
+        "openSpace": "開啟語音實驗室",
+        "helpText": "僅儲存在此裝置上。",
+        "placeholder": "貼上您的 API 金鑰",
+        "validating": "正在檢查密鑰...",
+        "valid": "鑰匙看起來不錯。",
+        "invalid": "該密鑰被拒絕。",
+        "billing": "您的 VoiceLab AI 積分餘額不足。開啟帳單進行充值。",
+        "saved": "VoiceLab 帳戶已連接",
+        "cleared": "VoiceLab 會話結束。",
+        "saveFailed": "無法保存密鑰。",
+        "missingTitle": "需登入 VoiceLab",
+        "missingBody": "登入以使用 VoiceLab Cloud 聽寫。不需要單獨的 API 金鑰。",
+        "missingCta": "開設帳戶設置"
       }
     },
     "agentConfig": {
@@ -1696,7 +1756,8 @@
         "dictationTranslation": "翻譯",
         "noteFormatting": "筆記格式化",
         "chatIntelligence": "聊天"
-      }
+      },
+      "temporarilyDisabled": "LLM 提供者設定暫時停用。語音僅使用 VoiceLab Cloud。"
     },
     "noteFormatting": {
       "autoGenerateTitle": "自動產生筆記標題",
@@ -3017,5 +3078,149 @@
     },
     "start": "開始記錄",
     "join": "加入並轉錄"
+  },
+  "desktop": {
+    "offline": "離線。本地聽寫仍然有效。",
+    "nav": {
+      "history": "歷史",
+      "vocabulary": "詞彙",
+      "more": "更多的"
+    },
+    "wallet": {
+      "title": "AI信用錢包",
+      "shared": "VoiceLab 產品之間的平衡",
+      "balance": "平衡",
+      "available": "可用的",
+      "reserved": "預訂的",
+      "unavailable": "錢包暫時無法使用。",
+      "updated": "更新了{{time}}",
+      "live": "即時餘額",
+      "manage": "管理帳單"
+    },
+    "creditShortage": {
+      "title": "需要更多人工智慧學分",
+      "description": "此錄音沒有足夠的可用積分。新增學分或選擇一個計劃。",
+      "required": "需要",
+      "useLocal": "管理 VoiceLab 帳單"
+    },
+    "dictation": {
+      "ready": "準備好"
+    },
+    "languages": {
+      "choose": "選擇語言",
+      "search": "搜尋語言",
+      "searchPlaceholder": "搜尋語言或代碼",
+      "clearSearch": "清除搜尋",
+      "empty": "未找到語言。",
+      "autoUnsupported": "自動檢測不適用於此服務。",
+      "languageUnsupported": "此語言不適用於所選服務。",
+      "groups": {
+        "automatic": "自動的",
+        "centralAsia": "中亞",
+        "other": "俄語和英語"
+      }
+    },
+    "onboarding": {
+      "progress": {
+        "welcome": "歡迎",
+        "mode": "帳戶",
+        "language-permissions": "語言",
+        "hotkey": "捷徑",
+        "ready": "準備好"
+      },
+      "welcome": {
+        "title": "VoiceLab 聽寫",
+        "description": "說話自然。您的文字將出現在您需要的地方。"
+      },
+      "advanced": {
+        "title": "進階設定",
+        "description": "使用本機型號或您自己的供應商，無需 VoiceLab Cloud 帳戶。",
+        "localTitle": "本地模型",
+        "localDescription": "音訊保留在此裝置上並使用 0 AI 積分。",
+        "providerTitle": "我的提供者",
+        "providerDescription": "稍後在進階設定中連接您的 API 金鑰。",
+        "useCloud": "繼續使用 VoiceLab 雲"
+      },
+      "mode": {
+        "localTitle": "本地模式",
+        "localDescription": "可以使用耳語語言和自動偵測。",
+        "providerTitle": "提供者模式",
+        "providerDescription": "設定後連接您的提供者和 API 金鑰。"
+      },
+      "language": {
+        "title": "語言和權限",
+        "description": "選擇您通常聽寫的語言。",
+        "loadingCapabilities": "檢查您的帳戶可用的語言...",
+        "capabilitiesUnavailable": "無法檢查雲端功能。您仍然可以選擇語言。",
+        "unsupported": "所選模式不支援該語言。選擇另一種語言繼續。",
+        "microphoneRequired": "需要存取麥克風才能繼續。"
+      },
+      "hotkey": {
+        "title": "快速快速的測試",
+        "description": "設定快捷方式，說話，然後檢查下面的結果。",
+        "placeholder": "您的結果將會出現在這裡..."
+      },
+      "ready": {
+        "title": "準備好",
+        "account": "您的 VoiceLab 帳戶和 AI Credit 錢包已連線。",
+        "local": "選擇本地轉錄。",
+        "provider": "開啟高級設定以連接您的提供者。",
+        "start": "開始聽寫"
+      }
+    },
+    "dictionary": {
+      "actionFailed": "無法完成更改",
+      "tryAgain": "再試一次。本地保存的單字將保留在此裝置上。",
+      "duplicateTitle": "已經在你的詞彙裡了",
+      "duplicateDescription": "這個詞已經被保存了。",
+      "saved": "詞彙更新",
+      "duplicatesSkipped": "{{count}} 重複已跳過",
+      "duplicatesSkipped_other": "{{count}} 重複項被跳過",
+      "status": {
+        "synced": "已同步",
+        "conflict": "需要審查",
+        "syncError": "儲存到本機，同步失敗",
+        "syncing": "正在同步",
+        "savedLocal": "已儲存在此裝置上"
+      }
+    },
+    "privacy": {
+      "notesSync": "筆記同步",
+      "notesSyncDescription": "在您登入的裝置上同步筆記。",
+      "accountSync": "詞彙和偏好",
+      "accountSyncDescription": "登入後帳號設定和詞彙會自動同步。",
+      "alwaysOn": "在",
+      "transcriptBackup": "成績單備份",
+      "transcriptBackupDescription": "此桌面版本未上傳腳本文字。",
+      "audioBackup": "音訊備份",
+      "audioBackupDescription": "錄音保留在此裝置上，不會上傳。",
+      "notEnabled": "離開",
+      "notAvailable": "不可用",
+      "localAudio": "本地音訊",
+      "localAudioDescription": "選擇錄音在此裝置上保留的時間。"
+    },
+    "settings": {
+      "account": "帳戶及積分",
+      "accountDescription": "個人資料、會話和 AI Credit 錢包",
+      "dictation": "聽寫",
+      "dictationDescription": "語言、麥克風和貼上行為",
+      "shortcuts": "快速方式",
+      "shortcutsDescription": "聽寫和 VoiceLab 快捷鍵",
+      "privacy": "資料與隱私",
+      "privacyDescription": "雲端備份、本地音訊和保留",
+      "advanced": "先進的",
+      "advancedDescription": "VoiceLab Cloud 與開發者工具",
+      "advancedSetup": "雲轉錄",
+      "advancedSetupDescription": "VoiceLab Dictate 會自動使用您的登入帳號。"
+    },
+    "session": {
+      "active": "已登入",
+      "device": "裝置",
+      "thisDevice": "此 VoiceLab 聽寫桌面",
+      "status": "會議",
+      "protected": "主動且受保護",
+      "signedOut": "未登入",
+      "signedOutDescription": "登入以使用 VoiceLab Cloud 和您的 AI Credit 錢包。"
+    }
   }
 }

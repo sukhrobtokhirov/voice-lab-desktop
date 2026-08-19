@@ -160,7 +160,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          node scripts/download-whisper-cpp.js --current --platform darwin --arch ${{ matrix.arch }}
           node scripts/download-llama-server.js --current --platform darwin --arch ${{ matrix.arch }}
           node scripts/download-sherpa-onnx.js --current --platform darwin --arch ${{ matrix.arch }}
           node scripts/download-yt-dlp.js --current --platform darwin --arch ${{ matrix.arch }}
@@ -173,8 +172,7 @@ jobs:
           cat > .env <<'EOF'
           VITE_AUTH_URL=https://voicelab.uz
           VITE_AUTH_API_URL=https://api.voicelab.uz
-          VITE_VOICELAB_API_URL=https://back.aisha.group
-          AISHA_API_KEY=
+          VITE_VOICELAB_API_URL=https://api.voicelab.uz
           OPENWHISPR_PROTOCOL=voicelab
           VITE_OPENWHISPR_PROTOCOL=voicelab
           UI_LANGUAGE=uz
@@ -261,7 +259,6 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           npm run compile:native
-          node scripts/download-whisper-cpp.js --current --platform linux --arch x64
           node scripts/download-llama-server.js --current --platform linux --arch x64
           node scripts/download-sherpa-onnx.js --current --platform linux --arch x64
           node scripts/download-yt-dlp.js --current --platform linux --arch x64
@@ -276,8 +273,7 @@ jobs:
           cat > .env <<'EOF'
           VITE_AUTH_URL=https://voicelab.uz
           VITE_AUTH_API_URL=https://api.voicelab.uz
-          VITE_VOICELAB_API_URL=https://back.aisha.group
-          AISHA_API_KEY=
+          VITE_VOICELAB_API_URL=https://api.voicelab.uz
           OPENWHISPR_PROTOCOL=voicelab
           VITE_OPENWHISPR_PROTOCOL=voicelab
           UI_LANGUAGE=uz
@@ -343,7 +339,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          node scripts/download-whisper-cpp.js --current --platform win32 --arch x64
           node scripts/download-llama-server.js --current --platform win32 --arch x64
           node scripts/download-sherpa-onnx.js --current --platform win32 --arch x64
           node scripts/download-yt-dlp.js --current --platform win32 --arch x64
@@ -363,8 +358,7 @@ jobs:
           @(
             "VITE_AUTH_URL=https://voicelab.uz",
             "VITE_AUTH_API_URL=https://api.voicelab.uz",
-            "VITE_VOICELAB_API_URL=https://back.aisha.group",
-            "AISHA_API_KEY=",
+            "VITE_VOICELAB_API_URL=https://api.voicelab.uz",
             "OPENWHISPR_PROTOCOL=voicelab",
             "VITE_OPENWHISPR_PROTOCOL=voicelab",
             "UI_LANGUAGE=uz"

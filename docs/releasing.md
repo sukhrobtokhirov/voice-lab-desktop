@@ -53,6 +53,6 @@ Paste each copied value into the matching GitHub secret.
 
 ## Notes
 
-- Packaged `.env` must **not** contain a shared `AISHA_API_KEY` (stripped in `afterPack`).
+- Packaged `.env` must not contain shared provider credentials. VoiceLab Cloud uses each user's desktop session and account wallet.
 - Local builds may be unsigned for QA; production macOS releases are signed and notarized, and Linux releases are packaged by GitHub Actions. Windows publishing is currently disabled.
-- Do not publish secrets (Aisha keys, Apple passwords) in release assets or commit history.
+- Do not publish secrets (provider keys, Apple passwords) in release assets or commit history.

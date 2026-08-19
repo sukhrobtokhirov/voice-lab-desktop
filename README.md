@@ -12,7 +12,7 @@
 
 <p align="center">
   Desktop dictation for VoiceLab — press a hotkey, speak, and text appears at your cursor.<br/>
-  Cloud speech-to-text via <a href="https://aisha.group">Aisha</a>, with local Whisper/Parakeet still available.
+  VoiceLab Cloud speech-to-text through your signed-in account—no API key or local speech model required.
 </p>
 
 <p align="center">
@@ -41,7 +41,7 @@ All releases: **[github.com/voicelab-uz/desktop/releases](https://github.com/voi
 1. Download the `.dmg` for your chip (Apple Silicon vs Intel).
 2. Open the disk image and drag **VoiceLab** into **Applications**.
 3. Open **VoiceLab**. New public release builds are signed and notarized, so macOS should not show the unidentified-developer warning. Older unsigned releases may still require **Open Anyway**. Grant microphone and accessibility permissions when prompted.
-4. On first run, paste your **Aisha API key** from [space.aisha.group](https://space.aisha.group).
+4. On first run, sign in to your **VoiceLab account** in the browser. Dictation starts automatically after authorization; no separate API key is required.
 
 ### Share with friends
 
@@ -50,7 +50,7 @@ This repo is **public**. Send them:
 - Latest release: https://github.com/voicelab-uz/desktop/releases/latest
 - Or the direct installer link for their operating system from that page
 
-Each person needs their own Aisha API key. You can also share the appropriate installer file directly.
+Each person signs in with their own VoiceLab account. You can also share the appropriate installer file directly.
 
 ### Install (Windows — coming soon)
 
@@ -68,8 +68,7 @@ On Linux, grant microphone and desktop accessibility permissions through your di
 ## Features
 
 - **Voice dictation** — global hotkey, auto-paste into the focused app
-- **VoiceLab Cloud STT** — Aisha API (`back.aisha.group`) with per-user API key
-- **Local STT** — Whisper / Parakeet on-device when you want offline
+- **VoiceLab Cloud STT** — authenticated Desktop Dictate operations charged to the account's AI Credit wallet
 - **Notes & meetings** — carry over from the OpenWhispr base (product surface still evolving)
 - **uz / en / ru** UI focus for VoiceLab
 
@@ -95,7 +94,7 @@ Useful scripts:
 | `npm run build:linux` | Local Linux x64 packages |
 | `npm run build:mac:cloud` | Unsigned arm64 build (CI-style) |
 
-See [ADAPTATION.md](ADAPTATION.md) for fork architecture and Aisha integration notes.
+See [ADAPTATION.md](ADAPTATION.md) for the fork architecture and VoiceLab integration notes.
 
 ## Releases & auto-update
 
@@ -111,6 +110,5 @@ Details: [docs/releasing.md](docs/releasing.md).
 
 VoiceLab Desktop is adapted from [OpenWhispr](https://github.com/OpenWhispr/openwhispr).
 
-- [OpenAI Whisper](https://github.com/openai/whisper) / [whisper.cpp](https://github.com/ggerganov/whisper.cpp)
-- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) / [NVIDIA Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)
-- [Electron](https://www.electronjs.org/) · [React](https://react.dev/) · [Aisha](https://aisha.group)
+- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) for speaker diarization
+- [Electron](https://www.electronjs.org/) · [React](https://react.dev/) · [VoiceLab](https://voicelab.uz)

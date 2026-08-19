@@ -44,17 +44,8 @@ export const useAudioRecording = (toast, options = {}) => {
         audioManagerRef.current.setVoiceAgentRequested(voiceAgentRequested);
         audioManagerRef.current.setTranslationRequested(translationRequested);
 
-        // Retry STT config fetch if it wasn't loaded on mount (e.g. auth wasn't ready)
-        if (!audioManagerRef.current.sttConfig) {
-          const config = await window.electronAPI.getSttConfig?.();
-          if (config?.success) {
-            audioManagerRef.current.setSttConfig(config);
-          }
-        }
-
-        const didStart = audioManagerRef.current.shouldUseStreaming()
-          ? await audioManagerRef.current.startStreamingRecording()
-          : await audioManagerRef.current.startRecording();
+        await playStartCue();
+        const didStart = await audioManagerRef.current.startRecording();
 
         // A quick tap can end the recording inside the start call itself (deferred
         // streaming stop) — don't pause media for a recording that already ended. See #1060.
@@ -63,7 +54,6 @@ export const useAudioRecording = (toast, options = {}) => {
             window.electronAPI?.pauseMediaPlayback?.();
           }
           window.electronAPI?.registerCancelHotkey?.("Escape");
-          void playStartCue();
         }
 
         return didStart;
@@ -259,17 +249,6 @@ export const useAudioRecording = (toast, options = {}) => {
           if (placedTimerRef.current) clearTimeout(placedTimerRef.current);
           placedTimerRef.current = setTimeout(() => setWasPlaced(false), 1400);
 
-          if (result.source === "openai" && getSettings().useLocalWhisper) {
-            toast({
-              title: t("hooks.audioRecording.fallback.title"),
-              description: t("hooks.audioRecording.fallback.description"),
-              variant: "default",
-            });
-          }
-
-          if (audioManagerRef.current.shouldUseStreaming()) {
-            audioManagerRef.current.warmupStreamingConnection();
-          }
         }
       },
       onTranslationFallback: ({ reason }) => {
@@ -289,14 +268,6 @@ export const useAudioRecording = (toast, options = {}) => {
     });
 
     audioManagerRef.current.setContext("dictation");
-    window.electronAPI.getSttConfig?.().then((config) => {
-      if (config?.success && audioManagerRef.current) {
-        audioManagerRef.current.setSttConfig(config);
-        if (audioManagerRef.current.shouldUseStreaming()) {
-          audioManagerRef.current.warmupStreamingConnection();
-        }
-      }
-    });
 
     const handleToggle = async ({
       voiceAgentRequested = false,

@@ -1,7 +1,7 @@
 import type { ModelDefinition } from "../models/ModelRegistry";
 import type { TinfoilCatalogModel } from "../models/tinfoilModels";
 
-export type LocalTranscriptionProvider = "whisper" | "nvidia";
+export type LocalTranscriptionProvider = "whisper" | "nvidia" | "voicelab";
 
 export type InferenceMode = "openwhispr" | "providers" | "local" | "self-hosted" | "enterprise";
 
@@ -284,54 +284,6 @@ export interface GpuInfo {
   vramMb?: number;
 }
 
-export interface CudaWhisperStatus {
-  downloaded: boolean;
-  downloading: boolean;
-  path: string | null;
-  gpuInfo: GpuInfo;
-}
-
-export interface VulkanWhisperStatus {
-  downloaded: boolean;
-  downloading: boolean;
-  vulkan: VulkanGpuResult;
-  hasNvidiaGpu: boolean;
-}
-
-export interface WhisperCheckResult {
-  installed: boolean;
-  working: boolean;
-  error?: string;
-}
-
-export interface WhisperModelResult {
-  success: boolean;
-  model: string;
-  downloaded: boolean;
-  size_mb?: number;
-  error?: string;
-  code?: string;
-  isDownloading?: boolean;
-  isInstalling?: boolean;
-  downloadProgress?: number;
-  downloadedBytes?: number;
-  totalBytes?: number;
-}
-
-export interface WhisperModelDeleteResult {
-  success: boolean;
-  model: string;
-  deleted: boolean;
-  freed_mb?: number;
-  error?: string;
-}
-
-export interface WhisperModelsListResult {
-  success: boolean;
-  models: WhisperModelResult[];
-  cache_dir: string;
-}
-
 export interface FFmpegAvailabilityResult {
   available: boolean;
   path?: string;
@@ -344,10 +296,6 @@ export interface AudioDiagnosticsResult {
   resourcesPath: string | null;
   isPackaged: boolean;
   ffmpeg: { available: boolean; path: string | null; error: string | null };
-  whisperBinary: { available: boolean; path: string | null; error: string | null };
-  whisperServer: { available: boolean; path: string | null };
-  modelsDir: string;
-  models: string[];
 }
 
 export type SystemAudioMode = "native" | "loopback" | "portal" | "unsupported";
@@ -398,81 +346,6 @@ export interface UpdateResult {
 
 export interface AppVersionResult {
   version: string;
-}
-
-export interface WhisperDownloadProgressData {
-  type: "progress" | "installing" | "complete" | "error";
-  model: string;
-  percentage?: number;
-  downloaded_bytes?: number;
-  total_bytes?: number;
-  error?: string;
-  code?: string;
-  result?: any;
-}
-
-export interface ParakeetCheckResult {
-  installed: boolean;
-  working: boolean;
-  path?: string;
-}
-
-export interface ParakeetModelResult {
-  success: boolean;
-  model: string;
-  downloaded: boolean;
-  path?: string;
-  size_bytes?: number;
-  size_mb?: number;
-  error?: string;
-  code?: string;
-  isDownloading?: boolean;
-  isInstalling?: boolean;
-  downloadProgress?: number;
-  downloadedBytes?: number;
-  totalBytes?: number;
-}
-
-export interface ParakeetModelDeleteResult {
-  success: boolean;
-  model: string;
-  deleted: boolean;
-  freed_bytes?: number;
-  freed_mb?: number;
-  error?: string;
-}
-
-export interface ParakeetModelsListResult {
-  success: boolean;
-  models: ParakeetModelResult[];
-  cache_dir: string;
-}
-
-export interface ParakeetDownloadProgressData {
-  type: "progress" | "installing" | "complete" | "error";
-  model: string;
-  percentage?: number;
-  downloaded_bytes?: number;
-  total_bytes?: number;
-  error?: string;
-  code?: string;
-}
-
-export interface ParakeetTranscriptionResult {
-  success: boolean;
-  text?: string;
-  message?: string;
-  error?: string;
-}
-
-export interface ParakeetDiagnosticsResult {
-  platform: string;
-  arch: string;
-  resourcesPath: string | null;
-  isPackaged: boolean;
-  sherpaOnnx: { available: boolean; path: string | null };
-  modelsDir: string;
-  models: string[];
 }
 
 export interface PasteToolsResult {
@@ -656,19 +529,7 @@ declare global {
       retryTranscription: (
         id: number,
         settings?: {
-          useLocalWhisper: boolean;
-          localTranscriptionProvider: string;
-          cloudTranscriptionMode: string;
-          cloudTranscriptionProvider: string;
-          cloudTranscriptionModel: string;
-          cloudTranscriptionBaseUrl?: string;
-          parakeetModel: string;
-          whisperModel: string;
           preferredLanguage?: string;
-          transcriptionMode?: InferenceMode;
-          remoteTranscriptionType?: SelfHostedType;
-          remoteTranscriptionUrl?: string;
-          remoteTranscriptionModel?: string;
         }
       ) => Promise<{
         success: boolean;
@@ -804,15 +665,6 @@ declare global {
         filePaths?: string[];
       }>;
       getFileSize?: (filePath: string) => Promise<number>;
-      transcribeAudioFile: (
-        filePath: string,
-        options?: {
-          provider?: "whisper" | "nvidia";
-          model?: string;
-          language?: string;
-          [key: string]: unknown;
-        }
-      ) => Promise<{ success: boolean; text?: string; error?: string }>;
       getPathForFile: (file: File) => string;
 
       // URL audio download
@@ -850,7 +702,7 @@ declare global {
       onTranscriptionUpdated?: (callback: (item: TranscriptionItem) => void) => () => void;
       onTranscriptionDeleted?: (callback: (payload: { id: number }) => void) => () => void;
       onTranscriptionsCleared?: (callback: (payload: { cleared: number }) => void) => () => void;
-
+      onDictationComplete?: (callback: (payload: { text: string }) => void) => () => void;
 
       getUiLanguage: () => Promise<string>;
       saveUiLanguage: (language: string) => Promise<{ success: boolean; language: string }>;
@@ -875,91 +727,11 @@ declare global {
       // Audio
       onNoAudioDetected: (callback: (event: any, data?: any) => void) => () => void;
 
-      // Whisper operations (whisper.cpp)
-      transcribeLocalWhisper: (audioBlob: Blob | ArrayBuffer, options?: any) => Promise<any>;
-      checkWhisperInstallation: () => Promise<WhisperCheckResult>;
-      downloadWhisperModel: (modelName: string) => Promise<WhisperModelResult>;
-      onWhisperDownloadProgress: (
-        callback: (event: any, data: WhisperDownloadProgressData) => void
-      ) => () => void;
-      checkModelStatus: (modelName: string) => Promise<WhisperModelResult>;
-      listWhisperModels: () => Promise<WhisperModelsListResult>;
-      deleteWhisperModel: (modelName: string) => Promise<WhisperModelDeleteResult>;
-      deleteAllWhisperModels: () => Promise<{
-        success: boolean;
-        deleted_count?: number;
-        freed_bytes?: number;
-        freed_mb?: number;
-        error?: string;
-      }>;
-      cancelWhisperDownload: () => Promise<{
-        success: boolean;
-        message?: string;
-        error?: string;
-      }>;
-
-      // CUDA GPU acceleration
+      // GPU acceleration for local intelligence models
       listGpus?: () => Promise<GpuDevice[]>;
-      setGpuDeviceIndex?: (
-        purpose: "transcription" | "intelligence",
-        uuid: string
-      ) => Promise<{ success: boolean }>;
-      getGpuDeviceIndex?: (purpose: "transcription" | "intelligence") => Promise<string>;
+      setGpuDeviceIndex?: (purpose: "intelligence", uuid: string) => Promise<{ success: boolean }>;
+      getGpuDeviceIndex?: (purpose: "intelligence") => Promise<string>;
       detectGpu: () => Promise<GpuInfo>;
-      getCudaWhisperStatus: () => Promise<CudaWhisperStatus>;
-      downloadCudaWhisperBinary: () => Promise<{ success: boolean; error?: string }>;
-      cancelCudaWhisperDownload: () => Promise<{ success: boolean }>;
-      deleteCudaWhisperBinary: () => Promise<{ success: boolean }>;
-      onCudaDownloadProgress: (
-        callback: (data: {
-          downloadedBytes: number;
-          totalBytes: number;
-          percentage: number;
-        }) => void
-      ) => () => void;
-      onCudaFallbackNotification: (callback: () => void) => () => void;
-
-      // Vulkan GPU acceleration (whisper on AMD/Intel GPUs)
-      getVulkanWhisperStatus: () => Promise<VulkanWhisperStatus>;
-      downloadVulkanWhisperBinary: () => Promise<{ success: boolean; error?: string }>;
-      cancelVulkanWhisperDownload: () => Promise<{ success: boolean }>;
-      deleteVulkanWhisperBinary: () => Promise<{ success: boolean; deletedCount?: number }>;
-      onVulkanWhisperDownloadProgress: (
-        callback: (data: {
-          downloadedBytes: number;
-          totalBytes: number;
-          percentage: number;
-        }) => void
-      ) => () => void;
-      onGpuFallbackNotification: (callback: () => void) => () => void;
-
-      // Parakeet operations (NVIDIA via sherpa-onnx)
-      transcribeLocalParakeet: (
-        audioBlob: ArrayBuffer,
-        options?: { model?: string }
-      ) => Promise<ParakeetTranscriptionResult>;
-      checkParakeetInstallation: () => Promise<ParakeetCheckResult>;
-      downloadParakeetModel: (modelName: string) => Promise<ParakeetModelResult>;
-      onParakeetDownloadProgress: (
-        callback: (event: any, data: ParakeetDownloadProgressData) => void
-      ) => () => void;
-      checkParakeetModelStatus: (modelName: string) => Promise<ParakeetModelResult>;
-      listParakeetModels: () => Promise<ParakeetModelsListResult>;
-      deleteParakeetModel: (modelName: string) => Promise<ParakeetModelDeleteResult>;
-      deleteAllParakeetModels: () => Promise<{
-        success: boolean;
-        deleted_count?: number;
-        freed_bytes?: number;
-        freed_mb?: number;
-        error?: string;
-      }>;
-      cancelParakeetDownload: () => Promise<{
-        success: boolean;
-        message?: string;
-        error?: string;
-        code?: string;
-      }>;
-      getParakeetDiagnostics: () => Promise<ParakeetDiagnosticsResult>;
 
       // Local AI model management
       modelGetAll: () => Promise<LocalLLMModelStatus[]>;
@@ -1165,15 +937,6 @@ declare global {
       saveBedrockProfile?: (value: string) => Promise<void>;
       getAzureEndpoint?: () => Promise<string | null>;
       saveAzureEndpoint?: (value: string) => Promise<void>;
-      validateAishaApiKey?: (
-        key?: string
-      ) => Promise<{
-        ok: boolean;
-        code?: string;
-        status?: number;
-        message?: string;
-        keyAccepted?: boolean;
-      }>;
       getAzureDeployment?: () => Promise<string | null>;
       saveAzureDeployment?: (value: string) => Promise<void>;
       getAzureApiVersion?: () => Promise<string | null>;
@@ -1235,7 +998,7 @@ declare global {
       toggleMediaPlayback?: () => Promise<boolean>;
       pauseMediaPlayback?: () => Promise<boolean>;
       resumeMediaPlayback?: () => Promise<boolean>;
-      openWhisperModelsFolder?: () => Promise<{ success: boolean; error?: string }>;
+      openModelCacheFolder?: () => Promise<{ success: boolean; error?: string }>;
 
       // Windows Push-to-Talk notifications
       notifyActivationModeChanged?: (mode: "tap" | "push") => void;
@@ -1255,16 +1018,31 @@ declare global {
         status: string;
         user: Record<string, unknown> | null;
         errorCode: string | null;
+        errorMessage?: string | null;
+      }>;
+      authReopenBrowser?: () => Promise<{
+        status: string;
+        user: Record<string, unknown> | null;
+        errorCode: string | null;
+        errorMessage?: string | null;
+      }>;
+      authCancelBrowser?: () => Promise<{
+        status: string;
+        user: Record<string, unknown> | null;
+        errorCode: string | null;
+        errorMessage?: string | null;
       }>;
       authGetStatus?: () => Promise<{
         status: string;
         user: Record<string, unknown> | null;
         errorCode: string | null;
+        errorMessage?: string | null;
       }>;
       authRefreshSession?: () => Promise<{
         status: string;
         user: Record<string, unknown> | null;
         errorCode: string | null;
+        errorMessage?: string | null;
       }>;
       authLogout?: () => Promise<{ success: boolean; revoked: boolean }>;
       authDeleteAccount?: () => Promise<{ success: boolean }>;
@@ -1273,7 +1051,11 @@ declare global {
           status: string;
           user: Record<string, unknown> | null;
           errorCode: string | null;
+          errorMessage?: string | null;
         }) => void
+      ) => () => void;
+      onDesktopProtocolError?: (
+        callback: (event: unknown, payload: { errorCode?: string }) => void
       ) => () => void;
 
       // OpenWhispr Cloud API
@@ -1287,16 +1069,17 @@ declare global {
         clientTranscriptionId?: string;
         wordsUsed?: number;
         wordsRemaining?: number;
-limitReached?: boolean;
-operationId?: string;
-estimatedCredits?: string | null;
-chargedCredits?: string | null;
-balanceCredits?: string;
-reservedCredits?: string;
-availableCredits?: string;
-limits?: Record<string, unknown>;
-retryAfterSeconds?: number | null;
-error?: string;
+        limitReached?: boolean;
+        operationId?: string;
+        estimatedCredits?: string | null;
+        chargedCredits?: string | null;
+        balanceCredits?: string;
+        isUnlimited?: boolean;
+        reservedCredits?: string;
+        availableCredits?: string;
+        limits?: Record<string, unknown>;
+        retryAfterSeconds?: number | null;
+        error?: string;
         code?: string;
       }>;
       cloudReason?: (
@@ -1348,23 +1131,24 @@ error?: string;
         code?: string;
         messageKey?: string;
       }>;
-cloudUsage?: () => Promise<{
-  success: boolean;
-  balanceCredits?: string;
-  reservedCredits?: string;
-  availableCredits?: string;
-  plan?: string;
-  estimatedCredits?: string | null;
-  chargedCredits?: string | null;
-  limits?: Record<string, unknown>;
-  topUpUrl?: string | null;
-  updatedAt?: string | null;
-  error?: string;
-  code?: string;
-}>;
-openVoiceLabBilling?: (
-  source?: "dictate" | "desktop"
-) => Promise<{ success: boolean; error?: string }>;
+      cloudUsage?: () => Promise<{
+        success: boolean;
+        balanceCredits?: string;
+        isUnlimited?: boolean;
+        reservedCredits?: string;
+        availableCredits?: string;
+        plan?: string;
+        estimatedCredits?: string | null;
+        chargedCredits?: string | null;
+        limits?: Record<string, unknown>;
+        topUpUrl?: string | null;
+        updatedAt?: string | null;
+        error?: string;
+        code?: string;
+      }>;
+      openVoiceLabBilling?: (
+        source?: "dictate" | "desktop"
+      ) => Promise<{ success: boolean; error?: string }>;
       cloudCheckout?: (opts?: {
         plan?: "monthly" | "annual";
         tier?: "pro" | "business";
@@ -1431,26 +1215,6 @@ openVoiceLabBilling?: (
         callback: (data: { stage: string; chunksTotal: number; chunksCompleted: number }) => void
       ) => () => void;
 
-      // Main-process BYOK audio file transcription
-      providerTranscribeFile?: (options: {
-        filePath: string;
-        baseUrl: string;
-        model: string;
-        diarize?: boolean;
-        provider?: string;
-        language?: string;
-        environment?: string;
-        tenant?: string;
-        transcriptionMode?: string;
-        remoteTranscriptionUrl?: string;
-        remoteTranscriptionModel?: string;
-      }) => Promise<{
-        success: boolean;
-        text?: string;
-        error?: string;
-        diarized?: boolean;
-      }>;
-
       // Main-process provider boundary. Renderer code can select providers and
       // submit work, but it cannot read stored credentials.
       providerCredentialStatus?: () => Promise<{
@@ -1464,9 +1228,7 @@ openVoiceLabBilling?: (
         provider: "custom" | "lan",
         endpoint: string
       ) => Promise<{ success: boolean; endpoint?: string; error?: string }>;
-      providerListModels?: (
-        provider: "openai" | "openrouter" | "custom" | "lan"
-      ) => Promise<{
+      providerListModels?: (provider: "openai" | "openrouter" | "custom" | "lan") => Promise<{
         success: boolean;
         models?: Array<{ id: string; ownedBy?: string; description?: string }>;
         error?: string;
@@ -1484,9 +1246,7 @@ openVoiceLabBilling?: (
         config?: Record<string, unknown>;
         options: Record<string, unknown>;
       }) => Promise<{ success: boolean; error?: string }>;
-      providerStreamCancel?: (
-        streamId: string
-      ) => Promise<{ success: boolean; error?: string }>;
+      providerStreamCancel?: (streamId: string) => Promise<{ success: boolean; error?: string }>;
       onProviderStreamPart?: (
         callback: (payload: {
           streamId: string;
@@ -1495,25 +1255,6 @@ openVoiceLabBilling?: (
           error?: string;
         }) => void
       ) => () => void;
-      providerTranscribe?: (payload: {
-        provider: string;
-        audioBuffer: ArrayBuffer | Uint8Array;
-        mimeType?: string;
-        model?: string;
-        baseUrl?: string;
-        language?: string;
-        prompt?: string;
-        keyterms?: string[];
-        contextBias?: string[];
-        environment?: "us" | "eu" | "au";
-        tenant?: string;
-      }) => Promise<{
-        success: boolean;
-        text?: string;
-        error?: string;
-        code?: string;
-      }>;
-
       // Usage limit events
       notifyLimitReached?: (data: {
         wordsUsed?: number;
@@ -1527,40 +1268,6 @@ openVoiceLabBilling?: (
 
       // Workspace invitation deep link
       onWorkspaceInvitationToken?: (callback: (token: string) => void) => () => void;
-
-      // AssemblyAI Streaming
-      assemblyAiStreamingWarmup?: (options?: {
-        sampleRate?: number;
-        language?: string;
-      }) => Promise<{
-        success: boolean;
-        alreadyWarm?: boolean;
-        error?: string;
-        code?: string;
-      }>;
-      assemblyAiStreamingStart?: (options?: { sampleRate?: number; language?: string }) => Promise<{
-        success: boolean;
-        usedWarmConnection?: boolean;
-        error?: string;
-        code?: string;
-      }>;
-      assemblyAiStreamingSend?: (audioBuffer: ArrayBuffer) => void;
-      assemblyAiStreamingForceEndpoint?: () => void;
-      assemblyAiStreamingStop?: () => Promise<{
-        success: boolean;
-        text?: string;
-        error?: string;
-      }>;
-      assemblyAiStreamingStatus?: () => Promise<{
-        isConnected: boolean;
-        sessionId: string | null;
-      }>;
-      onAssemblyAiPartialTranscript?: (callback: (text: string) => void) => () => void;
-      onAssemblyAiFinalTranscript?: (callback: (text: string) => void) => () => void;
-      onAssemblyAiError?: (callback: (error: string) => void) => () => void;
-      onAssemblyAiSessionEnd?: (
-        callback: (data: { audioDuration?: number; text?: string }) => void
-      ) => () => void;
 
       // Referral stats
       getReferralStats?: () => Promise<{
@@ -1700,69 +1407,6 @@ openVoiceLabBilling?: (
         query: string,
         limit?: number
       ) => Promise<ConversationPreview[]>;
-
-      // Deepgram Streaming
-      deepgramStreamingWarmup?: (options?: { sampleRate?: number; language?: string }) => Promise<{
-        success: boolean;
-        alreadyWarm?: boolean;
-        error?: string;
-        code?: string;
-      }>;
-      deepgramStreamingStart?: (options?: {
-        sampleRate?: number;
-        language?: string;
-        forceNew?: boolean;
-      }) => Promise<{
-        success: boolean;
-        usedWarmConnection?: boolean;
-        error?: string;
-        code?: string;
-      }>;
-      deepgramStreamingSend?: (audioBuffer: ArrayBuffer) => void;
-      deepgramStreamingFinalize?: () => void;
-      deepgramStreamingStop?: () => Promise<{
-        success: boolean;
-        text?: string;
-        error?: string;
-      }>;
-      deepgramStreamingStatus?: () => Promise<{
-        isConnected: boolean;
-        sessionId: string | null;
-      }>;
-      onDeepgramPartialTranscript?: (callback: (text: string) => void) => () => void;
-      onDeepgramFinalTranscript?: (callback: (text: string) => void) => () => void;
-      onDeepgramError?: (callback: (error: string) => void) => () => void;
-      onDeepgramSessionEnd?: (
-        callback: (data: { audioDuration?: number; text?: string }) => void
-      ) => () => void;
-
-      // Corti streaming (BYOK)
-      cortiStreamingWarmup?: (options?: {
-        environment?: string;
-        tenant?: string;
-        language?: string;
-        keyterms?: string[];
-      }) => Promise<{ success: boolean; error?: string; code?: string }>;
-      cortiStreamingStart?: (options?: {
-        environment?: string;
-        tenant?: string;
-        language?: string;
-        keyterms?: string[];
-      }) => Promise<{ success: boolean; error?: string; code?: string }>;
-      cortiStreamingSend?: (audioBuffer: ArrayBuffer) => void;
-      cortiStreamingFinalize?: () => void;
-      cortiStreamingStop?: () => Promise<{
-        success: boolean;
-        text?: string;
-        model?: string;
-        audioBytesSent?: number;
-        error?: string;
-      }>;
-      cortiStreamingStatus?: () => Promise<{ isConnected: boolean; sessionId: string | null }>;
-      onCortiPartialTranscript?: (callback: (text: string) => void) => () => void;
-      onCortiFinalTranscript?: (callback: (text: string) => void) => () => void;
-      onCortiError?: (callback: (error: string) => void) => () => void;
-      onCortiSessionEnd?: (callback: (data: { text?: string }) => void) => () => void;
 
       // Agent overlay
       resizeAgentWindow?: (width: number, height: number) => Promise<void>;
@@ -2007,22 +1651,6 @@ openVoiceLabBilling?: (
         embeddings: Record<string, number[]>
       ) => Promise<{ success: boolean }>;
 
-      // Dictation realtime streaming
-      dictationRealtimeWarmup?: (options: {
-        model?: string;
-        mode?: "byok" | "openwhispr";
-      }) => Promise<{ success: boolean; error?: string }>;
-      dictationRealtimeStart?: (options: {
-        model?: string;
-        mode?: "byok" | "openwhispr";
-      }) => Promise<{ success: boolean; error?: string }>;
-      dictationRealtimeSend?: (buffer: ArrayBuffer) => void;
-      dictationRealtimeStop?: () => Promise<{ success: boolean; text: string }>;
-      onDictationRealtimePartial?: (callback: (text: string) => void) => () => void;
-      onDictationRealtimeFinal?: (callback: (text: string) => void) => () => void;
-      onDictationRealtimeError?: (callback: (error: string) => void) => () => void;
-      onDictationRealtimeSessionEnd?: (callback: (data: { text: string }) => void) => () => void;
-
       // Google Calendar event listeners
       onGcalConnectionChanged?: (callback: (data: any) => void) => () => void;
       onGcalEventsSynced?: (callback: (data: any) => void) => () => void;
@@ -2101,12 +1729,6 @@ openVoiceLabBilling?: (
       onPreviewHold?: (callback: (payload: { showCleanup: boolean }) => void) => () => void;
       onPreviewResult?: (callback: (payload: { text: string }) => void) => () => void;
       onPreviewHide?: (callback: () => void) => () => void;
-      startDictationPreview?: (opts: {
-        provider: string;
-        model: string;
-        language?: string;
-        display?: boolean;
-      }) => Promise<{ success: boolean }>;
       stopDictationPreview?: (opts?: {
         showCleanup?: boolean;
         flushed?: boolean;
@@ -2121,8 +1743,6 @@ openVoiceLabBilling?: (
         success: boolean;
         bounds?: { x: number; y: number; width: number; height: number };
       }>;
-      sendDictationPreviewAudio?: (data: ArrayBuffer) => void;
-
       // VoiceLab sync v2 operations
       getDictionaryState?: () => Promise<DesktopDictionaryState>;
       createDictionaryEntry?: (input: {

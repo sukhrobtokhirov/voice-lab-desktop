@@ -3,11 +3,9 @@ const {
   providerConfigValueSchema,
   providerCredentialSaveSchema,
   providerEndpointSaveSchema,
-  providerFileTranscriptionSchema,
   providerModelListSchema,
   providerReasonSchema,
   providerStreamSchema,
-  providerTranscriptionSchema,
 } = require("./providerContracts");
 
 function registerProviderIpc({ handle, providerService }) {
@@ -50,12 +48,6 @@ function registerProviderIpc({ handle, providerService }) {
     }
     return providerService.cancelStream(event, streamId);
   });
-  handle("provider-transcribe", (_event, value) =>
-    providerService.transcribe(parse(providerTranscriptionSchema, value))
-  );
-  handle("provider-transcribe-file", (_event, value) =>
-    providerService.transcribeFile(parse(providerFileTranscriptionSchema, value))
-  );
 }
 
 module.exports = { registerProviderIpc };

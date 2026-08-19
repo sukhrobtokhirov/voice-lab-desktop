@@ -471,6 +471,7 @@ test("local transcripts stay isolated across account switches and require explic
       text TEXT NOT NULL,
       raw_text TEXT,
       error_message TEXT,
+      error_code TEXT,
       status TEXT DEFAULT 'completed',
       deleted_at TEXT,
       timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
