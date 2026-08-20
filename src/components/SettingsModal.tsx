@@ -62,7 +62,7 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         label: t("desktop.settings.account", { defaultValue: "Account & Credits" }),
         icon: UserCircle,
         description: t("desktop.settings.accountDescription", {
-          defaultValue: "Profile, session and AI Credit wallet",
+          defaultValue: "Profile, secure session and billing",
         }),
         group: t("settingsModal.groups.account", { defaultValue: "VoiceLab" }),
       },

@@ -14,9 +14,8 @@ export type SocialProvider = "google" | "microsoft" | "apple";
 export type VoiceLabUser = {
   id: string;
   email: string;
-  name?: string;
+  name: string;
   image?: string | null;
-  [key: string]: unknown;
 };
 
 function desktopAuthError(error: unknown, fallback: string): Error {
@@ -118,13 +117,17 @@ function normalizeUser(payload: unknown): VoiceLabUser | null {
   >;
   const id = String(userObj.id ?? userObj.pk ?? userObj.user_id ?? "");
   const email = String(userObj.email ?? userObj.username ?? "");
-  if (!id && !email) return null;
+  if (!id || id.length > 256 || !email || email.length > 320) return null;
+  const name =
+    String(userObj.name ?? email)
+      .trim()
+      .slice(0, 256) || email;
+  const image = typeof userObj.image === "string" ? userObj.image : null;
   return {
-    ...userObj,
-    id: id || email,
+    id,
     email,
-    name: String(userObj.full_name ?? userObj.name ?? userObj.username ?? email),
-    image: (userObj.avatar as string) || (userObj.image as string) || null,
+    name,
+    image,
   };
 }
 

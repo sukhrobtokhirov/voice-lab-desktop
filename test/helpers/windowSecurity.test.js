@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const Module = require("node:module");
@@ -32,7 +33,10 @@ test("renderer navigation is exact and never trusts remote web content", () => {
   withWindowSecurity(({ isAllowedRendererUrl }) => {
     const appIndex = path.join(appPath, "src", "dist", "index.html");
     assert.equal(isAllowedRendererUrl(pathToFileURL(appIndex).href), true);
-    assert.equal(isAllowedRendererUrl(`${pathToFileURL(appIndex).href}?window=control-panel`), true);
+    assert.equal(
+      isAllowedRendererUrl(`${pathToFileURL(appIndex).href}?window=control-panel`),
+      true
+    );
     assert.equal(isAllowedRendererUrl("https://voicelab.uz/app"), false);
     assert.equal(isAllowedRendererUrl("file:///tmp/index.html"), false);
   });
@@ -61,4 +65,26 @@ test("external navigation allows safe https and mailto only", () => {
     assert.equal(isAllowedExternalUrl("javascript:alert(1)"), false);
     assert.equal(isAllowedExternalUrl("https://user:pass@voicelab.uz"), false);
   });
+});
+
+test("open-external IPC delegates to the shared strict URL validator", () => {
+  const source = fs.readFileSync(path.join(appPath, "src", "helpers", "ipcHandlers.js"), "utf8");
+  assert.match(source, /const \{ openExternalUrl \} = require\("\.\/windowSecurity"\);/);
+  const handlerStart = source.indexOf('this._handle("open-external"');
+  const handlerEnd = source.indexOf('this._handle("get-auto-start-enabled"', handlerStart);
+  const handler = source.slice(handlerStart, handlerEnd);
+  assert.match(handler, /await openExternalUrl\(url\)/);
+  assert.doesNotMatch(handler, /shell\.openExternal/);
+});
+
+test("default session denies non-audio permissions and untrusted windows", () => {
+  const source = fs.readFileSync(path.join(appPath, "main.js"), "utf8");
+  const start = source.indexOf("function installSessionPermissionPolicy");
+  const end = source.indexOf("async function", start);
+  const policy = source.slice(start, end);
+  assert.match(policy, /setPermissionCheckHandler/);
+  assert.match(policy, /setPermissionRequestHandler/);
+  assert.match(policy, /permission === "media"/);
+  assert.match(policy, /isTrustedAppWebContents/);
+  assert.match(policy, /mediaTypes\.every\(\(type\) => type === "audio"\)/);
 });

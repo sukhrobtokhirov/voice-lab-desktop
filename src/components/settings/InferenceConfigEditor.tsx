@@ -54,6 +54,12 @@ function startCloudOnboarding() {
   window.location.reload();
 }
 
+const toPublicMode = (mode: InferenceMode): InferenceMode =>
+  mode === "openwhispr" ? "voicelab" : mode;
+
+const toPersistedMode = (mode: InferenceMode): InferenceMode =>
+  mode === "voicelab" ? "openwhispr" : mode;
+
 interface InferenceConfigEditorProps {
   scope: InferenceScope;
   onModeChange?: (mode: InferenceMode) => void;
@@ -67,7 +73,7 @@ export default function InferenceConfigEditor({ scope, onModeChange }: Inference
   const prefix = MODE_LABEL_PREFIX[scope];
   const modes: InferenceModeOption[] = [
     {
-      id: "openwhispr",
+      id: "voicelab",
       label: t(`${prefix}.openwhispr`),
       description: t(`${prefix}.openwhisprDesc`),
       icon: <Cloud className="w-4 h-4" />,
@@ -110,27 +116,28 @@ export default function InferenceConfigEditor({ scope, onModeChange }: Inference
 
   const handleModeSelect = useCallback(
     (mode: InferenceMode) => {
-      if (mode === "openwhispr" && !isSignedIn) {
+      const persistedMode = toPersistedMode(mode);
+      if (mode === "voicelab" && !isSignedIn) {
         startCloudOnboarding();
         return;
       }
-      if (mode === config.mode) return;
+      if (persistedMode === config.mode) return;
 
       const patch: Parameters<typeof setResolvedLLMConfig>[1] = {
-        mode,
-        cloudMode: mode === "openwhispr" ? "openwhispr" : "byok",
+        mode: persistedMode,
+        cloudMode: mode === "voicelab" ? "openwhispr" : "byok",
       };
-      if (!isProviderValidForMode(config.provider, mode)) {
+      if (!isProviderValidForMode(config.provider, persistedMode)) {
         patch.provider = "";
         patch.model = "";
       }
       setResolvedLLMConfig(scope, patch);
 
-      if (mode === "openwhispr" || mode === "self-hosted" || mode === "enterprise") {
+      if (mode === "voicelab" || mode === "self-hosted" || mode === "enterprise") {
         window.electronAPI?.llamaServerStop?.();
       }
 
-      onModeChange?.(mode);
+      onModeChange?.(persistedMode);
     },
     [scope, config.mode, config.provider, isSignedIn, onModeChange]
   );
@@ -164,7 +171,11 @@ export default function InferenceConfigEditor({ scope, onModeChange }: Inference
 
   return (
     <div className="space-y-3">
-      <InferenceModeSelector modes={modes} activeMode={config.mode} onSelect={handleModeSelect} />
+      <InferenceModeSelector
+        modes={modes}
+        activeMode={toPublicMode(config.mode)}
+        onSelect={handleModeSelect}
+      />
 
       {config.mode === "providers" && renderModelSelector("cloud")}
       {config.mode === "local" && renderModelSelector("local")}

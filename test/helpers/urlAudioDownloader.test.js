@@ -8,11 +8,22 @@ const { Readable } = require("stream");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const Module = require("module");
 // Isolate the yt-dlp self-update cache in a temp dir so tests never touch the
 // real ~/.cache/openwhispr. Must be set before the module is required.
 const YT_DLP_TEST_CACHE_DIR = path.join(os.tmpdir(), `ow-ytdlp-test-${process.pid}`);
 process.env.OPENWHISPR_YTDLP_CACHE_DIR = YT_DLP_TEST_CACHE_DIR;
-const downloader = require("../../src/helpers/urlAudioDownloader");
+const originalModuleLoad = Module._load;
+Module._load = function load(request, parent, isMain) {
+  if (request === "electron") return { app: { isReady: () => false } };
+  return originalModuleLoad.call(this, request, parent, isMain);
+};
+let downloader;
+try {
+  downloader = require("../../src/helpers/urlAudioDownloader");
+} finally {
+  Module._load = originalModuleLoad;
+}
 const {
   detectUrlType,
   extractYouTubeVideoId,
@@ -21,6 +32,7 @@ const {
   isAcceptableAudioContentType,
   ssrfSafeLookup,
   maybeUpdateYtDlp,
+  safeDownloadLogMetadata,
 } = downloader;
 
 test("detectUrlType returns youtube for standard watch URL", () => {
@@ -83,6 +95,22 @@ test("detectUrlType throws INVALID_URL for garbage input", () => {
   } catch (err) {
     assert.equal(err.code, "INVALID_URL");
   }
+});
+
+test("download diagnostics never include URL credentials, path, or query values", () => {
+  const metadata = safeDownloadLogMetadata(
+    "https://alice:secret@example.com/private/customer.wav?token=top-secret",
+    "direct"
+  );
+  const serialized = JSON.stringify(metadata);
+
+  assert.deepEqual(metadata, {
+    type: "direct",
+    protocol: "https:",
+    hasQuery: true,
+    hasCredentials: true,
+  });
+  assert.doesNotMatch(serialized, /alice|secret|example\.com|customer|token/);
 });
 
 test("extractYouTubeVideoId extracts from standard watch URL", () => {

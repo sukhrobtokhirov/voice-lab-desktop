@@ -3,10 +3,10 @@ import { withSessionRefresh } from "../../../lib/auth";
 import { getSettings } from "../../../stores/settingsStore";
 import logger from "../../../utils/logger";
 
-export const openwhisprProvider: InferenceProvider = {
-  id: "openwhispr",
+export const voiceLabProvider: InferenceProvider = {
+  id: "voicelab",
   async call({ text, model, agentName, config, ctx }) {
-    logger.logReasoning("OPENWHISPR_START", { model, agentName });
+    logger.logReasoning("VOICELAB_START", { model, agentName });
 
     const customPrompt = config.systemPrompt
       ? undefined
@@ -18,8 +18,6 @@ export const openwhisprProvider: InferenceProvider = {
         customDictionary: ctx.getCustomDictionary(),
         customPrompt,
         systemPrompt: config.systemPrompt,
-        // Routing already decided this is cleanup — stop the server from
-        // flipping to the action prompt on an agent-name mention.
         promptMode: config.systemPrompt ? undefined : "cleanup",
         language: config.language || ctx.getPreferredLanguage(),
         locale: ctx.getUiLanguage(),
@@ -27,7 +25,7 @@ export const openwhisprProvider: InferenceProvider = {
 
       if (!res?.success) {
         const err: Error & { code?: string } = new Error(
-          res?.error || "OpenWhispr cloud reasoning failed"
+          res?.error || "VoiceLab cloud reasoning failed"
         );
         err.code = res?.code;
         throw err;
@@ -36,9 +34,9 @@ export const openwhisprProvider: InferenceProvider = {
       return res;
     });
 
-    logger.logReasoning("OPENWHISPR_SUCCESS", {
+    logger.logReasoning("VOICELAB_SUCCESS", {
       model: result.model,
-      provider: result.provider,
+      provider: "voicelab",
       resultLength: result.text.length,
       promptMode: result.promptMode,
       matchType: result.matchType,

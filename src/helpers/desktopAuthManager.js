@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const { EventEmitter } = require("events");
+const http = require("http");
 const os = require("os");
 const { shell } = require("electron");
 
@@ -18,6 +19,10 @@ const AUTHORIZATION_CODE_PATTERN = /^dac_[A-Za-z0-9_-]{1,1020}$/;
 const OAUTH_VALUE_PATTERN = /^[A-Za-z0-9._~-]+$/;
 const PKCE_VALUE_LENGTH = 43;
 const DEVICE_NAME_MAX_LENGTH = 160;
+const USER_ID_MAX_LENGTH = 256;
+const USER_EMAIL_MAX_LENGTH = 320;
+const USER_NAME_MAX_LENGTH = 256;
+const USER_IMAGE_MAX_LENGTH = 2048;
 
 class DesktopAuthError extends Error {
   constructor(code, message, httpStatus = null) {
@@ -69,11 +74,53 @@ function desktopPlatform() {
   throw new DesktopAuthError("AUTH_PLATFORM_UNSUPPORTED", "Desktop platform is unsupported");
 }
 
-function validUser(value) {
+function boundedIdentity(value, maxLength) {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const normalized = String(value)
+    .normalize("NFKC")
+    .replace(/[\p{Cc}\p{Cf}]+/gu, "")
+    .trim();
+  return normalized && normalized.length <= maxLength ? normalized : null;
+}
+
+function boundedDisplayName(value, fallback) {
+  if (typeof value !== "string" && typeof value !== "number") return fallback;
+  const normalized = String(value)
+    .normalize("NFKC")
+    .replace(/[\p{Cc}\p{Cf}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, USER_NAME_MAX_LENGTH);
+  return normalized || fallback;
+}
+
+function safeUserImage(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (!normalized || normalized.length > USER_IMAGE_MAX_LENGTH) return null;
+  try {
+    const url = new URL(normalized);
+    return url.protocol === "https:" && !url.username && !url.password ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function canonicalUser(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const id = value.id ?? value.user_id ?? value.uuid;
-  if ((typeof id !== "string" && typeof id !== "number") || String(id).length < 1) return null;
-  return value;
+  const rawId = value.id ?? value.user_id ?? value.uuid;
+  const rawEmail = value.email ?? value.username;
+  const id = boundedIdentity(rawId, USER_ID_MAX_LENGTH);
+  const email = boundedIdentity(rawEmail, USER_EMAIL_MAX_LENGTH);
+  if (!id || !email) return null;
+  const rawName = value.name ?? value.full_name ?? value.display_name ?? value.username ?? email;
+  const rawImage = value.image ?? value.avatar ?? value.avatar_url ?? value.picture;
+  return {
+    id,
+    email,
+    name: boundedDisplayName(rawName, email),
+    image: safeUserImage(rawImage),
+  };
 }
 
 function normalizedUser(payload) {
@@ -87,7 +134,7 @@ function normalizedUser(payload) {
     payload,
   ];
   for (const candidate of candidates) {
-    const user = validUser(candidate);
+    const user = canonicalUser(candidate);
     if (user) return user;
   }
   return null;
@@ -128,8 +175,28 @@ class DesktopAuthManager extends EventEmitter {
     this.errorCode = null;
     this.errorMessage = null;
     this.pendingExpiryTimer = null;
+    this.callbackServer = null;
+    this.callbackRedirectUri = null;
     this.refreshPromise = null;
+    this.refreshPromiseEpoch = null;
     this.bootstrapPromise = null;
+    this.authEpoch = 0;
+  }
+
+  _advanceAuthEpoch() {
+    this.authEpoch += 1;
+    this.refreshPromise = null;
+    this.refreshPromiseEpoch = null;
+    return this.authEpoch;
+  }
+
+  _assertAuthEpoch(epoch) {
+    if (epoch !== this.authEpoch) {
+      throw new DesktopAuthError(
+        "AUTH_OPERATION_SUPERSEDED",
+        "Authentication operation was superseded"
+      );
+    }
   }
 
   _validateOrigin(value, label) {
@@ -165,7 +232,14 @@ class DesktopAuthManager extends EventEmitter {
   }
 
   async _bootstrap() {
+    const epoch = this.authEpoch;
     let pending = tokenStore.getPending();
+    // A loopback callback is bound to the process that created it. It cannot be
+    // resumed safely after a restart, so discard it and create a fresh request.
+    if (pending && this._isLoopbackRedirectUri(pending.redirectUri)) {
+      tokenStore.clearPending();
+      pending = null;
+    }
     if (pending && !this._isValidPending(pending)) {
       tokenStore.clearPending();
       pending = null;
@@ -183,13 +257,19 @@ class DesktopAuthManager extends EventEmitter {
       let current = storedSession;
       if (!current.accessToken || current.accessExpiresAt <= Date.now() + ACCESS_EXPIRY_SKEW_MS) {
         await this.refreshSession({ force: true, validateUser: false });
+        this._assertAuthEpoch(epoch);
         current = tokenStore.getSession();
       }
       if (!current?.accessToken) throw new DesktopAuthError("AUTH_EXPIRED", "Session expired");
-      const user = await this._fetchValidUser(current.accessToken);
+      let user = canonicalUser(current.user);
+      if (!user) user = await this._fetchValidUser(current.accessToken);
+      this._assertAuthEpoch(epoch);
       tokenStore.saveSession({ ...current, user });
       this._setStatus("authenticated", { user });
     } catch (error) {
+      if (epoch !== this.authEpoch || error?.code === "AUTH_OPERATION_SUPERSEDED") {
+        return this.getPublicStatus();
+      }
       const terminalRejection =
         [400, 401, 403].includes(Number(error?.httpStatus)) || error?.code === "AUTH_EXPIRED";
       if (terminalRejection) tokenStore.clearSession();
@@ -231,8 +311,8 @@ class DesktopAuthManager extends EventEmitter {
 
   _setStatus(status, extra = {}) {
     this.status = status;
-    this.user =
-      extra.user === undefined ? (status === "authenticated" ? this.user : null) : extra.user;
+    const suppliedUser = extra.user === undefined ? this.user : extra.user;
+    this.user = status === "authenticated" ? canonicalUser(suppliedUser) : null;
     this.errorCode = extra.errorCode || null;
     this.errorMessage = publicErrorMessage(extra.errorMessage);
     this.emit("status", this.getPublicStatus());
@@ -249,7 +329,7 @@ class DesktopAuthManager extends EventEmitter {
       typeof pending.state === "string" &&
       pending.state.length === PKCE_VALUE_LENGTH &&
       OAUTH_VALUE_PATTERN.test(pending.state) &&
-      pending.redirectUri === `${this.scheme}://auth/callback` &&
+      this._isAllowedRedirectUri(pending.redirectUri) &&
       AUTHORIZATION_REQUEST_ID_PATTERN.test(pending.authorizationRequestId || "") &&
       typeof pending.authorizationUrl === "string" &&
       pending.authorizationUrl.length <= CALLBACK_MAX_LENGTH &&
@@ -268,10 +348,151 @@ class DesktopAuthManager extends EventEmitter {
     }
   }
 
-  _schedulePendingExpiry(expiresAt) {
+  _isLoopbackRedirectUri(value) {
+    try {
+      const url = new URL(String(value));
+      const port = Number(url.port);
+      return (
+        url.protocol === "http:" &&
+        url.hostname === "127.0.0.1" &&
+        Number.isInteger(port) &&
+        port >= 1024 &&
+        port <= 65535 &&
+        url.pathname === "/callback" &&
+        !url.username &&
+        !url.password &&
+        !url.search &&
+        !url.hash
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  _isAllowedRedirectUri(value) {
+    return value === `${this.scheme}://auth/callback` || this._isLoopbackRedirectUri(value);
+  }
+
+  _closeLoopbackCallbackServer() {
+    const server = this.callbackServer;
+    this.callbackServer = null;
+    this.callbackRedirectUri = null;
+    if (server) {
+      try {
+        server.close();
+      } catch {}
+    }
+  }
+
+  async _startLoopbackCallbackServer() {
+    this._closeLoopbackCallbackServer();
+    return new Promise((resolve, reject) => {
+      const server = http.createServer((request, response) => {
+        void this._handleLoopbackCallback(request, response);
+      });
+      const fail = (error) => {
+        if (this.callbackServer === server) this._closeLoopbackCallbackServer();
+        reject(
+          new DesktopAuthError(
+            "AUTH_CALLBACK_SERVER_FAILED",
+            error?.message || "Authentication callback server failed"
+          )
+        );
+      };
+      server.once("error", fail);
+      server.listen(0, "127.0.0.1", () => {
+        server.removeListener("error", fail);
+        const address = server.address();
+        const port = address && typeof address === "object" ? Number(address.port) : 0;
+        if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+          server.close();
+          reject(
+            new DesktopAuthError(
+              "AUTH_CALLBACK_SERVER_FAILED",
+              "Authentication callback server selected an invalid port"
+            )
+          );
+          return;
+        }
+        this.callbackServer = server;
+        this.callbackRedirectUri = `http://127.0.0.1:${port}/callback`;
+        server.unref?.();
+        resolve(this.callbackRedirectUri);
+      });
+    });
+  }
+
+  _writeLoopbackResponse(response, statusCode, title, message) {
+    const safeTitle = String(title).replace(/[<>&"']/g, "");
+    const safeMessage = String(message).replace(/[<>&"']/g, "");
+    const body = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle}</title><style>body{margin:0;background:#f7f7f5;color:#171717;font:16px system-ui,sans-serif;display:grid;min-height:100vh;place-items:center}.card{max-width:440px;margin:24px;padding:32px;border:1px solid #ddd;border-radius:20px;background:#fff}h1{font-size:22px;margin:0 0 12px}p{line-height:1.6;margin:0;color:#666}</style></head><body><main class="card"><h1>${safeTitle}</h1><p>${safeMessage}</p></main></body></html>`;
+    response.writeHead(statusCode, {
+      "Cache-Control": "no-store",
+      "Content-Security-Policy":
+        "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+      "Content-Type": "text/html; charset=utf-8",
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+    });
+    response.end(body);
+  }
+
+  async _handleLoopbackCallback(request, response) {
+    const redirectUri = this.callbackRedirectUri;
+    if (!redirectUri || request.method !== "GET" || request.socket?.remoteAddress !== "127.0.0.1") {
+      this._writeLoopbackResponse(
+        response,
+        400,
+        "VoiceLab sign-in failed",
+        "Invalid callback request."
+      );
+      return;
+    }
+    let callbackUrl;
+    try {
+      callbackUrl = new URL(request.url || "", redirectUri);
+      if (
+        callbackUrl.origin !== new URL(redirectUri).origin ||
+        callbackUrl.pathname !== "/callback"
+      ) {
+        throw new Error("invalid callback route");
+      }
+      const result = await this.handleCallback(callbackUrl.toString());
+      if (result.status !== "authenticated") {
+        this._writeLoopbackResponse(
+          response,
+          409,
+          "VoiceLab sign-in not completed",
+          "Return to VoiceLab Desktop and try again."
+        );
+        return;
+      }
+      this._writeLoopbackResponse(
+        response,
+        200,
+        "VoiceLab sign-in complete",
+        "You can close this tab and continue in VoiceLab Desktop."
+      );
+    } catch (error) {
+      authLogger.warn("loopback_callback_failed", {
+        errorCode: error?.code || "AUTH_CALLBACK_ERROR",
+        httpStatus: error?.httpStatus,
+      });
+      this._writeLoopbackResponse(
+        response,
+        400,
+        "VoiceLab sign-in failed",
+        "Return to VoiceLab Desktop and start sign-in again."
+      );
+    }
+  }
+
+  _schedulePendingExpiry(expiresAt, epoch = this.authEpoch) {
     clearTimeout(this.pendingExpiryTimer);
     const delay = Math.max(0, expiresAt - Date.now());
     this.pendingExpiryTimer = setTimeout(() => {
+      if (epoch !== this.authEpoch) return;
+      this._closeLoopbackCallbackServer();
       tokenStore.clearPending();
       this._setStatus("expired", { errorCode: "AUTH_TRANSACTION_EXPIRED" });
     }, delay);
@@ -390,22 +611,26 @@ class DesktopAuthManager extends EventEmitter {
     }
     tokenStore.clearPending();
     clearTimeout(this.pendingExpiryTimer);
+    const epoch = this._advanceAuthEpoch();
 
     const codeVerifier = base64url(crypto.randomBytes(32));
     const codeChallenge = base64url(crypto.createHash("sha256").update(codeVerifier).digest());
     const state = base64url(crypto.randomBytes(32));
-    const redirectUri = `${this.scheme}://auth/callback`;
-    const pending = {
-      codeVerifier,
-      state,
-      redirectUri,
-      createdAt: Date.now(),
-      expiresAt: Date.now() + PENDING_TTL_MS,
-    };
-    tokenStore.savePending(pending);
     this._setStatus("opening-browser");
 
+    let operationRedirectUri = null;
     try {
+      const redirectUri = await this._startLoopbackCallbackServer();
+      operationRedirectUri = redirectUri;
+      this._assertAuthEpoch(epoch);
+      const pending = {
+        codeVerifier,
+        state,
+        redirectUri,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + PENDING_TTL_MS,
+      };
+      tokenStore.savePending(pending);
       const response = await this._request("/api/v2/auth/desktop/authorizations", {
         method: "POST",
         headers: { "X-Request-ID": crypto.randomUUID() },
@@ -421,6 +646,7 @@ class DesktopAuthManager extends EventEmitter {
           platform: desktopPlatform(),
         }),
       });
+      this._assertAuthEpoch(epoch);
       const requestId = response?.authorization_request_id;
       if (
         typeof requestId !== "string" ||
@@ -448,9 +674,15 @@ class DesktopAuthManager extends EventEmitter {
       });
       this._schedulePendingExpiry(expiresAt);
       await shell.openExternal(authorizationUrl, { activate: true });
+      this._assertAuthEpoch(epoch);
       this._setStatus("waiting-for-browser");
       return this.getPublicStatus();
     } catch (error) {
+      if (epoch !== this.authEpoch || error?.code === "AUTH_OPERATION_SUPERSEDED") {
+        if (this.callbackRedirectUri === operationRedirectUri) this._closeLoopbackCallbackServer();
+        return this.getPublicStatus();
+      }
+      this._closeLoopbackCallbackServer();
       tokenStore.clearPending();
       clearTimeout(this.pendingExpiryTimer);
       this._setStatus("error", {
@@ -483,13 +715,15 @@ class DesktopAuthManager extends EventEmitter {
   }
 
   cancelAuthorization() {
+    this._advanceAuthEpoch();
+    this._closeLoopbackCallbackServer();
     tokenStore.clearPending();
     clearTimeout(this.pendingExpiryTimer);
     this._setStatus("cancelled", { errorCode: "AUTH_CANCELLED_BY_USER" });
     return this.getPublicStatus();
   }
 
-  _parseCallback(value) {
+  _parseCallback(value, expectedRedirectUri = `${this.scheme}://auth/callback`) {
     if (typeof value !== "string" || value.length > CALLBACK_MAX_LENGTH) {
       throw new DesktopAuthError("AUTH_CALLBACK_INVALID", "Authentication callback is invalid");
     }
@@ -499,13 +733,20 @@ class DesktopAuthManager extends EventEmitter {
     } catch {
       throw new DesktopAuthError("AUTH_CALLBACK_INVALID", "Authentication callback is invalid");
     }
+    let expected;
+    try {
+      expected = new URL(expectedRedirectUri);
+    } catch {
+      throw new DesktopAuthError("AUTH_CALLBACK_INVALID", "Authentication callback is invalid");
+    }
     if (
-      url.protocol !== `${this.scheme}:` ||
-      url.hostname !== "auth" ||
-      url.pathname !== "/callback" ||
+      !this._isAllowedRedirectUri(expected.toString()) ||
+      url.protocol !== expected.protocol ||
+      url.hostname !== expected.hostname ||
+      url.port !== expected.port ||
+      url.pathname !== expected.pathname ||
       url.username ||
       url.password ||
-      url.port ||
       url.hash
     ) {
       throw new DesktopAuthError("AUTH_CALLBACK_INVALID", "Authentication callback is invalid");
@@ -536,12 +777,14 @@ class DesktopAuthManager extends EventEmitter {
     const pending = tokenStore.getPending();
     if (!pending) {
       const storedSession = tokenStore.getSession();
-      if (storedSession?.kind === "desktop-go-v2" && validUser(storedSession.user)) {
-        this._setStatus("authenticated", { user: storedSession.user });
+      const user = canonicalUser(storedSession?.user);
+      if (storedSession?.kind === "desktop-go-v2" && user) {
+        this._setStatus("authenticated", { user });
         return this.getPublicStatus();
       }
       throw new DesktopAuthError("AUTH_TRANSACTION_MISSING", "No pending authentication request");
     }
+    const epoch = this.authEpoch;
     try {
       if (!this._isValidPending(pending)) {
         tokenStore.clearPending();
@@ -552,7 +795,7 @@ class DesktopAuthManager extends EventEmitter {
         }
         throw new DesktopAuthError("AUTH_TRANSACTION_INVALID", "Authentication request is invalid");
       }
-      const callback = this._parseCallback(callbackUrl);
+      const callback = this._parseCallback(callbackUrl, pending.redirectUri);
       if (!constantTimeEqual(callback.state, pending.state)) {
         throw new DesktopAuthError("AUTH_STATE_MISMATCH", "Authentication state mismatch");
       }
@@ -586,16 +829,35 @@ class DesktopAuthManager extends EventEmitter {
           installation_id: tokenStore.getInstallationId(),
         }),
       });
+      this._assertAuthEpoch(epoch);
       const accessToken = response?.access_token || response?.access;
       let user = normalizedUser(response);
       if (!user) user = await this._fetchValidUser(accessToken);
+      this._assertAuthEpoch(epoch);
       const sessionValue = this._sessionFromTokenResponse(response, null, user);
       tokenStore.completeAuthorization(sessionValue);
       clearTimeout(this.pendingExpiryTimer);
+      this._closeLoopbackCallbackServer();
       this._setStatus("authenticated", { user });
       return this.getPublicStatus();
     } catch (error) {
-      if (error.code !== "AUTH_STATE_MISMATCH" && error.code !== "AUTH_CALLBACK_REPLAYED") {
+      if (epoch !== this.authEpoch || error?.code === "AUTH_OPERATION_SUPERSEDED") {
+        return this.getPublicStatus();
+      }
+      if (error.code === "AUTH_STATE_MISMATCH" && this._isValidPending(pending)) {
+        authLogger.warn("callback_state_mismatch_recovered", {
+          errorCode: error.code,
+          httpStatus: error.httpStatus,
+        });
+        this._schedulePendingExpiry(pending.expiresAt);
+        this._setStatus("waiting-for-browser", {
+          errorCode: error.code,
+          errorMessage: error.message,
+        });
+        return this.getPublicStatus();
+      }
+      if (error.code !== "AUTH_CALLBACK_REPLAYED") {
+        this._closeLoopbackCallbackServer();
         tokenStore.clearPending();
         clearTimeout(this.pendingExpiryTimer);
       }
@@ -634,7 +896,10 @@ class DesktopAuthManager extends EventEmitter {
         "Authentication refresh token was not rotated"
       );
     }
-    const user = suppliedUser || normalizedUser(response) || validUser(existingSession?.user);
+    const user =
+      canonicalUser(suppliedUser) ||
+      normalizedUser(response) ||
+      canonicalUser(existingSession?.user);
     if (!user) {
       throw new DesktopAuthError("AUTH_USER_RESPONSE_INVALID", "Authenticated user is missing");
     }
@@ -654,14 +919,21 @@ class DesktopAuthManager extends EventEmitter {
   }
 
   async refreshSession({ force = false, validateUser = true } = {}) {
-    if (this.refreshPromise) return this.refreshPromise;
-    this.refreshPromise = this._refreshSession({ force, validateUser }).finally(() => {
-      this.refreshPromise = null;
+    const epoch = this.authEpoch;
+    if (this.refreshPromise && this.refreshPromiseEpoch === epoch) return this.refreshPromise;
+    const operation = this._refreshSession({ force, validateUser, epoch });
+    const tracked = operation.finally(() => {
+      if (this.refreshPromise === tracked) {
+        this.refreshPromise = null;
+        this.refreshPromiseEpoch = null;
+      }
     });
-    return this.refreshPromise;
+    this.refreshPromise = tracked;
+    this.refreshPromiseEpoch = epoch;
+    return tracked;
   }
 
-  async _refreshSession({ force, validateUser }) {
+  async _refreshSession({ force, validateUser, epoch }) {
     const storedSession = tokenStore.getSession();
     if (!storedSession?.refreshToken || storedSession.kind !== "desktop-go-v2") {
       throw new DesktopAuthError("AUTH_EXPIRED", "Session expired");
@@ -688,14 +960,22 @@ class DesktopAuthManager extends EventEmitter {
           installation_id: tokenStore.getInstallationId(),
         }),
       });
+      this._assertAuthEpoch(epoch);
       const accessToken = response?.access_token || response?.access;
-      let user = normalizedUser(response) || validUser(storedSession.user);
-      if (validateUser) user = await this._fetchValidUser(accessToken);
+      let user = normalizedUser(response) || canonicalUser(storedSession.user);
+      if (!user && validateUser) user = await this._fetchValidUser(accessToken);
+      this._assertAuthEpoch(epoch);
       const updated = this._sessionFromTokenResponse(response, storedSession, user);
       tokenStore.saveSession(updated);
       this._setStatus("authenticated", { user });
       return this.getPublicStatus();
     } catch (error) {
+      if (epoch !== this.authEpoch || error?.code === "AUTH_OPERATION_SUPERSEDED") {
+        throw new DesktopAuthError(
+          "AUTH_OPERATION_SUPERSEDED",
+          "Authentication operation was superseded"
+        );
+      }
       const terminalRejection = [400, 401, 403].includes(Number(error?.httpStatus));
       if (terminalRejection) {
         tokenStore.clearSession();
@@ -721,13 +1001,22 @@ class DesktopAuthManager extends EventEmitter {
       !storedSession.accessToken ||
       storedSession.accessExpiresAt <= Date.now() + ACCESS_EXPIRY_SKEW_MS
     ) {
-      await this.refreshSession({ force: true });
+      await this.refreshSession({ force: true, validateUser: false });
       storedSession = tokenStore.getSession();
     }
-    if (!storedSession?.accessToken || !validUser(storedSession.user)) {
+    if (!storedSession?.accessToken || !canonicalUser(storedSession.user)) {
       throw new DesktopAuthError("AUTH_EXPIRED", "Session expired");
     }
     return storedSession.accessToken;
+  }
+
+  invalidateSession({ code = "AUTH_EXPIRED", message = "Session expired" } = {}) {
+    this._advanceAuthEpoch();
+    tokenStore.clearSession();
+    this._setStatus("signed-out", {
+      errorCode: code,
+      errorMessage: message,
+    });
   }
 
   async deleteAccount() {
@@ -737,31 +1026,23 @@ class DesktopAuthManager extends EventEmitter {
 
   async logout() {
     const storedSession = tokenStore.getSession();
-    if (!storedSession) {
-      tokenStore.clearPending();
-      clearTimeout(this.pendingExpiryTimer);
-      this._setStatus("signed-out");
-      return { success: true, revoked: false };
-    }
-    const revoked = await this._revokeCurrentSession();
+    this._advanceAuthEpoch();
+    this._closeLoopbackCallbackServer();
+    tokenStore.clearSession();
     tokenStore.clearPending();
     clearTimeout(this.pendingExpiryTimer);
     this._setStatus("signed-out");
+    if (!storedSession) {
+      return { success: true, revoked: false };
+    }
+    const revoked = await this._revokeSessionSnapshot(storedSession);
     return { success: true, revoked };
   }
 
-  async _revokeCurrentSession() {
-    let storedSession = tokenStore.getSession();
+  async _revokeSessionSnapshot(storedSession) {
     if (!storedSession) return false;
     let revoked = false;
     try {
-      if (
-        !storedSession.accessToken ||
-        storedSession.accessExpiresAt <= Date.now() + ACCESS_EXPIRY_SKEW_MS
-      ) {
-        await this.refreshSession({ force: true, validateUser: false });
-        storedSession = tokenStore.getSession();
-      }
       if (storedSession?.accessToken) {
         await this._request("/api/v2/auth/desktop/logout", {
           method: "POST",
@@ -780,8 +1061,6 @@ class DesktopAuthManager extends EventEmitter {
           httpStatus: error.httpStatus,
         });
       }
-    } finally {
-      tokenStore.clearSession();
     }
     return revoked;
   }

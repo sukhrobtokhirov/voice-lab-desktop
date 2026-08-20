@@ -1330,7 +1330,7 @@
     },
     "account": {
       "voiceLabAccount": {
-        "sectionDescription": "VoiceLab Cloud kirilgan hisobingiz va umumiy AI Credit hamyoningizdan foydalanadi.",
+        "sectionDescription": "VoiceLab Cloud kirilgan VoiceLab obunangizdan foydalanadi.",
         "label": "VoiceLab hisobi",
         "description": "Bir marta kiring; alohida nutq API kaliti kerak emas.",
         "openSpace": "VoiceLab’ni ochish",
@@ -1600,7 +1600,7 @@
       "open": "Open",
       "removeModels": {
         "confirmText": "Delete Models",
-        "description": "This deletes all locally cached Whisper models ({{path}}) and frees disk space. You can download them again from the model picker.",
+        "description": "Bu lokal keshdagi barcha nutq modellarini o‘chiradi va diskda joy bo‘shatadi. Ularni model tanlagichidan qayta yuklab olish mumkin.",
         "failedDescription": "Something went wrong removing the models. Please try again.",
         "failedDescriptionShort": "Could not remove cached models.",
         "failedTitle": "Couldn't remove models",
@@ -3089,14 +3089,14 @@
       "more": "Yana"
     },
     "wallet": {
-      "title": "AI Credit hamyoni",
-      "shared": "Barcha VoiceLab mahsulotlari uchun bitta balans",
-      "balance": "Balans",
-      "available": "Mavjud",
-      "reserved": "Band qilingan",
-      "unavailable": "Hamyon vaqtincha ochilmadi.",
+      "title": "VoiceLab tarifi va foydalanish",
+      "shared": "Tarif va billing VoiceLab saytida boshqariladi.",
+      "balance": "Bugun ishlatilgan",
+      "available": "Bugun qolgan",
+      "reserved": "Kunlik limit",
+      "unavailable": "Foydalanish maʼlumoti hali yoʻq.",
       "updated": "{{time}} da yangilandi",
-      "live": "Jonli balans",
+      "live": "Foydalanish keyingi diktovkadan soʻng ko‘rinadi.",
       "manage": "Billingni boshqarish"
     },
     "creditShortage": {
@@ -3164,7 +3164,7 @@
       },
       "ready": {
         "title": "Tayyor",
-        "account": "VoiceLab hisobingiz va AI Credit hamyoningiz ulandi.",
+        "account": "VoiceLab hisobingiz ulandi.",
         "local": "Lokal transkripsiya tanlandi.",
         "provider": "Providerni ulash uchun qo‘shimcha sozlamalarni oching.",
         "start": "Diktantni boshlash"
@@ -3203,7 +3203,7 @@
     },
     "settings": {
       "account": "Hisob va creditlar",
-      "accountDescription": "Profil, sessiya va AI Credit hamyoni",
+      "accountDescription": "Profil, xavfsiz sessiya va billing",
       "dictation": "Diktant",
       "dictationDescription": "Til, mikrofon va matn joylash",
       "shortcuts": "Tugmalar",
@@ -3222,7 +3222,7 @@
       "status": "Sessiya",
       "protected": "Faol va himoyalangan",
       "signedOut": "Hisobga kirilmagan",
-      "signedOutDescription": "VoiceLab Cloud va AI Credit hamyonidan foydalanish uchun kiring."
+      "signedOutDescription": "VoiceLab Cloud’dan foydalanish uchun kiring."
     }
   }
 }

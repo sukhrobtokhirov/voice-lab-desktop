@@ -1,12 +1,17 @@
 const crypto = require("crypto");
 const authLogger = require("./authLogger");
-const operationStore = require("./dictationOperationStore");
 
 const CLIENT_ID = "voicelab-desktop";
+const MAX_AUDIO_BYTES = 64 * 1024 * 1024;
+const MIN_AUDIO_DURATION_MS = 500;
+const MAX_AUDIO_DURATION_MS = 300 * 1000;
+const SUPPORTED_LANGUAGES = new Set(["uz", "en", "ru"]);
+const DESKTOP_STT_PATH = ["", "v1", "desktop", "stt"].join("/");
+const DESKTOP_PRICING_PATH = ["", "api", "v1", "billing", "desktop", "pricing"].join("/");
 const STATUS_CODE = {
   400: "INVALID_REQUEST",
   401: "AUTH_EXPIRED",
-  402: "INSUFFICIENT_CREDITS",
+  402: "ENTITLEMENT_REQUIRED",
   403: "ENTITLEMENT_REQUIRED",
   409: "IDEMPOTENCY_CONFLICT",
   413: "AUDIO_LIMIT_EXCEEDED",
@@ -24,15 +29,23 @@ function normalizeErrorCode(status, body) {
   ).toUpperCase();
   const goCode = {
     INVALID_MULTIPART: "INVALID_REQUEST",
+    VALIDATION_ERROR: "INVALID_REQUEST",
     INVALID_IDEMPOTENCY_KEY: "INVALID_REQUEST",
     UNAUTHENTICATED: "AUTH_EXPIRED",
+    INVALID_DESKTOP_TOKEN: "AUTH_EXPIRED",
+    DESKTOP_SUBSCRIPTION_REQUIRED: "ENTITLEMENT_REQUIRED",
     INSUFFICIENT_CREDITS: "INSUFFICIENT_CREDITS",
     AUDIO_TOO_LARGE: "AUDIO_LIMIT_EXCEEDED",
+    AUDIO_TOO_LONG: "AUDIO_LIMIT_EXCEEDED",
     UNSUPPORTED_AUDIO_FORMAT: "AUDIO_INVALID",
     INVALID_AUDIO: "AUDIO_INVALID",
     NO_SPEECH_DETECTED: "NO_SPEECH_DETECTED",
+    CONCURRENT_DICTATION: "CONCURRENCY_LIMIT",
+    DAILY_DICTATION_LIMIT_REACHED: "DAILY_CAP_REACHED",
     RATE_LIMITED: "RATE_LIMITED",
     STT_OVERLOADED: "RATE_LIMITED",
+    DESKTOP_STT_UNAVAILABLE: "SERVICE_UNAVAILABLE",
+    DESKTOP_STT_TIMEOUT: "SERVICE_UNAVAILABLE",
     STT_NOT_AVAILABLE: "ENTITLEMENT_REQUIRED",
     STT_UNAVAILABLE: "SERVICE_UNAVAILABLE",
     LONG_STT_UNAVAILABLE: "SERVICE_UNAVAILABLE",
@@ -67,6 +80,7 @@ class VoiceLabApiError extends Error {
       this.details?.error && typeof this.details.error === "object" ? this.details.error : {};
     const details = {
       ...(serverError.details || {}),
+      ...(serverError.fields || {}),
       ...(this.details.details || {}),
       ...this.details,
     };
@@ -79,6 +93,7 @@ class VoiceLabApiError extends Error {
       hint: details.hint || serverError.hint || null,
       status: this.status,
       retryAfterSeconds: this.retryAfterSeconds,
+      fields: serverError.fields || null,
     };
     for (const key of [
       "required",
@@ -105,19 +120,87 @@ function retryAfterSeconds(response) {
   return Number.isFinite(date) ? Math.max(0, Math.ceil((date - Date.now()) / 1000)) : null;
 }
 
-function composeSignal(externalSignal, timeoutMs) {
+function authSessionContext(authManager) {
+  const metadata = authManager?.getSessionMetadata?.() || {};
+  return {
+    accountId: metadata.accountId == null ? null : String(metadata.accountId),
+    sessionId: metadata.sessionId == null ? null : String(metadata.sessionId),
+  };
+}
+
+function sameAuthSessionContext(expected, current) {
+  if (!expected || !current) return false;
+  if (expected.sessionId || current.sessionId) {
+    return (
+      Boolean(expected.sessionId) &&
+      expected.sessionId === current.sessionId &&
+      expected.accountId === current.accountId
+    );
+  }
+  return Boolean(expected.accountId) && expected.accountId === current.accountId;
+}
+
+function record(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function safeString(...values) {
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const normalized = value.trim();
+    if (normalized) return normalized.slice(0, 128);
+  }
+  return null;
+}
+
+function safeNumber(value, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= min && number <= max ? number : null;
+}
+
+function normalizeDesktopPricing(payload) {
+  const root = record(payload);
+  const plans = Array.isArray(root.plans) ? root.plans.map(record) : [];
+  const plan = plans.find((candidate) => safeString(candidate.code) && safeString(candidate.name));
+  const priceCents = safeNumber(plan?.price_cents, { max: 100_000_000 });
+  const priceUsd =
+    safeString(plan?.price_usd) ?? (priceCents === null ? null : (priceCents / 100).toFixed(2));
+  return {
+    enabled: root.enabled === true,
+    currency: safeString(root.currency, plan?.currency) || "USD",
+    provider: safeString(root.provider),
+    plan: plan
+      ? {
+          code: safeString(plan.code),
+          name: safeString(plan.name),
+          priceUsd,
+          currency: safeString(plan.currency, root.currency) || "USD",
+          billingInterval: safeString(plan.billing_interval),
+          billingIntervalCount: safeNumber(plan.billing_interval_count, { min: 1, max: 120 }),
+          dailyMinutes: safeNumber(plan.daily_minutes, { max: 24 * 60 }),
+          maxRecordingSeconds: safeNumber(plan.max_recording_seconds, { max: 24 * 60 * 60 }),
+        }
+      : null,
+    requestId: safeString(root.request_id),
+  };
+}
+
+function composeSignal(externalSignals, timeoutMs) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const abort = () => controller.abort(externalSignal?.reason);
-  if (externalSignal)
-    externalSignal.aborted
-      ? abort()
-      : externalSignal.addEventListener("abort", abort, { once: true });
+  const signals = (Array.isArray(externalSignals) ? externalSignals : [externalSignals]).filter(
+    Boolean
+  );
+  const abort = (event) => controller.abort(event?.target?.reason);
+  for (const signal of signals) {
+    if (signal.aborted) abort({ target: signal });
+    else signal.addEventListener("abort", abort, { once: true });
+  }
   return {
     signal: controller.signal,
     cleanup() {
       clearTimeout(timeout);
-      externalSignal?.removeEventListener?.("abort", abort);
+      for (const signal of signals) signal.removeEventListener?.("abort", abort);
     },
   };
 }
@@ -132,14 +215,29 @@ class VoiceLabApiClient {
     this.walletCache = null;
     this.walletFetchedAt = 0;
     this.walletAccountId = null;
-    this.activeDictationOperations = new Set();
+    this.activeDictationOperations = new Map();
+    this.sessionAccountId = null;
   }
 
   resetSessionState() {
     this.walletCache = null;
     this.walletFetchedAt = 0;
     this.walletAccountId = null;
-    this.activeDictationOperations.clear();
+  }
+
+  handleAuthStatus(status) {
+    this.resetSessionState();
+    const nextAccountId =
+      status?.status === "authenticated" ? this.authManager.getSessionMetadata().accountId : null;
+    const accountChanged =
+      this.sessionAccountId && nextAccountId && this.sessionAccountId !== nextAccountId;
+    if (status?.status !== "authenticated" || accountChanged) {
+      for (const operation of this.activeDictationOperations.values()) {
+        operation.abortController?.abort();
+      }
+      this.activeDictationOperations.clear();
+    }
+    this.sessionAccountId = nextAccountId;
   }
 
   getBillingUrl(source = "dictate") {
@@ -149,24 +247,34 @@ class VoiceLabApiClient {
   }
 
   async authenticatedFetch(pathname, options = {}) {
+    const method = String(options.method || "GET").toUpperCase();
+    const mayRefreshDesktopToken = method === "POST" && pathname === DESKTOP_STT_PATH;
+    const initialAuthContext = authSessionContext(this.authManager);
     let authRetried = false;
+    let retryAuthContext = null;
     for (;;) {
       let accessToken;
       try {
         accessToken = await this.authManager.getValidAccessToken();
       } catch (error) {
+        const terminal =
+          [400, 401, 403].includes(Number(error?.httpStatus)) ||
+          error?.code === "AUTH_EXPIRED" ||
+          error?.code === "AUTH_REQUIRED";
         throw new VoiceLabApiError({
-          code: error.code || "AUTH_EXPIRED",
-          message: "VoiceLab session expired. Sign in again.",
-          status: 401,
+          code: terminal ? error.code || "AUTH_EXPIRED" : "SERVICE_UNAVAILABLE",
+          message: terminal
+            ? "VoiceLab session expired. Sign in again."
+            : "VoiceLab authentication is temporarily unavailable. Try again.",
+          status: terminal ? 401 : Number(error?.httpStatus) || null,
         });
       }
       const metadata = this.authManager.getSessionMetadata();
-      const timed = composeSignal(options.signal, options.timeoutMs || 45_000);
+      const timed = composeSignal(options.signals || options.signal, options.timeoutMs || 45_000);
       let response;
       try {
         response = await fetch(`${this.apiBaseUrl}${pathname}`, {
-          method: options.method || "GET",
+          method,
           headers: {
             Accept: "application/json",
             Authorization: `Bearer ${accessToken}`,
@@ -183,7 +291,10 @@ class VoiceLabApiClient {
         });
       } catch (error) {
         timed.cleanup();
-        if (options.signal?.aborted)
+        const externalSignals = (
+          Array.isArray(options.signals) ? options.signals : [options.signal]
+        ).filter(Boolean);
+        if (externalSignals.some((signal) => signal.aborted))
           throw new VoiceLabApiError({ code: "CANCELLED", message: "Request cancelled" });
         throw new VoiceLabApiError({
           code: "SERVICE_UNAVAILABLE",
@@ -191,19 +302,6 @@ class VoiceLabApiClient {
         });
       }
       timed.cleanup();
-      if (response.status === 401 && !authRetried) {
-        authRetried = true;
-        try {
-          await this.authManager.refreshSession({ force: true });
-        } catch {
-          throw new VoiceLabApiError({
-            code: "AUTH_EXPIRED",
-            message: "VoiceLab session expired. Sign in again.",
-            status: 401,
-          });
-        }
-        continue;
-      }
       const text = await response.text();
       let body = null;
       if (text) {
@@ -218,6 +316,56 @@ class VoiceLabApiClient {
         }
       }
       if (response.ok) return body;
+
+      const invalidDesktopToken =
+        response.status === 401 && body?.error?.code === "invalid_desktop_token";
+      if (mayRefreshDesktopToken && invalidDesktopToken && !authRetried) {
+        if (!sameAuthSessionContext(initialAuthContext, authSessionContext(this.authManager))) {
+          throw new VoiceLabApiError({
+            code: "AUTH_ACCOUNT_CHANGED",
+            message: "The active VoiceLab session changed during this request.",
+            status: 409,
+            details: body || {},
+          });
+        }
+        authRetried = true;
+        try {
+          await this.authManager.refreshSession({ force: true, validateUser: false });
+        } catch (refreshError) {
+          const terminal =
+            [400, 401, 403].includes(Number(refreshError?.httpStatus)) ||
+            refreshError?.code === "AUTH_EXPIRED" ||
+            refreshError?.code === "AUTH_REQUIRED";
+          throw new VoiceLabApiError({
+            code: terminal ? "AUTH_EXPIRED" : "SERVICE_UNAVAILABLE",
+            message: terminal
+              ? "VoiceLab session expired. Sign in again."
+              : "VoiceLab authentication is temporarily unavailable. Try again.",
+            status: terminal ? 401 : Number(refreshError?.httpStatus) || null,
+          });
+        }
+        retryAuthContext = authSessionContext(this.authManager);
+        if (!sameAuthSessionContext(initialAuthContext, retryAuthContext)) {
+          throw new VoiceLabApiError({
+            code: "AUTH_ACCOUNT_CHANGED",
+            message: "The active VoiceLab session changed during token refresh.",
+            status: 409,
+            details: body || {},
+          });
+        }
+        continue;
+      }
+      if (
+        mayRefreshDesktopToken &&
+        invalidDesktopToken &&
+        authRetried &&
+        sameAuthSessionContext(retryAuthContext, authSessionContext(this.authManager))
+      ) {
+        this.authManager.invalidateSession?.({
+          code: "invalid_desktop_token",
+          message: body?.message || "VoiceLab session expired. Sign in again.",
+        });
+      }
       const error = new VoiceLabApiError({
         code: normalizeErrorCode(response.status, body),
         message:
@@ -234,8 +382,9 @@ class VoiceLabApiClient {
         errorCode: error.code,
         serverCode: body?.error?.code || body?.code,
         httpStatus: response.status,
-        method: options.method || "GET",
+        method,
         path: pathname,
+        requestId: body?.request_id || null,
       });
       throw error;
     }
@@ -259,7 +408,7 @@ class VoiceLabApiClient {
         dictation_enabled: true,
         dictation_max_concurrent_operations: 1,
         dictation_max_duration_seconds: Number(
-          process.env.VOICELAB_DICTATION_MAX_DURATION_SECONDS || 600
+          process.env.VOICELAB_DICTATION_MAX_DURATION_SECONDS || 300
         ),
         supported_languages: ["uz", "en", "ru"],
         auto_detection_supported: true,
@@ -294,57 +443,106 @@ class VoiceLabApiClient {
     return this.walletCache;
   }
 
-  async beginDictation({ audioBuffer, source = "dictate", durationMs = null, language = null }) {
-    const wallet = await this.getWallet();
-    const requestedLanguage =
-      (typeof language === "string" ? language.trim().toLowerCase() : "") || "auto";
-    const supported = new Set(wallet.limits.supported_languages || []);
-    const autoSupported = wallet.limits.auto_detection_supported === true;
-    if (requestedLanguage === "auto" && !autoSupported) {
+  async getDesktopPricing() {
+    const timed = composeSignal(null, 15_000);
+    let response;
+    try {
+      response = await fetch(`${this.apiBaseUrl}${DESKTOP_PRICING_PATH}`, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "X-VoiceLab-Client": CLIENT_ID,
+          "X-VoiceLab-App-Version": this.appVersion,
+          "X-VoiceLab-Channel": this.channel,
+        },
+        signal: timed.signal,
+      });
+    } catch {
       throw new VoiceLabApiError({
-        code: "AUDIO_LANGUAGE_UNSUPPORTED",
-        message:
-          "Automatic language detection is not available for this provider. Choose a language.",
-        status: 422,
-        details: { language: requestedLanguage, supported_languages: [...supported] },
+        code: "SERVICE_UNAVAILABLE",
+        message: "VoiceLab pricing is temporarily unavailable.",
+      });
+    } finally {
+      timed.cleanup();
+    }
+
+    const text = await response.text();
+    let body = null;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      throw new VoiceLabApiError({
+        code: "BACKEND_RESPONSE_INVALID",
+        message: "VoiceLab returned an invalid pricing response.",
+        status: response.status,
       });
     }
-    if (requestedLanguage !== "auto" && !supported.has(requestedLanguage)) {
+    if (!response.ok) {
+      throw new VoiceLabApiError({
+        code: normalizeErrorCode(response.status, body),
+        message: body?.message || "VoiceLab pricing is unavailable.",
+        status: response.status,
+        details: body || {},
+      });
+    }
+    return normalizeDesktopPricing(body);
+  }
+
+  async beginDictation({ audioBuffer, source = "dictate", durationMs = null, language = null }) {
+    const requestedLanguage =
+      (typeof language === "string" ? language.trim().toLowerCase() : "") || "auto";
+    if (requestedLanguage !== "auto" && !SUPPORTED_LANGUAGES.has(requestedLanguage)) {
       throw new VoiceLabApiError({
         code: "AUDIO_LANGUAGE_UNSUPPORTED",
         message: "This language is not available for VoiceLab Cloud.",
         status: 422,
-        details: { language: requestedLanguage, supported_languages: [...supported] },
+        details: {
+          language: requestedLanguage,
+          supported_languages: [...SUPPORTED_LANGUAGES],
+        },
       });
     }
     const normalizedLanguage = requestedLanguage === "auto" ? "uz" : requestedLanguage;
-    if (wallet.limits.dictation_enabled === false)
+    if (!Buffer.isBuffer(audioBuffer) && !(audioBuffer instanceof Uint8Array))
       throw new VoiceLabApiError({
-        code: "ENTITLEMENT_REQUIRED",
-        message: "Dictate is not enabled for this plan.",
-        status: 403,
+        code: "INVALID_REQUEST",
+        message: "Audio is required.",
+        status: 400,
       });
-    const limit = Number(wallet.limits.dictation_max_concurrent_operations ?? 1);
-    if (this.activeDictationOperations.size >= Math.max(1, limit))
+    if (audioBuffer.byteLength <= 0)
+      throw new VoiceLabApiError({
+        code: "AUDIO_INVALID",
+        message: "The recording is empty.",
+        status: 422,
+      });
+    if (audioBuffer.byteLength > MAX_AUDIO_BYTES)
+      throw new VoiceLabApiError({
+        code: "AUDIO_LIMIT_EXCEEDED",
+        message: "The audio file is larger than 64 MiB.",
+        status: 413,
+        details: { max_audio_bytes: MAX_AUDIO_BYTES },
+      });
+    if (Number.isFinite(durationMs) && durationMs < MIN_AUDIO_DURATION_MS)
+      throw new VoiceLabApiError({
+        code: "AUDIO_INVALID",
+        message: "The recording must be at least 500 ms long.",
+        status: 422,
+        details: { min_duration_ms: MIN_AUDIO_DURATION_MS },
+      });
+    if (Number.isFinite(durationMs) && durationMs > MAX_AUDIO_DURATION_MS)
+      throw new VoiceLabApiError({
+        code: "AUDIO_LIMIT_EXCEEDED",
+        message: "The recording must be no longer than 300 seconds.",
+        status: 413,
+        details: { max_duration_seconds: 300 },
+      });
+    if (this.activeDictationOperations.size >= 1)
       throw new VoiceLabApiError({
         code: "CONCURRENCY_LIMIT",
         message: "Another VoiceLab Dictate operation is already running.",
         status: 429,
-        details: { max_concurrent_operations: limit },
+        details: { max_concurrent_operations: 1 },
       });
-    const maxDuration = Number(
-      wallet.limits.dictation_max_duration_seconds ??
-        process.env.VOICELAB_DICTATION_MAX_DURATION_SECONDS ??
-        600
-    );
-    if (durationMs && Number.isFinite(maxDuration) && durationMs > maxDuration * 1000)
-      throw new VoiceLabApiError({
-        code: "AUDIO_LIMIT_EXCEEDED",
-        message: "This recording is longer than the current Dictate limit.",
-        status: 413,
-        details: { max_duration_seconds: maxDuration },
-      });
-    const audioHash = crypto.createHash("sha256").update(audioBuffer).digest("hex");
     const accountId = this.authManager.getSessionMetadata().accountId;
     if (!accountId) {
       throw new VoiceLabApiError({
@@ -353,74 +551,19 @@ class VoiceLabApiClient {
         status: 401,
       });
     }
-    const operation = operationStore.begin({
-      audioHash,
+    const operation = {
+      operationId: crypto.randomUUID(),
       source,
-      durationMs,
+      durationMs: Number.isFinite(durationMs) ? durationMs : null,
       language: normalizedLanguage,
       accountId,
-    });
-    this.activeDictationOperations.add(operation.operationId);
+      abortController: new AbortController(),
+    };
+    this.activeDictationOperations.set(operation.operationId, operation);
     return operation;
   }
 
-  async waitForOperation(initial, operation, index, signal) {
-    let payload = initial;
-    let operationPayload = payload?.operation || payload;
-    const serverId =
-      operationPayload?.operation_id ||
-      operationPayload?.id ||
-      operationStore.get(operation.operationId)?.serverOperations?.[String(index)];
-    if (serverId == null)
-      throw new VoiceLabApiError({
-        code: "BACKEND_RESPONSE_INVALID",
-        message: "VoiceLab operation id is missing.",
-        status: 502,
-      });
-    operationStore.attachServerOperation(
-      operation.operationId,
-      index,
-      serverId,
-      operationStore.get(operation.operationId)?.expectedChunkCount
-    );
-    const deadline = Date.now() + 60_000;
-    while (Date.now() < deadline) {
-      operationPayload = payload?.operation || payload;
-      const status = String(operationPayload?.status || "").toLowerCase();
-      if (
-        status === "success" ||
-        status === "completed" ||
-        (typeof operationPayload?.transcript === "string" && !status)
-      )
-        return payload;
-      if (status === "failed") {
-        throw new VoiceLabApiError({
-          code: operationPayload?.error?.code || operationPayload?.code || "DICTATION_FAILED",
-          message:
-            operationPayload?.error?.message ||
-            (typeof operationPayload?.error === "string" ? operationPayload.error : null) ||
-            operationPayload?.detail ||
-            "Transcription failed.",
-          status: 422,
-          details: operationPayload,
-        });
-      }
-      await new Promise((resolve) => setTimeout(resolve, 750));
-      payload = await this.authenticatedFetch(
-        `/api/v1/stt/transcriptions/${encodeURIComponent(serverId)}`,
-        { method: "GET", timeoutMs: 20_000, signal }
-      );
-    }
-    operationStore.retain(operation.operationId);
-    throw new VoiceLabApiError({
-      code: "DICTATION_PROCESSING",
-      message: "Transcription is still processing. Retry to resume this operation.",
-      status: 202,
-      details: { operation_id: serverId, resumable: true },
-    });
-  }
-
-  async sendDictationChunk(operation, audioBuffer, metadata = {}, index = 0, count = 1) {
+  async sendDictationChunk(operation, audioBuffer, metadata = {}) {
     if (operation.accountId !== this.authManager.getSessionMetadata().accountId) {
       throw new VoiceLabApiError({
         code: "AUTH_ACCOUNT_CHANGED",
@@ -429,15 +572,10 @@ class VoiceLabApiClient {
       });
     }
     const language = metadata.language ?? operation.language;
-    const idempotencyKey = operationStore.deterministicChunkKey(operation, index);
-    const totalDurationSeconds = Number(
-      operation.totalDurationSeconds ??
-        (Number.isFinite(operation.durationMs) ? operation.durationMs / 1000 : NaN)
-    );
-    if (count > 1 && (!Number.isFinite(totalDurationSeconds) || totalDurationSeconds <= 0)) {
+    if (language && !SUPPORTED_LANGUAGES.has(language)) {
       throw new VoiceLabApiError({
-        code: "AUDIO_DURATION_REQUIRED",
-        message: "Chunked Dictate requires a measured total audio duration.",
+        code: "AUDIO_LANGUAGE_UNSUPPORTED",
+        message: "This language is not available for VoiceLab Cloud.",
         status: 422,
       });
     }
@@ -446,37 +584,25 @@ class VoiceLabApiClient {
       form.append(
         "audio",
         new Blob([audioBuffer], { type: metadata.contentType || "audio/mpeg" }),
-        metadata.fileName || `dictation-${index}.mp3`
+        metadata.fileName || "dictation.mp3"
       );
-      if (language && language !== "auto") form.append("language", language);
-      if (metadata.includeSpeakers === true || metadata.include_speakers === true) {
-        form.append("include_speakers", "true");
-      }
+      if (language) form.append("language", language);
       return form;
     };
-    const persistedServerId = operationStore.get(operation.operationId)?.serverOperations?.[
-      String(index)
-    ];
-    const initial = persistedServerId
-      ? await this.authenticatedFetch(
-          `/api/v1/stt/transcriptions/${encodeURIComponent(persistedServerId)}`,
-          { method: "GET", timeoutMs: 20_000, signal: metadata.signal }
-        )
-      : await this.authenticatedFetch("/api/v1/stt", {
-          method: "POST",
-          bodyFactory,
-          idempotencyKey,
-          timeoutMs: 120_000,
-          signal: metadata.signal,
-        });
-    operationStore.attachServerOperation(
-      operation.operationId,
-      index,
-      persistedServerId || initial?.id,
-      count
-    );
-    const result = await this.waitForOperation(initial, operation, index, metadata.signal);
-    operationStore.recordChunkResult(operation.operationId, index, result);
+    const result = await this.authenticatedFetch("/v1/desktop/stt", {
+      method: "POST",
+      bodyFactory,
+      timeoutMs: 120_000,
+      signals: [operation.abortController?.signal, metadata.signal],
+    });
+    if (!result || typeof result.text !== "string") {
+      throw new VoiceLabApiError({
+        code: "BACKEND_RESPONSE_INVALID",
+        message: "VoiceLab returned an invalid transcription response.",
+        status: 502,
+        details: { request_id: result?.request_id || null },
+      });
+    }
     return result;
   }
 
@@ -509,101 +635,45 @@ class VoiceLabApiClient {
     });
   }
 
-  async resumePendingDictations({ signal } = {}) {
-    const accountId = this.authManager.getSessionMetadata().accountId;
-    if (!accountId) return [];
-    const completed = [];
-    for (const operation of operationStore.listPending(accountId)) {
-      if (operation.accountId !== this.authManager.getSessionMetadata().accountId) break;
-      const expectedCount = Number(operation.expectedChunkCount || 0);
-      const serverEntries = Object.entries(operation.serverOperations || {}).sort(
-        ([left], [right]) => Number(left) - Number(right)
-      );
-      if (!serverEntries.length || (expectedCount > 0 && serverEntries.length < expectedCount))
-        continue;
-      try {
-        const results = [];
-        for (const [rawIndex, serverId] of serverEntries) {
-          const index = Number(rawIndex);
-          const initial = await this.authenticatedFetch(
-            `/api/v1/stt/transcriptions/${encodeURIComponent(serverId)}`,
-            { method: "GET", timeoutMs: 20_000, signal }
-          );
-          const result = await this.waitForOperation(initial, operation, index, signal);
-          operationStore.recordChunkResult(operation.operationId, index, result);
-          results.push(result);
-        }
-        const text = results
-          .map((payload) => {
-            const serverOperation = payload?.operation || payload || {};
-            const result = serverOperation.result || payload?.result || serverOperation;
-            return result.transcript || result.text || "";
-          })
-          .filter(Boolean)
-          .join(" ")
-          .replace(/\s+/g, " ")
-          .trim();
-        const last = results[results.length - 1] || {};
-        const serverOperation = last?.operation || last || {};
-        const merged = {
-          ...last,
-          operation: {
-            ...serverOperation,
-            result: { ...(serverOperation.result || last.result || {}), text },
-          },
-        };
-        const publicPayload = await this.publicResult(merged, operation.operationId);
-        this.finishDictation(operation);
-        completed.push(publicPayload);
-      } catch (error) {
-        this.failDictation(operation, error);
-        if (error?.code === "AUTH_EXPIRED" || error?.code === "AUTH_ACCOUNT_CHANGED") break;
-      }
-    }
-    return completed;
-  }
-
   finishDictation(operation) {
     this.activeDictationOperations.delete(operation.operationId);
-    operationStore.remove(operation.operationId);
     this.walletFetchedAt = 0;
   }
   failDictation(operation, error) {
+    void error;
     this.activeDictationOperations.delete(operation.operationId);
-    [
-      "SERVICE_UNAVAILABLE",
-      "BACKEND_FAILED",
-      "BACKEND_RESPONSE_INVALID",
-      "DICTATION_PROCESSING",
-    ].includes(error?.code)
-      ? operationStore.retain(operation.operationId)
-      : operationStore.remove(operation.operationId);
   }
 
   async publicResult(payload, operationId) {
     const operation = payload?.operation || payload || {};
     const result = operation?.result || payload?.result || operation;
-    let wallet = this.walletCache || {
+    const usage = result.usage && typeof result.usage === "object" ? result.usage : null;
+    return {
+      success: true,
+      text: result.transcript || result.text || "",
+      source: "voicelab",
+      operationId,
+      language: result.language || null,
+      usage,
+      usedSeconds: usage?.used_seconds ?? null,
+      dailyLimitSeconds: usage?.daily_limit_seconds ?? null,
+      remainingSeconds: usage?.remaining_seconds ?? null,
+      requestId: result.request_id || null,
+      chargedCredits: null,
       isUnlimited: false,
       balanceCredits: null,
       reservedCredits: "0",
       availableCredits: null,
-      limits: {},
-    };
-    try {
-      wallet = await this.getWallet({ force: true });
-    } catch {}
-    return {
-      success: true,
-      text: result.transcript || result.text || "",
-      operationId,
-      chargedCredits: operation?.charged_credits == null ? null : String(operation.charged_credits),
-      isUnlimited: wallet.isUnlimited,
-      balanceCredits: wallet.balanceCredits,
-      reservedCredits: wallet.reservedCredits,
-      availableCredits: wallet.availableCredits,
-      limits: wallet.limits,
-      sttProvider: result.stt_provider || result.provider || "voicelab",
+      limits: {
+        dictation_enabled: true,
+        dictation_max_concurrent_operations: 1,
+        dictation_max_duration_seconds: 300,
+        supported_languages: [...SUPPORTED_LANGUAGES],
+        auto_detection_supported: false,
+      },
+      // This endpoint is a VoiceLab boundary. Do not leak legacy or
+      // implementation-specific provider names returned by the server.
+      sttProvider: "voicelab",
       sttModel: result.stt_model || result.model || null,
       audioDurationMs:
         result.audio_duration_ms ??

@@ -1,12 +1,19 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./useAuth";
+import type { VoiceLabUser } from "../lib/auth";
+
+export type DesktopSttUsage = {
+  used_seconds: number;
+  daily_limit_seconds: number;
+  remaining_seconds: number;
+};
 
 export interface CreditWalletData {
-  isUnlimited: boolean;
-  balanceCredits: string;
-  reservedCredits: string;
-  availableCredits: string;
-  plan: string;
+  isUnlimited: boolean | null;
+  balanceCredits: string | null;
+  reservedCredits: string | null;
+  availableCredits: string | null;
+  plan: string | null;
   estimatedCredits: string | null;
   chargedCredits: string | null;
   limits: Record<string, unknown>;
@@ -14,14 +21,22 @@ export interface CreditWalletData {
   updatedAt: string | null;
   supportedLanguages: string[];
   autoDetectionSupported: boolean;
+  sttUsage: DesktopSttUsage | null;
+  planPrice: {
+    amount: string;
+    currency: string;
+    billingInterval: string | null;
+  } | null;
 }
 
 interface UseUsageResult extends CreditWalletData {
   status: string;
-  isSubscribed: boolean;
-  isOverLimit: boolean;
+  isSubscribed: boolean | null;
+  isOverLimit: boolean | null;
   isLoading: boolean;
   hasLoaded: boolean;
+  hasUsageData: boolean;
+  hasSubscriptionData: boolean;
   error: string | null;
   errorCode: string | null;
   checkoutLoading: boolean;
@@ -30,138 +45,237 @@ interface UseUsageResult extends CreditWalletData {
   openBillingPortal: () => Promise<{ success: boolean; error?: string }>;
 }
 
-const EMPTY: CreditWalletData = {
-  isUnlimited: false,
-  balanceCredits: "0",
-  reservedCredits: "0",
-  availableCredits: "0",
-  plan: "free",
+const SUPPORTED_LANGUAGES = ["uz", "en", "ru"];
+const MAX_DURATION_SECONDS = 300;
+
+const STATIC_DESKTOP_STT_DATA: CreditWalletData = {
+  isUnlimited: null,
+  balanceCredits: null,
+  reservedCredits: null,
+  availableCredits: null,
+  plan: null,
   estimatedCredits: null,
   chargedCredits: null,
-  limits: {},
+  limits: {
+    supported_languages: SUPPORTED_LANGUAGES,
+    auto_detection_supported: false,
+    max_duration_seconds: MAX_DURATION_SECONDS,
+  },
   topUpUrl: null,
   updatedAt: null,
-  supportedLanguages: [],
+  supportedLanguages: SUPPORTED_LANGUAGES,
   autoDetectionSupported: false,
+  sttUsage: null,
+  planPrice: null,
+};
+
+function isDesktopSttUsage(value: unknown): value is DesktopSttUsage {
+  if (!value || typeof value !== "object") return false;
+  const usage = value as Partial<DesktopSttUsage>;
+  return (
+    Number.isFinite(usage.used_seconds) &&
+    Number.isFinite(usage.daily_limit_seconds) &&
+    Number.isFinite(usage.remaining_seconds)
+  );
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function subscriptionFromUser(user: VoiceLabUser | null): {
+  plan: string | null;
+  isSubscribed: boolean | null;
+  status: string | null;
+} {
+  if (!user) return { plan: null, isSubscribed: null, status: null };
+  const raw = user as Record<string, unknown>;
+  const subscription =
+    raw.subscription && typeof raw.subscription === "object"
+      ? (raw.subscription as Record<string, unknown>)
+      : {};
+  const plan = firstString(
+    raw.plan,
+    raw.subscription_plan,
+    raw.subscriptionPlan,
+    raw.tier,
+    subscription.plan,
+    subscription.tier
+  );
+  const status = firstString(
+    raw.subscription_status,
+    raw.subscriptionStatus,
+    subscription.status
+  )?.toLowerCase();
+  const explicit = raw.is_subscribed ?? raw.isSubscribed ?? subscription.is_active;
+  if (typeof explicit === "boolean")
+    return { plan, isSubscribed: explicit, status: status || null };
+  if (status) {
+    return {
+      plan,
+      isSubscribed: ["active", "trial", "trialing"].includes(status),
+      status,
+    };
+  }
+  if (plan)
+    return {
+      plan,
+      isSubscribed: !["free", "none"].includes(plan.toLowerCase()),
+      status: null,
+    };
+  return { plan: null, isSubscribed: null, status: null };
+}
+
+type PricingState = {
+  plan: string | null;
+  planPrice: CreditWalletData["planPrice"];
+  isSubscribed: boolean | null;
+  status: string | null;
+  isLoading: boolean;
+  hasLoaded: boolean;
+  error: string | null;
+  errorCode: string | null;
 };
 
 export function useUsage(): UseUsageResult | null {
-  const { isSignedIn, isLoaded } = useAuth();
-  const [data, setData] = useState<CreditWalletData>(EMPTY);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasLoaded, setHasLoaded] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [errorCode, setErrorCode] = useState<string | null>(null);
-  const inFlight = useRef<Promise<void> | null>(null);
-  const billingWindowPending = useRef(false);
+  const { isSignedIn, user } = useAuth();
+  const [data, setData] = useState<CreditWalletData>(STATIC_DESKTOP_STT_DATA);
+  const userSubscription = useMemo(() => subscriptionFromUser(user), [user]);
+  const pricingRequest = useRef(0);
+  const [pricing, setPricing] = useState<PricingState>(() => ({
+    ...userSubscription,
+    planPrice: null,
+    isLoading: false,
+    hasLoaded: false,
+    error: null,
+    errorCode: null,
+  }));
 
-  const fetchUsage = useCallback(async () => {
-    if (inFlight.current) return inFlight.current;
-    const task = (async () => {
-      setIsLoading(true);
-      setError(null);
-      setErrorCode(null);
-      try {
-        const result = await window.electronAPI.cloudUsage?.();
-        if (!result?.success) {
-          setError(result?.error || "Unable to load AI Credit wallet.");
-          setErrorCode(result?.code || "WALLET_UNAVAILABLE");
-          return;
-        }
-        const response = result as typeof result & {
-          supported_languages?: string[];
-          supportedLanguages?: string[];
-          auto_detection_supported?: boolean;
-          autoDetectionSupported?: boolean;
-        };
-        const limits = (result.limits ?? {}) as Record<string, unknown>;
-        setData({
-          isUnlimited: result.isUnlimited === true,
-          balanceCredits: String(result.balanceCredits ?? "0"),
-          reservedCredits: String(result.reservedCredits ?? "0"),
-          availableCredits: String(result.availableCredits ?? "0"),
-          plan: result.plan ?? "free",
-          estimatedCredits:
-            result.estimatedCredits == null ? null : String(result.estimatedCredits),
-          chargedCredits: result.chargedCredits == null ? null : String(result.chargedCredits),
-          limits,
-          topUpUrl: result.topUpUrl ?? null,
-          updatedAt: result.updatedAt ?? null,
-          supportedLanguages:
-            response.supportedLanguages ??
-            response.supported_languages ??
-            (Array.isArray(limits.supported_languages)
-              ? (limits.supported_languages as string[])
-              : []),
-          autoDetectionSupported: Boolean(
-            response.autoDetectionSupported ??
-            response.auto_detection_supported ??
-            limits.auto_detection_supported
-          ),
-        });
-      } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Unable to load AI Credit wallet.");
-        setErrorCode("WALLET_UNAVAILABLE");
-      } finally {
-        setIsLoading(false);
-        setHasLoaded(true);
-      }
-    })();
-    inFlight.current = task.finally(() => {
-      inFlight.current = null;
-    });
-    return inFlight.current;
-  }, []);
-
+  // Usage is account-scoped. Clear it on logout and before another account can
+  // render so daily seconds never bleed between desktop sessions.
   useEffect(() => {
-    if (!isLoaded || !isSignedIn) {
-      setData(EMPTY);
-      setIsLoading(false);
+    setData(STATIC_DESKTOP_STT_DATA);
+  }, [isSignedIn, user?.id]);
+
+  const loadPricing = useCallback(async () => {
+    const request = ++pricingRequest.current;
+    const fallback = userSubscription;
+    if (!isSignedIn) {
+      setPricing({
+        ...fallback,
+        planPrice: null,
+        isLoading: false,
+        hasLoaded: true,
+        error: null,
+        errorCode: null,
+      });
       return;
     }
-    void fetchUsage();
-    const changed = () => void fetchUsage();
-    const refreshAfterBilling = () => {
-      if (!billingWindowPending.current) return;
-      billingWindowPending.current = false;
-      void fetchUsage();
-    };
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") refreshAfterBilling();
-    };
-    window.addEventListener("usage-changed", changed);
-    window.addEventListener("focus", refreshAfterBilling);
-    document.addEventListener("visibilitychange", handleVisibility);
+
+    setPricing({
+      ...fallback,
+      planPrice: null,
+      isLoading: true,
+      hasLoaded: false,
+      error: null,
+      errorCode: null,
+    });
+    try {
+      const result = await window.electronAPI.desktopPricing?.();
+      if (pricingRequest.current !== request) return;
+      if (!result?.success) {
+        setPricing({
+          ...fallback,
+          planPrice: null,
+          isLoading: false,
+          hasLoaded: true,
+          error: result?.error || "Pricing is unavailable.",
+          errorCode: result?.code || "PRICING_UNAVAILABLE",
+        });
+        return;
+      }
+      setPricing({
+        plan: firstString(result.plan?.name, result.plan?.code, fallback.plan),
+        planPrice:
+          result.plan?.priceUsd && result.plan?.currency
+            ? {
+                amount: result.plan.priceUsd,
+                currency: result.plan.currency,
+                billingInterval: result.plan.billingInterval ?? null,
+              }
+            : null,
+        isSubscribed: fallback.isSubscribed,
+        status: fallback.status,
+        isLoading: false,
+        hasLoaded: true,
+        error: null,
+        errorCode: null,
+      });
+    } catch (error) {
+      if (pricingRequest.current !== request) return;
+      setPricing({
+        ...fallback,
+        planPrice: null,
+        isLoading: false,
+        hasLoaded: true,
+        error: error instanceof Error ? error.message : "Pricing is unavailable.",
+        errorCode: "PRICING_UNAVAILABLE",
+      });
+    }
+  }, [isSignedIn, userSubscription]);
+
+  useEffect(() => {
+    void loadPricing();
     return () => {
-      window.removeEventListener("usage-changed", changed);
-      window.removeEventListener("focus", refreshAfterBilling);
-      document.removeEventListener("visibilitychange", handleVisibility);
+      pricingRequest.current += 1;
     };
-  }, [isLoaded, isSignedIn, fetchUsage]);
+  }, [loadPricing]);
+
+  // The synchronous STT response is the only authoritative usage source for
+  // this token. Never turn this event into a wallet request.
+  useEffect(() => {
+    const updateFromSttResult = (event: Event) => {
+      const detail = (event as CustomEvent<{ usage?: unknown }>).detail;
+      if (!isDesktopSttUsage(detail?.usage)) return;
+      const sttUsage = detail.usage;
+      setData((current) => ({
+        ...current,
+        limits: { ...current.limits, desktop_stt_usage: sttUsage },
+        sttUsage,
+        updatedAt: new Date().toISOString(),
+      }));
+    };
+    window.addEventListener("usage-changed", updateFromSttResult);
+    return () => window.removeEventListener("usage-changed", updateFromSttResult);
+  }, []);
 
   const openBilling = useCallback(async () => {
     if (!window.electronAPI.openVoiceLabBilling) {
       return { success: false, error: "Billing is unavailable." };
     }
-    const result = await window.electronAPI.openVoiceLabBilling("dictate");
-    if (result?.success) billingWindowPending.current = true;
-    return result;
+    return window.electronAPI.openVoiceLabBilling("dictate");
   }, []);
 
   if (!isSignedIn) return null;
-  const available = Number(data.availableCredits);
 
   return {
     ...data,
-    status: errorCode ? "unavailable" : "active",
-    isSubscribed: data.plan !== "free",
-    isOverLimit: !data.isUnlimited && Number.isFinite(available) && available <= 0,
-    isLoading,
-    hasLoaded,
-    error,
-    errorCode,
+    plan: pricing.plan,
+    planPrice: pricing.planPrice,
+    status: pricing.status || "unknown",
+    isSubscribed: pricing.isSubscribed,
+    isOverLimit: data.sttUsage ? data.sttUsage.remaining_seconds <= 0 : null,
+    isLoading: pricing.isLoading,
+    hasLoaded: pricing.hasLoaded,
+    hasUsageData: data.sttUsage !== null,
+    hasSubscriptionData: pricing.plan !== null || pricing.isSubscribed !== null,
+    error: pricing.error,
+    errorCode: pricing.errorCode,
     checkoutLoading: false,
-    refetch: fetchUsage,
+    refetch: loadPricing,
     openCheckout: openBilling,
     openBillingPortal: openBilling,
   };

@@ -1328,7 +1328,7 @@
     },
     "account": {
       "voiceLabAccount": {
-        "sectionDescription": "VoiceLab Cloud uses your signed-in account and shared AI Credit wallet.",
+        "sectionDescription": "VoiceLab Cloud uses your signed-in VoiceLab subscription.",
         "label": "VoiceLab account",
         "description": "Sign in once; no separate speech API key is required.",
         "openSpace": "Open VoiceLab",
@@ -1598,7 +1598,7 @@
       "open": "Open",
       "removeModels": {
         "confirmText": "Delete Models",
-        "description": "This deletes all locally cached Whisper models ({{path}}) and frees disk space. You can download them again from the model picker.",
+        "description": "This deletes all locally cached speech models and frees disk space. You can download them again from the model picker.",
         "failedDescription": "Something went wrong removing the models. Please try again.",
         "failedDescriptionShort": "Could not remove cached models.",
         "failedTitle": "Couldn't remove models",
@@ -3087,14 +3087,14 @@
       "more": "More"
     },
     "wallet": {
-      "title": "AI Credit wallet",
-      "shared": "One balance across VoiceLab products",
-      "balance": "Balance",
-      "available": "Available",
-      "reserved": "Reserved",
-      "unavailable": "Wallet is temporarily unavailable.",
+      "title": "VoiceLab plan & usage",
+      "shared": "Plan and billing are managed on VoiceLab.",
+      "balance": "Used today",
+      "available": "Remaining today",
+      "reserved": "Daily allowance",
+      "unavailable": "Usage is not available yet.",
       "updated": "Updated {{time}}",
-      "live": "Live balance",
+      "live": "Usage appears after your next dictation.",
       "manage": "Manage billing"
     },
     "creditShortage": {
@@ -3162,7 +3162,7 @@
       },
       "ready": {
         "title": "Ready",
-        "account": "Your VoiceLab account and AI Credit wallet are connected.",
+        "account": "Your VoiceLab account is connected.",
         "local": "Local transcription is selected.",
         "provider": "Open Advanced settings to connect your provider.",
         "start": "Start dictating"
@@ -3201,7 +3201,7 @@
     },
     "settings": {
       "account": "Account & Credits",
-      "accountDescription": "Profile, session and AI Credit wallet",
+      "accountDescription": "Profile, secure session and billing",
       "dictation": "Dictation",
       "dictationDescription": "Language, microphone and paste behavior",
       "shortcuts": "Shortcuts",
@@ -3220,7 +3220,7 @@
       "status": "Session",
       "protected": "Active and protected",
       "signedOut": "Not signed in",
-      "signedOutDescription": "Sign in to use VoiceLab Cloud and your AI Credit wallet."
+      "signedOutDescription": "Sign in to use VoiceLab Cloud."
     }
   }
 }

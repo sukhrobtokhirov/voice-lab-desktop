@@ -3,11 +3,26 @@ import type { TinfoilCatalogModel } from "../models/tinfoilModels";
 
 export type LocalTranscriptionProvider = "whisper" | "nvidia" | "voicelab";
 
-export type InferenceMode = "openwhispr" | "providers" | "local" | "self-hosted" | "enterprise";
+export type VoiceLabInferenceMode = "voicelab";
+export type LegacyInferenceMode = "openwhispr";
+export type InferenceMode =
+  | VoiceLabInferenceMode
+  | LegacyInferenceMode
+  | "providers"
+  | "local"
+  | "self-hosted"
+  | "enterprise";
 
 export type SelfHostedType = "openai-compatible" | "lan";
 
 export type TranscriptionStatus = "completed" | "failed" | "pending" | "discarded";
+
+export type DesktopAuthUser = {
+  id: string;
+  email: string;
+  name: string;
+  image: string | null;
+};
 
 export type TranscriptionErrorCode =
   | "TIMEOUT"
@@ -24,6 +39,10 @@ export type TranscriptionErrorCode =
   | "DAILY_CAP_REACHED"
   | "RATE_LIMITED"
   | "AUDIO_LIMIT_EXCEEDED"
+  | "AUDIO_INVALID"
+  | "NO_SPEECH_DETECTED"
+  | "INVALID_REQUEST"
+  | "CANCELLED"
   | "IDEMPOTENCY_CONFLICT"
   | "SERVICE_UNAVAILABLE"
   | "VOICELAB_STREAMING_DISABLED"
@@ -991,6 +1010,12 @@ declare global {
       checkMicrophoneAccess?: () => Promise<{ granted: boolean; status: string }>;
       checkSystemAudioAccess?: () => Promise<SystemAudioAccessResult>;
       requestSystemAudioAccess?: () => Promise<SystemAudioAccessResult>;
+      armDisplayMediaCapture?: () => Promise<{
+        success: boolean;
+        required?: boolean;
+        expiresInMs?: number;
+        code?: string;
+      }>;
       openMicrophoneSettings?: () => Promise<{ success: boolean; error?: string }>;
       openSoundInputSettings?: () => Promise<{ success: boolean; error?: string }>;
       openAccessibilitySettings?: () => Promise<{ success: boolean; error?: string }>;
@@ -1016,31 +1041,31 @@ declare global {
       // Auth
       authStartBrowser?: (provider?: "google") => Promise<{
         status: string;
-        user: Record<string, unknown> | null;
+        user: DesktopAuthUser | null;
         errorCode: string | null;
         errorMessage?: string | null;
       }>;
       authReopenBrowser?: () => Promise<{
         status: string;
-        user: Record<string, unknown> | null;
+        user: DesktopAuthUser | null;
         errorCode: string | null;
         errorMessage?: string | null;
       }>;
       authCancelBrowser?: () => Promise<{
         status: string;
-        user: Record<string, unknown> | null;
+        user: DesktopAuthUser | null;
         errorCode: string | null;
         errorMessage?: string | null;
       }>;
       authGetStatus?: () => Promise<{
         status: string;
-        user: Record<string, unknown> | null;
+        user: DesktopAuthUser | null;
         errorCode: string | null;
         errorMessage?: string | null;
       }>;
       authRefreshSession?: () => Promise<{
         status: string;
-        user: Record<string, unknown> | null;
+        user: DesktopAuthUser | null;
         errorCode: string | null;
         errorMessage?: string | null;
       }>;
@@ -1049,7 +1074,7 @@ declare global {
       onAuthStateChanged?: (
         callback: (status: {
           status: string;
-          user: Record<string, unknown> | null;
+          user: DesktopAuthUser | null;
           errorCode: string | null;
           errorMessage?: string | null;
         }) => void
@@ -1058,10 +1083,18 @@ declare global {
         callback: (event: unknown, payload: { errorCode?: string }) => void
       ) => () => void;
 
-      // OpenWhispr Cloud API
+      // VoiceLab Cloud API
       cloudTranscribe?: (
         audioBuffer: ArrayBuffer,
-        opts: { language?: string; prompt?: string; useCase?: string; diarization?: boolean }
+        opts: {
+          language?: string;
+          prompt?: string;
+          useCase?: string;
+          diarization?: boolean;
+          mimeType?: string;
+          durationSeconds?: number;
+          requestId?: string;
+        }
       ) => Promise<{
         success: boolean;
         text?: string;
@@ -1079,9 +1112,21 @@ declare global {
         availableCredits?: string;
         limits?: Record<string, unknown>;
         retryAfterSeconds?: number | null;
+        language?: string | null;
+        usage?: {
+          used_seconds: number;
+          daily_limit_seconds: number;
+          remaining_seconds: number;
+        } | null;
+        requestId?: string | null;
+        serverCode?: string | null;
+        status?: number | null;
+        fields?: Record<string, unknown> | null;
+        max_duration_seconds?: number;
         error?: string;
         code?: string;
       }>;
+      cancelCloudTranscribe?: (requestId: string) => Promise<{ success: boolean }>;
       cloudReason?: (
         text: string,
         opts: {
@@ -1145,6 +1190,26 @@ declare global {
         updatedAt?: string | null;
         error?: string;
         code?: string;
+      }>;
+      desktopPricing?: () => Promise<{
+        success: boolean;
+        enabled?: boolean;
+        currency?: string;
+        provider?: string | null;
+        plan?: {
+          code: string | null;
+          name: string | null;
+          priceUsd: string | null;
+          currency: string;
+          billingInterval: string | null;
+          billingIntervalCount: number | null;
+          dailyMinutes: number | null;
+          maxRecordingSeconds: number | null;
+        };
+        error?: string;
+        code?: string;
+        status?: number | null;
+        requestId?: string | null;
       }>;
       openVoiceLabBilling?: (
         source?: "dictate" | "desktop"

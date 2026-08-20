@@ -152,6 +152,12 @@ const getDisplayCaptureOptions = (mode: "loopback" | "portal") => {
 
 const requestSystemAudioDisplayStream = async (mode: "loopback" | "portal") => {
   try {
+    if (mode === "loopback" && window.electronAPI?.getPlatform?.() === "win32") {
+      const authorization = await window.electronAPI?.armDisplayMediaCapture?.();
+      if (!authorization?.success) {
+        throw new Error("System-audio capture authorization is unavailable.");
+      }
+    }
     const stream = await navigator.mediaDevices.getDisplayMedia(getDisplayCaptureOptions(mode));
     const audioTrack = stream.getAudioTracks()[0];
 

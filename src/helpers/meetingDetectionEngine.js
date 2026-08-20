@@ -1,6 +1,7 @@
-const { BrowserWindow, shell } = require("electron");
+const { BrowserWindow } = require("electron");
 const debugLogger = require("./debugLogger");
 const { getMeetingJoinUrl } = require("./meetingJoinUrl");
+const { openExternalUrl } = require("./windowSecurity");
 
 const IMMINENT_THRESHOLD_MS = 5 * 60 * 1000;
 
@@ -184,12 +185,11 @@ class MeetingDetectionEngine {
         if (action === "join") {
           const joinUrl = getMeetingJoinUrl(detection.event);
           if (joinUrl) {
-            shell
-              .openExternal(joinUrl)
+            openExternalUrl(joinUrl)
               .catch((error) =>
                 debugLogger.error(
                   "Failed to open meeting link",
-                  { error: error.message, joinUrl },
+                  { error: error.message },
                   "meeting"
                 )
               );

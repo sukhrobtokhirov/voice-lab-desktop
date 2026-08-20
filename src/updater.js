@@ -1,5 +1,7 @@
+const { app } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const { publicUpdateInfo } = require("./helpers/releaseNotes");
+const { resolveUpdateFeed } = require("./helpers/updateFeedConfig");
 
 class UpdateManager {
   constructor() {
@@ -23,16 +25,18 @@ class UpdateManager {
   }
 
   setupAutoUpdater() {
-    if (process.env.NODE_ENV === "development") {
+    if (!app.isPackaged && process.env.NODE_ENV === "development") {
       return;
     }
 
-    autoUpdater.setFeedURL({
-      provider: "github",
-      owner: process.env.UPDATE_OWNER || "voicelab-uz",
-      repo: process.env.UPDATE_REPO || "desktop",
-      private: false,
-    });
+    autoUpdater.setFeedURL(
+      resolveUpdateFeed({
+        isPackaged: app.isPackaged,
+        nodeEnv: process.env.NODE_ENV,
+        owner: process.env.UPDATE_OWNER,
+        repo: process.env.UPDATE_REPO,
+      })
+    );
 
     // Use arch-specific update channel on macOS to prevent arm64/x64
     // from downloading mismatched artifacts. Both builds publish to the
@@ -155,7 +159,7 @@ class UpdateManager {
 
   async checkForUpdates() {
     try {
-      if (process.env.NODE_ENV === "development") {
+      if (!app.isPackaged && process.env.NODE_ENV === "development") {
         return {
           updateAvailable: false,
           message: "Update checks are disabled in development mode",

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Post-install script for OpenWhispr (deb/rpm)
+# Post-install script for VoiceLab (deb/rpm)
 # Sets up chrome-sandbox permissions and ydotool daemon prerequisites.
 # Best-effort: nothing here may fail the package install.
 
@@ -7,9 +7,16 @@ set -uo pipefail
 
 # 0. Set SUID bit on chrome-sandbox (required by Electron for Linux sandboxing)
 #    Find it wherever dpkg placed the package files, rather than hardcoding /opt/...
-CHROME_SANDBOX=$(dpkg -L open-whispr 2>/dev/null | grep chrome-sandbox || echo "")
+CHROME_SANDBOX=$(dpkg -L voicelab-desktop 2>/dev/null | grep chrome-sandbox || echo "")
+if [ -z "$CHROME_SANDBOX" ]; then
+  # Older package name, retained only for upgrade compatibility.
+  CHROME_SANDBOX=$(dpkg -L open-whispr 2>/dev/null | grep chrome-sandbox || echo "")
+fi
 if [ -z "$CHROME_SANDBOX" ]; then
   # Fallback: conventional electron-builder install path
+  CHROME_SANDBOX="/opt/VoiceLab/chrome-sandbox"
+fi
+if [ ! -f "$CHROME_SANDBOX" ] && [ -f "/opt/OpenWhispr/chrome-sandbox" ]; then
   CHROME_SANDBOX="/opt/OpenWhispr/chrome-sandbox"
 fi
 if [ -f "$CHROME_SANDBOX" ]; then

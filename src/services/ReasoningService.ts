@@ -65,11 +65,14 @@ class ReasoningService extends BaseReasoningService {
     config: ReasoningConfig = {}
   ): Promise<string> {
     const trimmedModel = model?.trim?.() || "";
-    const provider = config.lanUrl ? "lan" : config.provider || getModelProvider(trimmedModel);
-    if (!trimmedModel && provider !== "openwhispr") throw new Error("No reasoning model selected");
+    const configuredProvider = config.lanUrl
+      ? "lan"
+      : config.provider || getModelProvider(trimmedModel);
+    const provider = configuredProvider === "openwhispr" ? "voicelab" : configuredProvider;
+    if (!trimmedModel && provider !== "voicelab") throw new Error("No reasoning model selected");
 
-    if (provider === "openwhispr") {
-      const handler = (await import("./ai/inferenceProviders/openwhispr")).openwhisprProvider;
+    if (provider === "voicelab") {
+      const handler = (await import("./ai/inferenceProviders/voicelab")).voiceLabProvider;
       return handler.call({
         text,
         model: trimmedModel,
@@ -81,7 +84,9 @@ class ReasoningService extends BaseReasoningService {
           getCustomDictionary: this.getCustomDictionary.bind(this),
           getPreferredLanguage: this.getPreferredLanguage.bind(this),
           getUiLanguage: this.getUiLanguage.bind(this),
-          callChatCompletionsApi: async () => { throw new Error("Unavailable"); },
+          callChatCompletionsApi: async () => {
+            throw new Error("Unavailable");
+          },
           calculateMaxTokens: this.calculateMaxTokens.bind(this),
         },
       });

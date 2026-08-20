@@ -64,7 +64,7 @@ import {
   consumePendingInvitationToken,
   clearPendingInvitationToken,
 } from "../utils/pendingInvitationToken";
-import { WORKSPACES_ENABLED } from "../lib/features";
+import { VOICELAB_AI_ENABLED, WORKSPACES_ENABLED } from "../lib/features";
 
 const platform = getCachedPlatform();
 
@@ -945,7 +945,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
                 }}
               />
             )}
-            {activeView === "chat" && (
+            {VOICELAB_AI_ENABLED && activeView === "chat" && (
               <Suspense fallback={<PanelLoadingFallback />}>
                 <ChatView />
               </Suspense>

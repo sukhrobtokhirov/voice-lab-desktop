@@ -4,7 +4,7 @@
 export function buildNoteFormattingOverrides(noteFormatting, isCloudMode, customApiKey) {
   if (isCloudMode) {
     return {
-      provider: "openwhispr",
+      provider: "voicelab",
       baseUrl: undefined,
       customApiKey: undefined,
       lanUrl: undefined,

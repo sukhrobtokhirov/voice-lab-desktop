@@ -56,27 +56,40 @@ test("accepts only registered top-level application frames", () => {
     assert.doesNotThrow(() => assertTrustedIpcSender(event, "paste-text", manager));
 
     assert.throws(
-      () => assertTrustedIpcSender({ ...event, senderFrame: { url: event.senderFrame.url } }, "paste-text", manager),
+      () =>
+        assertTrustedIpcSender(
+          { ...event, senderFrame: { url: event.senderFrame.url } },
+          "paste-text",
+          manager
+        ),
       { code: "IPC_SUBFRAME_FORBIDDEN" }
     );
     event.senderFrame.url = "https://evil.test/";
-    assert.throws(
-      () => assertTrustedIpcSender(event, "paste-text", manager),
-      { code: "IPC_ORIGIN_FORBIDDEN" }
-    );
+    assert.throws(() => assertTrustedIpcSender(event, "paste-text", manager), {
+      code: "IPC_ORIGIN_FORBIDDEN",
+    });
   });
 });
 
 test("groups generic credential writes and auth into control-panel capabilities", () => {
   withSecurity(({ assertTrustedIpcSender }) => {
     const { event, manager, sender } = fixture();
-    assert.throws(
-      () => assertTrustedIpcSender(event, "provider-save-credential", manager),
-      { code: "IPC_CAPABILITY_FORBIDDEN" }
-    );
+    assert.throws(() => assertTrustedIpcSender(event, "provider-save-credential", manager), {
+      code: "IPC_CAPABILITY_FORBIDDEN",
+    });
     sender._window = manager.controlPanelWindow;
     assert.doesNotThrow(() => assertTrustedIpcSender(event, "provider-save-credential", manager));
     assert.doesNotThrow(() => assertTrustedIpcSender(event, "auth-start-browser", manager));
+    assert.doesNotThrow(() => assertTrustedIpcSender(event, "arm-display-media-capture", manager));
+  });
+});
+
+test("display-media grants can only be armed by the control panel", () => {
+  withSecurity(({ assertTrustedIpcSender }) => {
+    const { event, manager } = fixture();
+    assert.throws(() => assertTrustedIpcSender(event, "arm-display-media-capture", manager), {
+      code: "IPC_CAPABILITY_FORBIDDEN",
+    });
   });
 });
 
@@ -85,9 +98,32 @@ test("raw credential reads are unavailable to auxiliary windows", () => {
     const { event, manager, sender } = fixture();
     manager.notificationWindow = { name: "notification" };
     sender._window = manager.notificationWindow;
-    assert.throws(
-      () => assertTrustedIpcSender(event, "get-openai-key", manager),
-      { code: "IPC_CAPABILITY_FORBIDDEN" }
-    );
+    assert.throws(() => assertTrustedIpcSender(event, "get-openai-key", manager), {
+      code: "IPC_CAPABILITY_FORBIDDEN",
+    });
+  });
+});
+
+test("secure event listeners reject untrusted senders before dispatch", () => {
+  withSecurity(({ createSecureListener }) => {
+    const { event, manager } = fixture();
+    let registered;
+    let calls = 0;
+    const ipcMain = {
+      on: (channel, listener) => {
+        assert.equal(channel, "meeting-transcription-send");
+        registered = listener;
+      },
+    };
+    createSecureListener(ipcMain, manager)("meeting-transcription-send", () => {
+      calls += 1;
+    });
+
+    registered(event, new ArrayBuffer(4), "mic");
+    assert.equal(calls, 1);
+
+    event.senderFrame.url = "https://evil.test/";
+    registered(event, new ArrayBuffer(4), "mic");
+    assert.equal(calls, 1);
   });
 });

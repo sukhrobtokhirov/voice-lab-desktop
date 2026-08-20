@@ -7,9 +7,9 @@
 // 1. Strips non-target platform/arch binaries from onnxruntime-node
 //    (saves 150–180 MB per build).
 // 2. Wraps the Linux binary in a shell script that forces XWayland, reads
-//    user flags from ~/.config/open-whispr-flags.conf, and falls back to
-//    --no-sandbox where the Chromium sandbox cannot work (AppImage/tar.gz
-//    on distros that restrict unprivileged user namespaces).
+//    user flags from ~/.config/open-whispr-flags.conf, and fails closed when
+//    the Chromium sandbox is unavailable unless the user explicitly opts in
+//    to an insecure diagnostic launch.
 // 3. Fails the build if required binaries (ffmpeg-static, ps-list vendor exe,
 //    onnx worker script) are missing from app.asar.unpacked/.
 
@@ -143,6 +143,25 @@ function registerMacResourceBinariesForSigning(context) {
   console.log(
     `  afterPack: registered ${frameworks.length} framework(s) and ${machOFiles.length} loose Mach-O file(s) under Contents/Resources for signing`
   );
+}
+
+function enforceMacTransportSecurity(context) {
+  if (context.electronPlatformName !== "darwin") return;
+  const infoPlist = path.join(resolveAppPath(context), "Contents", "Info.plist");
+  execFileSync("/usr/libexec/PlistBuddy", [
+    "-c",
+    "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads false",
+    infoPlist,
+  ]);
+  const value = execFileSync(
+    "/usr/libexec/PlistBuddy",
+    ["-c", "Print :NSAppTransportSecurity:NSAllowsArbitraryLoads", infoPlist],
+    { encoding: "utf8" }
+  ).trim();
+  if (value !== "false") {
+    throw new Error("afterPack: macOS arbitrary network loads remain enabled");
+  }
+  console.log("  afterPack: enforced macOS transport security");
 }
 
 // ---------------------------------------------------------------------------
@@ -504,6 +523,7 @@ exports.default = async function (context) {
   verifyMeetingAecHelper(context);
   verifyUnpackedBinaries(context);
   const sidecarCount = verifyOwnedSidecars(context);
+  enforceMacTransportSecurity(context);
   registerMacResourceBinariesForSigning(context);
   assertPackagedResourcesAreSecretFree(context);
   writePackageVerification(context, sidecarCount);
@@ -512,3 +532,4 @@ exports.default = async function (context) {
 exports.configuredPreloadPaths = configuredPreloadPaths;
 exports.assertPackagedPreloads = assertPackagedPreloads;
 exports.writePackageVerification = writePackageVerification;
+exports.enforceMacTransportSecurity = enforceMacTransportSecurity;

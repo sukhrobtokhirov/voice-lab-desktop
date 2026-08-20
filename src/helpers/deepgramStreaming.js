@@ -697,7 +697,7 @@ class DeepgramStreaming {
                   : Date.now();
               this.onFinalTranscript?.(this.accumulatedText, startedAt);
               debugLogger.debug("Deepgram final transcript", {
-                text: trimmed.slice(0, 100),
+                textLength: trimmed.length,
                 totalAccumulated: this.accumulatedText.length,
               });
             }

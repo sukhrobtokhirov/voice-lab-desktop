@@ -402,12 +402,12 @@ class AssemblyAiStreaming {
                   this.accumulatedText = this.turns.map((turn) => turn.text).join(" ");
                   this.onFinalTranscript?.(this.accumulatedText, previousTurn.startedAt);
                   debugLogger.debug("AssemblyAI formatted turn update applied", {
-                    text: trimmedTranscript.slice(0, 100),
+                    textLength: trimmedTranscript.length,
                     totalAccumulated: this.accumulatedText.length,
                   });
                 } else {
                   debugLogger.debug("AssemblyAI duplicate turn ignored", {
-                    text: trimmedTranscript.slice(0, 100),
+                    textLength: trimmedTranscript.length,
                   });
                 }
                 break;
@@ -425,7 +425,7 @@ class AssemblyAiStreaming {
               this.accumulatedText = this.turns.map((turn) => turn.text).join(" ");
               this.onFinalTranscript?.(this.accumulatedText, speechTimestamp);
               debugLogger.debug("AssemblyAI final transcript (end_of_turn)", {
-                text: message.transcript.slice(0, 100),
+                textLength: message.transcript.length,
                 totalAccumulated: this.accumulatedText.length,
               });
             } else if (message.turn_is_formatted) {

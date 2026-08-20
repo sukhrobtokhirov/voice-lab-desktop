@@ -15,12 +15,20 @@ if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
   FLAGS+=(--ozone-platform=x11)
 fi
 
-# Chromium needs unprivileged user namespaces (restricted since Ubuntu 23.10)
-# or a root-owned setuid chrome-sandbox; with neither it aborts at launch.
+# Chromium needs unprivileged user namespaces (restricted on some distributions)
+# or a root-owned setuid chrome-sandbox. Never silently drop the sandbox: users
+# who understand the risk must opt in explicitly for a diagnostic launch.
 if ! { [ "$(stat -c %u "$HERE/chrome-sandbox" 2>/dev/null)" = "0" ] && [ -u "$HERE/chrome-sandbox" ] && [ -x "$HERE/chrome-sandbox" ]; }; then
   if command -v unshare >/dev/null 2>&1 && ! unshare --user --map-root-user true >/dev/null 2>&1; then
-    echo "${binaryName}: user namespaces are restricted, starting with --no-sandbox" >&2
-    FLAGS+=(--no-sandbox)
+    if [ "\${VOICELAB_ALLOW_NO_SANDBOX:-}" = "1" ]; then
+      echo "${binaryName}: WARNING: Chromium sandbox disabled by explicit VOICELAB_ALLOW_NO_SANDBOX=1" >&2
+      FLAGS+=(--no-sandbox)
+    else
+      echo "${binaryName}: Chromium sandbox is unavailable; refusing to start insecurely." >&2
+      echo "Enable unprivileged user namespaces or install a root-owned setuid chrome-sandbox." >&2
+      echo "For one diagnostic launch only, set VOICELAB_ALLOW_NO_SANDBOX=1." >&2
+      exit 78
+    fi
   fi
 fi
 

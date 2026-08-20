@@ -5,27 +5,28 @@ const DBUS_SERVICE_NAME = "com.openwhispr.App";
 const DBUS_OBJECT_PATH = "/com/openwhispr/App";
 const DBUS_INTERFACE = "com.openwhispr.App";
 
-// Per-slot gsettings paths and display names
+// Keep the existing gsettings paths and D-Bus identifiers so installed shortcuts
+// continue working; only their user-visible labels use the current product name.
 const SLOT_CONFIG = {
   dictation: {
     path: "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/openwhispr/",
-    name: "OpenWhispr Toggle",
+    name: "VoiceLab Toggle",
   },
   agent: {
     path: "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/openwhispr-agent/",
-    name: "OpenWhispr Agent",
+    name: "VoiceLab Agent",
   },
   meeting: {
     path: "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/openwhispr-meeting/",
-    name: "OpenWhispr Meeting",
+    name: "VoiceLab Meeting",
   },
   voiceAgent: {
     path: "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/openwhispr-voice-agent/",
-    name: "OpenWhispr Voice Agent",
+    name: "VoiceLab Voice Agent",
   },
   translation: {
     path: "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/openwhispr-translation/",
-    name: "OpenWhispr Translation",
+    name: "VoiceLab Translation",
   },
 };
 

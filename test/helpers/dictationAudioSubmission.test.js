@@ -37,6 +37,6 @@ test("all locally detected non-speech is rejected before cloud upload", () => {
   assert.match(processAudio, /if \(speechGateDecision\.skip\)/);
   assert.ok(
     processAudio.indexOf("if (speechGateDecision.skip)") <
-      processAudio.indexOf("this.processWithOpenWhisprCloud")
+      processAudio.indexOf("this.processWithVoiceLabCloud")
   );
 });

@@ -59,13 +59,16 @@ class DebugLogger {
     try {
       const logsDir = path.join(app.getPath("userData"), "logs");
       if (!fs.existsSync(logsDir)) {
-        fs.mkdirSync(logsDir, { recursive: true });
+        fs.mkdirSync(logsDir, { recursive: true, mode: 0o700 });
       }
+      try {
+        fs.chmodSync(logsDir, 0o700);
+      } catch {}
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       this.logFile = path.join(logsDir, `debug-${timestamp}.log`);
 
-      this.logStream = fs.createWriteStream(this.logFile, { flags: "a" });
+      this.logStream = fs.createWriteStream(this.logFile, { flags: "a", mode: 0o600 });
       this.fileLoggingEnabled = true;
       this.fileLoggingPending = false;
 
@@ -102,7 +105,9 @@ class DebugLogger {
       return argLevel;
     }
 
-    const envLevel = normalizeLevel(process.env.OPENWHISPR_LOG_LEVEL || process.env.LOG_LEVEL);
+    const envLevel = normalizeLevel(
+      process.env.VOICELAB_LOG_LEVEL || process.env.OPENWHISPR_LOG_LEVEL || process.env.LOG_LEVEL
+    );
     if (envLevel) {
       return envLevel;
     }
@@ -369,15 +374,9 @@ class DebugLogger {
     this.debug(
       "Starting process",
       {
-        command,
-        args,
-        cwd: options.cwd || process.cwd(),
-        env: {
-          FFMPEG_PATH: options.env?.FFMPEG_PATH,
-          FFMPEG_EXECUTABLE: options.env?.FFMPEG_EXECUTABLE,
-          FFMPEG_BINARY: options.env?.FFMPEG_BINARY,
-          PATH_preview: options.env?.PATH?.substring(0, 200) + "...",
-        },
+        command: path.basename(String(command || "unknown")),
+        argCount: Array.isArray(args) ? args.length : 0,
+        hasCustomCwd: Boolean(options.cwd),
       },
       "process"
     );
@@ -386,9 +385,11 @@ class DebugLogger {
   logProcessOutput(processName, type, data) {
     if (!this.isDebugEnabled()) return;
 
-    const output = data.toString().trim();
-    if (output) {
-      this.debug(`${processName} ${type}`, output, "process");
+    const byteLength = Buffer.isBuffer(data)
+      ? data.byteLength
+      : Buffer.byteLength(String(data || ""));
+    if (byteLength > 0) {
+      this.debug(`${processName} ${type}`, { byteLength }, "process");
     }
   }
 

@@ -34,6 +34,8 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
               {children}
             </a>
           ),
+          img: ({ alt }) =>
+            alt ? <span className="text-muted-foreground italic">{alt}</span> : null,
           code: ({ children }) => (
             <code className="bg-black/10 px-1 py-0.5 rounded text-xs font-mono">{children}</code>
           ),

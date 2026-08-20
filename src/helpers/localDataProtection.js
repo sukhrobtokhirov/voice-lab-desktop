@@ -70,6 +70,11 @@ const CORE_DEFINITIONS = [
       value: (row, plaintext) => normalizeDictionaryValue(plaintext.word),
     },
   },
+  {
+    table: "google_calendar_tokens",
+    fields: ["access_token", "refresh_token"],
+    identity: (row) => row.google_email,
+  },
 ];
 
 const SYNC_DEFINITIONS = [

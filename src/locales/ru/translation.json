@@ -1155,7 +1155,7 @@
   "settingsPage": {
     "account": {
       "voiceLabAccount": {
-        "sectionDescription": "VoiceLab Cloud использует ваш аккаунт и общий кошелёк AI Credits.",
+        "sectionDescription": "VoiceLab Cloud использует вашу подписку VoiceLab.",
         "label": "Аккаунт VoiceLab",
         "description": "Войдите один раз; отдельный API-ключ для речи не нужен.",
         "openSpace": "Открыть VoiceLab",
@@ -1425,7 +1425,7 @@
       "open": "Открыть",
       "removeModels": {
         "confirmText": "Удалить модели",
-        "description": "Будут удалены все локально кешированные модели Whisper ({{path}}), что освободит дисковое пространство. Вы сможете скачать их снова в выборе моделей.",
+        "description": "Будут удалены все локально кешированные речевые модели, что освободит место на диске. Их можно будет снова скачать в выборе моделей.",
         "failedDescription": "Произошла ошибка при удалении моделей. Попробуйте ещё раз.",
         "failedDescriptionShort": "Не удалось удалить кешированные модели.",
         "failedTitle": "Не удалось удалить модели",
@@ -3091,14 +3091,14 @@
       "more": "Ещё"
     },
     "wallet": {
-      "title": "Кошелёк AI Credits",
-      "shared": "Один баланс для всех продуктов VoiceLab",
-      "balance": "Баланс",
-      "available": "Доступно",
-      "reserved": "Зарезервировано",
-      "unavailable": "Кошелёк временно недоступен.",
+      "title": "Тариф и использование VoiceLab",
+      "shared": "Тариф и оплата управляются на сайте VoiceLab.",
+      "balance": "Использовано сегодня",
+      "available": "Осталось сегодня",
+      "reserved": "Дневной лимит",
+      "unavailable": "Данные об использовании пока недоступны.",
       "updated": "Обновлено в {{time}}",
-      "live": "Текущий баланс",
+      "live": "Данные появятся после следующей диктовки.",
       "manage": "Управление биллингом"
     },
     "creditShortage": {
@@ -3166,7 +3166,7 @@
       },
       "ready": {
         "title": "Готово",
-        "account": "Аккаунт VoiceLab и кошелёк AI Credits подключены.",
+        "account": "Аккаунт VoiceLab подключён.",
         "local": "Выбрана локальная транскрипция.",
         "provider": "Откройте расширенные настройки и подключите провайдера.",
         "start": "Начать диктовку"
@@ -3205,7 +3205,7 @@
     },
     "settings": {
       "account": "Аккаунт и кредиты",
-      "accountDescription": "Профиль, сессия и кошелёк AI Credits",
+      "accountDescription": "Профиль, защищённая сессия и оплата",
       "dictation": "Диктовка",
       "dictationDescription": "Язык, микрофон и вставка текста",
       "shortcuts": "Горячие клавиши",
@@ -3224,7 +3224,7 @@
       "status": "Сессия",
       "protected": "Активна и защищена",
       "signedOut": "Вход не выполнен",
-      "signedOutDescription": "Войдите, чтобы использовать VoiceLab Cloud и кошелёк AI Credits."
+      "signedOutDescription": "Войдите, чтобы использовать VoiceLab Cloud."
     }
   }
 }

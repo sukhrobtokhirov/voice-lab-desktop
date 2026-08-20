@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { ONBOARDING_STEP_KEY } from "../constants/onboarding";
 
 // Restart the onboarding flow from the cloud-migration step (used when a
-// settings panel needs the user to sign in for OpenWhispr Cloud).
+// settings panel needs the user to sign in for VoiceLab Cloud).
 export function useStartOnboarding() {
   return useCallback(() => {
     localStorage.setItem("pendingCloudMigration", "true");

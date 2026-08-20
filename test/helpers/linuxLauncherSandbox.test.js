@@ -53,17 +53,30 @@ function launchedArgs(ctx) {
 }
 
 test(
-  "appends --no-sandbox before user args when chrome-sandbox is not setuid root and the userns probe fails",
+  "fails closed when chrome-sandbox is not setuid root and the userns probe fails",
   { skip: !isLinux },
   () => {
     const ctx = setupLauncher();
     const res = runLauncher(ctx, { unshareExit: 1, args: ["--user-arg"] });
 
-    assert.equal(res.status, 0, res.stderr);
-    assert.match(res.stderr, /--no-sandbox/);
-    assert.deepEqual(launchedArgs(ctx), ["--no-sandbox", "--user-arg"]);
+    assert.equal(res.status, 78, res.stderr);
+    assert.match(res.stderr, /refusing to start insecurely/);
+    assert.equal(fs.existsSync(ctx.argsFile), false);
   }
 );
+
+test("requires an explicit diagnostic opt-in to disable the sandbox", { skip: !isLinux }, () => {
+  const ctx = setupLauncher();
+  const res = runLauncher(ctx, {
+    unshareExit: 1,
+    env: { VOICELAB_ALLOW_NO_SANDBOX: "1" },
+    args: ["--user-arg"],
+  });
+
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(res.stderr, /disabled by explicit/);
+  assert.deepEqual(launchedArgs(ctx), ["--no-sandbox", "--user-arg"]);
+});
 
 test("keeps the sandbox when user namespaces are available", { skip: !isLinux }, () => {
   const ctx = setupLauncher();
@@ -108,7 +121,7 @@ test("keeps the sandbox when unshare is unavailable", { skip: !isLinux }, () => 
 });
 
 test(
-  "orders the XWayland flag, the sandbox fallback, and flags-file entries before user args",
+  "orders the XWayland flag, explicit sandbox override, and flags-file entries before user args",
   { skip: !isLinux },
   () => {
     const ctx = setupLauncher();
@@ -118,7 +131,7 @@ test(
 
     const res = runLauncher(ctx, {
       unshareExit: 1,
-      env: { XDG_SESSION_TYPE: "wayland" },
+      env: { XDG_SESSION_TYPE: "wayland", VOICELAB_ALLOW_NO_SANDBOX: "1" },
       args: ["--user-arg"],
     });
 

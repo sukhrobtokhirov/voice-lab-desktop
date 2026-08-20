@@ -45,14 +45,16 @@ const ELECTRON_TO_HYPRLAND_KEY = {
 const VALID_HOTKEY_PATTERN =
   /^((CommandOrControl|CmdOrCtrl|Control|Ctrl|Alt|Option|Shift|Super|Meta|Win|Command|Cmd)(\+(CommandOrControl|CmdOrCtrl|Control|Ctrl|Alt|Option|Shift|Super|Meta|Win|Command|Cmd))*(\+)?)?(F([1-9]|1[0-9]|2[0-4])|[A-Za-z0-9]|Space|Escape|Tab|Backspace|Delete|Insert|Home|End|PageUp|PageDown|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Enter|PrintScreen|ScrollLock|Pause|Backquote|`)?$/i;
 
-const BINDS_FILENAME = "openwhispr-binds.conf";
+const BINDS_FILENAME = "voicelab-binds.conf";
+const LEGACY_BINDS_FILENAME = "openwhispr-binds.conf";
 const MANAGED_HEADER_LINES = [
-  "# OpenWhispr keybinds (managed automatically)",
+  "# VoiceLab keybinds (managed automatically)",
   "# If you delete this file, also remove the matching source line from your Hyprland config.",
 ];
+const LEGACY_MANAGED_HEADER = "# OpenWhispr keybinds (managed automatically)";
 
 function isManagedHeaderLine(line) {
-  return MANAGED_HEADER_LINES.includes(line.trim());
+  return MANAGED_HEADER_LINES.includes(line.trim()) || line.trim() === LEGACY_MANAGED_HEADER;
 }
 
 function buildManagedBindsContent(lines = []) {
@@ -77,6 +79,18 @@ function getHyprlandConfPath() {
 
 function getBindsFilePath() {
   return path.join(getHyprConfigDir(), BINDS_FILENAME);
+}
+
+function migrateLegacyBindsFile() {
+  const bindsFile = getBindsFilePath();
+  const legacyFile = path.join(getHyprConfigDir(), LEGACY_BINDS_FILENAME);
+  if (!fs.existsSync(bindsFile) && fs.existsSync(legacyFile)) {
+    try {
+      fs.renameSync(legacyFile, bindsFile);
+    } catch (err) {
+      debugLogger.log("[HyprlandShortcut] Could not migrate legacy binds file:", err.message);
+    }
+  }
 }
 
 let dbus = null;
@@ -264,6 +278,7 @@ class HyprlandShortcutManager {
   }
 
   _writeBindToConfig(bindLine) {
+    migrateLegacyBindsFile();
     const bindsFile = getBindsFilePath();
     fs.mkdirSync(path.dirname(bindsFile), { recursive: true });
 
@@ -287,6 +302,7 @@ class HyprlandShortcutManager {
   }
 
   _removeBindFromConfig() {
+    migrateLegacyBindsFile();
     const bindsFile = getBindsFilePath();
     let content = "";
     try {
@@ -319,6 +335,15 @@ class HyprlandShortcutManager {
     const sourceLine = `source = ./${BINDS_FILENAME}`;
     if (content.includes(`./${BINDS_FILENAME}`)) return;
 
+    if (content.includes(`./${LEGACY_BINDS_FILENAME}`)) {
+      const migratedContent = content.replaceAll(
+        `./${LEGACY_BINDS_FILENAME}`,
+        `./${BINDS_FILENAME}`
+      );
+      fs.writeFileSync(mainConfig, migratedContent, "utf-8");
+      return;
+    }
+
     const separator = content.length > 0 && !content.endsWith("\n") ? "\n" : "";
     fs.appendFileSync(mainConfig, `${separator}${sourceLine}\n`, "utf-8");
     debugLogger.log("[HyprlandShortcut] Added source directive to hyprland.conf");
@@ -350,7 +375,7 @@ class HyprlandShortcutManager {
    * Register a keybinding in Hyprland using hyprctl keyword bind.
    * The binding executes a dbus-send command that calls our Toggle() method.
    *
-   * Also writes the bind to openwhispr-binds.conf (sourced from hyprland.conf)
+   * Also writes the bind to voicelab-binds.conf (sourced from hyprland.conf)
    * so it survives `hyprctl reload`.
    */
   async registerKeybinding(hotkey) {
@@ -371,7 +396,7 @@ class HyprlandShortcutManager {
     }
 
     try {
-      // First unregister any existing OpenWhispr binding if the hotkey changed.
+      // First unregister any existing VoiceLab binding if the hotkey changed.
       if (this.currentBinding && this.currentBinding !== converted.bindKey) {
         await this.unregisterKeybinding();
       }

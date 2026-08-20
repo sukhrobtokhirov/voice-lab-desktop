@@ -4,7 +4,8 @@ const path = require("path");
 const { app, safeStorage } = require("electron");
 const debugLogger = require("./debugLogger");
 
-const SERVICE = "OpenWhispr";
+const SERVICE = "VoiceLab";
+const LEGACY_SERVICE = "OpenWhispr";
 const ACCOUNT = "secrets-master-key";
 const ALGO = "aes-256-gcm";
 const IV_LEN = 12;
@@ -71,16 +72,44 @@ function _initKeychain() {
     try {
       stored = entry.getPassword();
     } catch {}
-    if (stored) {
-      const key = Buffer.from(stored, "base64");
-      if (key.length !== KEY_LEN) throw new Error("stored key length invalid");
-      masterKey = key;
-    } else {
+
+    let migratedLegacyKey = false;
+    if (!stored) {
+      try {
+        const legacyEntry = new Entry(LEGACY_SERVICE, ACCOUNT);
+        stored = legacyEntry.getPassword();
+        migratedLegacyKey = Boolean(stored);
+      } catch {}
+    }
+
+    if (!stored) {
       masterKey = crypto.randomBytes(KEY_LEN);
-      entry.setPassword(masterKey.toString("base64"));
+      stored = masterKey.toString("base64");
+      entry.setPassword(stored);
       // Write the safeStorage backup only when the key is first generated.
       // Re-writing on every launch invokes a second Keychain backend on macOS.
       _saveMasterKeyBackup();
+      return true;
+    }
+
+    const key = Buffer.from(stored, "base64");
+    if (key.length !== KEY_LEN) throw new Error("stored key length invalid");
+    masterKey = key;
+
+    if (migratedLegacyKey) {
+      try {
+        entry.setPassword(stored);
+        _saveMasterKeyBackup();
+        debugLogger.info("migrated legacy keychain key to VoiceLab", {}, "secretCrypto");
+      } catch (error) {
+        // The legacy entry remains intact and usable on this launch. Do not
+        // delete it until the canonical write has succeeded on a later launch.
+        debugLogger.warn(
+          "could not persist migrated VoiceLab keychain key",
+          { error: error?.message },
+          "secretCrypto"
+        );
+      }
     }
     return true;
   } catch (error) {

@@ -3,6 +3,7 @@ const Module = require("node:module");
 const test = require("node:test");
 
 const INSTALLATION_ID = "0191f85b-7b5d-7f2a-8d71-2f5ea87cdf77";
+const REQUEST_ID = `dau_${"r".repeat(43)}`;
 
 function jsonResponse(body, status = 200) {
   return new Response(body == null ? null : JSON.stringify(body), { status });
@@ -12,6 +13,7 @@ function loadDesktopAuthManager(initialSession) {
   const modulePath = require.resolve("../../src/helpers/desktopAuthManager");
   delete require.cache[modulePath];
   let storedSession = initialSession ? { ...initialSession } : null;
+  let pending = null;
   const tokenStore = {
     getInstallationId: () => INSTALLATION_ID,
     getSession: () => (storedSession ? { ...storedSession } : null),
@@ -21,8 +23,17 @@ function loadDesktopAuthManager(initialSession) {
     clearSession: () => {
       storedSession = null;
     },
-    getPending: () => null,
-    clearPending: () => {},
+    getPending: () => (pending ? { ...pending } : null),
+    savePending: (value) => {
+      pending = { ...value };
+    },
+    clearPending: () => {
+      pending = null;
+    },
+    completeAuthorization: (value) => {
+      storedSession = { ...value };
+      pending = null;
+    },
   };
   const originalLoad = Module._load;
   Module._load = function mockedLoad(request, parent, isMain) {
@@ -35,6 +46,7 @@ function loadDesktopAuthManager(initialSession) {
     return {
       DesktopAuthManager: require(modulePath),
       getSession: () => storedSession,
+      getPending: () => pending,
     };
   } finally {
     Module._load = originalLoad;
@@ -162,4 +174,147 @@ test("logout always clears local credentials and reports failed network revocati
   });
   assert.equal(getSession(), null);
   assert.equal(manager.getPublicStatus().status, "signed-out");
+});
+
+test("refresh canonicalizes stored Go user aliases without calling me", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const session = {
+    ...initialSession(),
+    user: {
+      uuid: "user-alias-9",
+      username: "alias@example.com",
+      display_name: "Alias User",
+    },
+  };
+  const { DesktopAuthManager, getSession } = loadDesktopAuthManager(session);
+  const manager = managerFrom(DesktopAuthManager);
+  const requests = [];
+  global.fetch = async (url) => {
+    requests.push(url);
+    return jsonResponse({
+      access_token: "new-access-token-abcdefghijklmnopqrstuvwxyz",
+      refresh_token: `refresh-new-${"n".repeat(40)}`,
+      expires_in: 900,
+      refresh_expires_in: 3600,
+      session_id: session.sessionId,
+    });
+  };
+
+  const status = await manager.refreshSession({ force: true });
+
+  assert.equal(status.status, "authenticated");
+  assert.deepEqual(
+    {
+      id: status.user.id,
+      email: status.user.email,
+      name: status.user.name,
+    },
+    {
+      id: "user-alias-9",
+      email: "alias@example.com",
+      name: "Alias User",
+    }
+  );
+  assert.deepEqual(getSession().user, status.user);
+  assert.deepEqual(requests, ["https://api.voicelab.uz/api/v2/auth/desktop/token"]);
+});
+
+test("logout clears locally before revoke and a late refresh cannot restore the session", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const session = initialSession();
+  const { DesktopAuthManager, getSession } = loadDesktopAuthManager(session);
+  const manager = managerFrom(DesktopAuthManager);
+  let resolveRefresh;
+  let resolveLogout;
+  let logoutRequest;
+  global.fetch = async (url, init) => {
+    if (url.endsWith("/desktop/token")) {
+      return new Promise((resolve) => {
+        resolveRefresh = () =>
+          resolve(
+            jsonResponse({
+              access_token: "late-access-token-abcdefghijklmnopqrstuvwxyz",
+              refresh_token: `refresh-late-${"l".repeat(40)}`,
+              user: session.user,
+            })
+          );
+      });
+    }
+    if (url.endsWith("/desktop/logout")) {
+      logoutRequest = { url, init };
+      return new Promise((resolve) => {
+        resolveLogout = () => resolve(jsonResponse({ success: true }));
+      });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  const refresh = manager.refreshSession({ force: true, validateUser: false });
+  await new Promise((resolve) => setImmediate(resolve));
+  const logout = manager.logout();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(getSession(), null);
+  assert.equal(manager.getPublicStatus().status, "signed-out");
+  assert.equal(logoutRequest.init.headers.Authorization, `Bearer ${session.accessToken}`);
+  assert.equal(JSON.parse(logoutRequest.init.body).refresh_token, session.refreshToken);
+
+  resolveLogout();
+  assert.deepEqual(await logout, { success: true, revoked: true });
+  resolveRefresh();
+  await assert.rejects(refresh, (error) => error.code === "AUTH_OPERATION_SUPERSEDED");
+  assert.equal(getSession(), null);
+  assert.equal(manager.getPublicStatus().status, "signed-out");
+});
+
+test("a new authorization supersedes an in-flight refresh without overwriting its session", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const session = initialSession();
+  const { DesktopAuthManager, getPending, getSession } = loadDesktopAuthManager(session);
+  const manager = managerFrom(DesktopAuthManager);
+  let resolveRefresh;
+  global.fetch = async (url) => {
+    if (url.endsWith("/desktop/token")) {
+      return new Promise((resolve) => {
+        resolveRefresh = () =>
+          resolve(
+            jsonResponse({
+              access_token: "late-access-token-abcdefghijklmnopqrstuvwxyz",
+              refresh_token: `refresh-late-${"l".repeat(40)}`,
+              user: session.user,
+            })
+          );
+      });
+    }
+    if (url.endsWith("/authorizations")) {
+      return jsonResponse(
+        {
+          authorization_request_id: REQUEST_ID,
+          authorization_url: `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`,
+        },
+        201
+      );
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  const refresh = manager.refreshSession({ force: true, validateUser: false });
+  await new Promise((resolve) => setImmediate(resolve));
+  const authorization = await manager.startAuthorization();
+  resolveRefresh();
+
+  assert.equal(authorization.status, "waiting-for-browser");
+  assert.equal(getPending().authorizationRequestId, REQUEST_ID);
+  await assert.rejects(refresh, (error) => error.code === "AUTH_OPERATION_SUPERSEDED");
+  assert.equal(getSession().accessToken, session.accessToken);
+  assert.equal(manager.getPublicStatus().status, "waiting-for-browser");
 });

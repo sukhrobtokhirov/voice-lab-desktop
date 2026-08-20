@@ -97,6 +97,12 @@ const QT_KEYS = {
 };
 
 const COMPONENT_NAME = "openwhispr";
+const PRODUCT_NAME = "VoiceLab";
+const LEGACY_PRODUCT_NAME = "OpenWhispr";
+
+function buildActionId(slotName) {
+  return [COMPONENT_NAME, slotName, PRODUCT_NAME, `${PRODUCT_NAME} ${slotName}`];
+}
 
 class KDEShortcutManager {
   constructor() {
@@ -213,8 +219,10 @@ class KDEShortcutManager {
     // Map friendly names back to slot names
     const friendlyToSlot = {};
     for (const slotName of this.registeredSlots) {
-      friendlyToSlot[`OpenWhispr ${slotName}`] = slotName;
-      friendlyToSlot[`OpenWhispr`] = "dictation"; // legacy compat
+      friendlyToSlot[`${PRODUCT_NAME} ${slotName}`] = slotName;
+      friendlyToSlot[`${LEGACY_PRODUCT_NAME} ${slotName}`] = slotName;
+      friendlyToSlot[PRODUCT_NAME] = "dictation";
+      friendlyToSlot[LEGACY_PRODUCT_NAME] = "dictation";
     }
     const slotName = friendlyToSlot[name];
     return slotName ? this.callbacks.get(slotName) : null;
@@ -248,7 +256,7 @@ class KDEShortcutManager {
     }
 
     // actionId: [componentUnique, actionUnique, componentFriendly, actionFriendly]
-    const actionId = [COMPONENT_NAME, slotName, "OpenWhispr", `OpenWhispr ${slotName}`];
+    const actionId = buildActionId(slotName);
 
     try {
       // Pre-registration conflict check via low-level D-Bus call
@@ -372,7 +380,7 @@ class KDEShortcutManager {
   async unregisterKeybinding(slotName = "dictation") {
     if (!this.kglobalaccel) return;
 
-    const actionId = [COMPONENT_NAME, slotName, "OpenWhispr", `OpenWhispr ${slotName}`];
+    const actionId = buildActionId(slotName);
 
     try {
       await new Promise((resolve, reject) => {
@@ -395,7 +403,7 @@ class KDEShortcutManager {
     // clean up stale registrations from dead processes anyway.
     const promises = [];
     for (const slotName of this.registeredSlots) {
-      const actionId = [COMPONENT_NAME, slotName, "OpenWhispr", `OpenWhispr ${slotName}`];
+      const actionId = buildActionId(slotName);
       try {
         promises.push(
           new Promise((resolve, reject) => {

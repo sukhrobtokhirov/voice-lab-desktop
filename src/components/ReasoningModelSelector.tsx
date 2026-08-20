@@ -639,7 +639,7 @@ export default function ReasoningModelSelector({
                   <div className="space-y-2">
                     <div className="flex items-baseline justify-between">
                       <h4 className="font-medium text-foreground">{t("common.apiKey")}</h4>
-                      <GetApiKeyLink url="https://tinfoil.sh/inference?utm_source=referral&utm_campaign=openwhispr" />
+                      <GetApiKeyLink url="https://tinfoil.sh/inference?utm_source=referral&utm_campaign=voicelab" />
                     </div>
                     <ApiKeyInput
                       apiKey={tinfoilApiKey}
@@ -655,7 +655,7 @@ export default function ReasoningModelSelector({
                     <p className="text-xs text-muted-foreground">{t("reasoning.corti.euOnly")}</p>
                     <div className="flex items-baseline justify-between">
                       <h4 className="font-medium text-foreground">{t("common.apiKey")}</h4>
-                      <GetApiKeyLink url="https://www.corti.ai/?utm_source=referral&utm_campaign=openwhispr" />
+                      <GetApiKeyLink url="https://www.corti.ai/?utm_source=referral&utm_campaign=voicelab" />
                     </div>
                     <ApiKeyInput
                       apiKey={cortiApiKey}

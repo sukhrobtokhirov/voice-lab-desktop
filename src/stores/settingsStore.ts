@@ -878,6 +878,10 @@ const STALE_SECRET_LOCALSTORAGE_KEYS = [
   "customTranscriptionApiKey",
   "customReasoningApiKey",
   "cleanupCustomApiKey",
+  "noteFormattingCustomApiKey",
+  "translationCustomApiKey",
+  "chatAgentCustomApiKey",
+  "dictationAgentCustomApiKey",
   "bedrockAccessKeyId",
   "bedrockSecretAccessKey",
   "bedrockSessionToken",
@@ -1136,7 +1140,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   noteFormattingCloudMode: readString("noteFormattingCloudMode", ""),
   noteFormattingCloudBaseUrl: readString("noteFormattingCloudBaseUrl", ""),
   noteFormattingRemoteUrl: readString("noteFormattingRemoteUrl", ""),
-  noteFormattingCustomApiKey: readString("noteFormattingCustomApiKey", ""),
+  noteFormattingCustomApiKey: "",
 
   translationMode: (() => {
     const v = readString("translationMode", "openwhispr");
@@ -1155,7 +1159,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   translationCloudMode: readString("translationCloudMode", "openwhispr"),
   translationCloudBaseUrl: readString("translationCloudBaseUrl", ""),
   translationRemoteUrl: readString("translationRemoteUrl", ""),
-  translationCustomApiKey: readString("translationCustomApiKey", ""),
+  translationCustomApiKey: "",
   translationDisableThinking: readBoolean("translationDisableThinking", true),
   useDictationTranslation: readBoolean("useDictationTranslation", false),
   translationSourceLanguage: readString("translationSourceLanguage", "auto"),
@@ -1234,7 +1238,10 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setNoteFormattingCloudMode: createStringSetter("noteFormattingCloudMode"),
   setNoteFormattingCloudBaseUrl: createStringSetter("noteFormattingCloudBaseUrl"),
   setNoteFormattingRemoteUrl: createStringSetter("noteFormattingRemoteUrl"),
-  setNoteFormattingCustomApiKey: createStringSetter("noteFormattingCustomApiKey"),
+  setNoteFormattingCustomApiKey: createSecretSetter(
+    "noteFormattingCustomApiKey",
+    "cleanupCustom"
+  ),
 
   setTranslationMode: createStringSetter("translationMode") as (mode: InferenceMode) => void,
   setTranslationProvider: createStringSetter("translationProvider"),
@@ -1242,7 +1249,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setTranslationCloudMode: createStringSetter("translationCloudMode"),
   setTranslationCloudBaseUrl: createStringSetter("translationCloudBaseUrl"),
   setTranslationRemoteUrl: createStringSetter("translationRemoteUrl"),
-  setTranslationCustomApiKey: createStringSetter("translationCustomApiKey"),
+  setTranslationCustomApiKey: createSecretSetter("translationCustomApiKey", "cleanupCustom"),
   setTranslationDisableThinking: createBooleanSetter("translationDisableThinking"),
   setUseDictationTranslation: createBooleanSetter("useDictationTranslation"),
   setTranslationSourceLanguage: createStringSetter("translationSourceLanguage"),
@@ -1276,7 +1283,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   })(),
   chatAgentRemoteUrl: readString("chatAgentRemoteUrl", ""),
   chatAgentCloudBaseUrl: readString("chatAgentCloudBaseUrl", ""),
-  chatAgentCustomApiKey: readString("chatAgentCustomApiKey", ""),
+  chatAgentCustomApiKey: "",
 
   dictationAgentMode: (() => {
     const v = readString("dictationAgentMode", "openwhispr");
@@ -1295,7 +1302,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   dictationAgentCloudMode: readString("dictationAgentCloudMode", "openwhispr"),
   dictationAgentCloudBaseUrl: readString("dictationAgentCloudBaseUrl", ""),
   dictationAgentRemoteUrl: readString("dictationAgentRemoteUrl", ""),
-  dictationAgentCustomApiKey: readString("dictationAgentCustomApiKey", ""),
+  dictationAgentCustomApiKey: "",
 
   cleanupDisableThinking: readBoolean("cleanupDisableThinking", true),
   dictationAgentDisableThinking: readBoolean("dictationAgentDisableThinking", true),
@@ -1319,7 +1326,10 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setDictationAgentCloudMode: createStringSetter("dictationAgentCloudMode"),
   setDictationAgentCloudBaseUrl: createStringSetter("dictationAgentCloudBaseUrl"),
   setDictationAgentRemoteUrl: createStringSetter("dictationAgentRemoteUrl"),
-  setDictationAgentCustomApiKey: createStringSetter("dictationAgentCustomApiKey"),
+  setDictationAgentCustomApiKey: createSecretSetter(
+    "dictationAgentCustomApiKey",
+    "cleanupCustom"
+  ),
 
   setCleanupDisableThinking: createBooleanSetter("cleanupDisableThinking"),
   setDictationAgentDisableThinking: createBooleanSetter("dictationAgentDisableThinking"),
@@ -1837,7 +1847,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setChatAgentMode: createStringSetter("chatAgentMode") as (mode: InferenceMode) => void,
   setChatAgentCloudBaseUrl: createStringSetter("chatAgentCloudBaseUrl"),
   setChatAgentRemoteUrl: createStringSetter("chatAgentRemoteUrl"),
-  setChatAgentCustomApiKey: createStringSetter("chatAgentCustomApiKey"),
+  setChatAgentCustomApiKey: createSecretSetter("chatAgentCustomApiKey", "cleanupCustom"),
 
   updateTranscriptionSettings: (settings: Partial<TranscriptionSettings>) => {
     const s = useSettingsStore.getState();
@@ -2158,11 +2168,19 @@ export function setResolvedLLMConfig(
     if (value === undefined) continue;
     const storeKey = def.storeKeys[field as keyof InferenceScopeStoreKeys];
     if (!storeKey) continue;
-    // cleanupCustomApiKey is a secret kept in the OS secure store, not
-    // localStorage (which is stripped on startup). Route it through the
-    // dedicated setter so it survives restarts.
-    if (storeKey === "cleanupCustomApiKey") {
-      useSettingsStore.getState().setCleanupCustomApiKey(value as string);
+    // Custom provider credentials share one secure-store entry. None of them
+    // may be persisted in renderer localStorage.
+    const customSecretSetters = {
+      cleanupCustomApiKey: "setCleanupCustomApiKey",
+      noteFormattingCustomApiKey: "setNoteFormattingCustomApiKey",
+      translationCustomApiKey: "setTranslationCustomApiKey",
+      chatAgentCustomApiKey: "setChatAgentCustomApiKey",
+      dictationAgentCustomApiKey: "setDictationAgentCustomApiKey",
+    } as const;
+    const customSecretSetter = customSecretSetters[storeKey as keyof typeof customSecretSetters];
+    if (customSecretSetter) {
+      const setter = useSettingsStore.getState()[customSecretSetter];
+      (setter as (secret: string) => void)(value as string);
       continue;
     }
     if (isBrowser) {
@@ -2220,8 +2238,22 @@ export async function initializeSettings(): Promise<void> {
 
   if (window.electronAPI) {
     try {
+      const legacyCustomSecret = [
+        "cleanupCustomApiKey",
+        "customReasoningApiKey",
+        "noteFormattingCustomApiKey",
+        "translationCustomApiKey",
+        "chatAgentCustomApiKey",
+        "dictationAgentCustomApiKey",
+      ]
+        .map((key) => localStorage.getItem(key))
+        .find((value) => value && value !== STORED_SECRET_PLACEHOLDER);
       const status = await window.electronAPI.providerCredentialStatus?.();
       const configured = status?.credentials || {};
+      if (!configured.cleanupCustom && legacyCustomSecret) {
+        await window.electronAPI.providerSaveCredential?.("cleanupCustom", legacyCustomSecret);
+        configured.cleanupCustom = true;
+      }
       const placeholder = (credential: string) =>
         configured[credential] ? STORED_SECRET_PLACEHOLDER : "";
 
@@ -2239,6 +2271,10 @@ export async function initializeSettings(): Promise<void> {
         tinfoilApiKey: placeholder("tinfoil"),
         customTranscriptionApiKey: placeholder("customTranscription"),
         cleanupCustomApiKey: placeholder("cleanupCustom"),
+        noteFormattingCustomApiKey: placeholder("cleanupCustom"),
+        translationCustomApiKey: placeholder("cleanupCustom"),
+        chatAgentCustomApiKey: placeholder("cleanupCustom"),
+        dictationAgentCustomApiKey: placeholder("cleanupCustom"),
         bedrockAccessKeyId: placeholder("bedrockAccessKeyId"),
         bedrockSecretAccessKey: placeholder("bedrockSecretAccessKey"),
         bedrockSessionToken: placeholder("bedrockSessionToken"),

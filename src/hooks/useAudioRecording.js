@@ -171,7 +171,7 @@ export const useAudioRecording = (toast, options = {}) => {
                     settings.setTranscriptionMode("local");
                     settings.setUseLocalWhisper(true);
                   } else if (recovery === "retry") {
-                    void performStartRecording();
+                    void audioManagerRef.current?.retryLastCloudTranscription();
                   }
                 },
               },
@@ -248,7 +248,6 @@ export const useAudioRecording = (toast, options = {}) => {
           setWasPlaced(true);
           if (placedTimerRef.current) clearTimeout(placedTimerRef.current);
           placedTimerRef.current = setTimeout(() => setWasPlaced(false), 1400);
-
         }
       },
       onTranslationFallback: ({ reason }) => {

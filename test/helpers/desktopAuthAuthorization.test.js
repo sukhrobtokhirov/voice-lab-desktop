@@ -6,6 +6,14 @@ const INSTALLATION_ID = "0191f85b-7b5d-7f2a-8d71-2f5ea87cdf77";
 const REQUEST_ID = `dau_${"r".repeat(43)}`;
 const CALLBACK_CODE = `dac_${"c".repeat(43)}`;
 
+function loopbackCallback(pending, { code = CALLBACK_CODE, state = pending.state, version } = {}) {
+  const url = new URL(pending.redirectUri);
+  if (version != null) url.searchParams.set("v", version);
+  url.searchParams.set("code", code);
+  url.searchParams.set("state", state);
+  return url.toString();
+}
+
 function jsonResponse(status, body) {
   return new Response(body == null ? null : JSON.stringify(body), { status });
 }
@@ -106,7 +114,9 @@ test("starts system-browser PKCE authorization through the exact Go contract", a
   assert.equal(calls[0].url, "https://api.voicelab.uz/api/v2/auth/desktop/authorizations");
   const request = JSON.parse(calls[0].init.body);
   assert.equal(request.client_id, "voicelab-desktop");
-  assert.equal(request.redirect_uri, "voicelab://auth/callback");
+  assert.match(request.redirect_uri, /^http:\/\/127\.0\.0\.1:\d{4,5}\/callback$/);
+  const redirectPort = Number(new URL(request.redirect_uri).port);
+  assert.ok(redirectPort >= 1024 && redirectPort <= 65535);
   assert.equal(request.code_challenge_method, "S256");
   assert.match(request.code_challenge, /^[A-Za-z0-9_-]{43}$/);
   assert.equal(getPending().codeVerifier.length, 43);
@@ -243,7 +253,7 @@ test("rejects untrusted, unbound, or extra authorization URL values", async (t) 
   );
 });
 
-test("v1 callback exchanges code and PKCE verifier without browser cookies", async (t) => {
+test("loopback callback exchanges code and PKCE verifier without browser cookies", async (t) => {
   const originalFetch = global.fetch;
   t.after(() => {
     global.fetch = originalFetch;
@@ -272,9 +282,7 @@ test("v1 callback exchanges code and PKCE verifier without browser cookies", asy
   await manager.startAuthorization();
   const pending = getPending();
 
-  const status = await manager.handleCallback(
-    `voicelab://auth/callback?v=1&code=${CALLBACK_CODE}&state=${pending.state}`
-  );
+  const status = await manager.handleCallback(loopbackCallback(pending, { version: "1" }));
 
   assert.equal(status.status, "authenticated");
   const exchange = calls[1];
@@ -286,7 +294,7 @@ test("v1 callback exchanges code and PKCE verifier without browser cookies", asy
   assert.deepEqual(body, {
     grant_type: "authorization_code",
     client_id: "voicelab-desktop",
-    redirect_uri: "voicelab://auth/callback",
+    redirect_uri: pending.redirectUri,
     code: CALLBACK_CODE,
     code_verifier: pending.codeVerifier,
     installation_id: INSTALLATION_ID,
@@ -295,19 +303,56 @@ test("v1 callback exchanges code and PKCE verifier without browser cookies", asy
   assert.equal(getStoredSession().refreshToken, "refresh-token-abcdefghijklmnopqrstuvwxyz");
 
   const requestCountAfterExchange = calls.length;
-  const duplicateStatus = await manager.handleCallback(
-    `voicelab://auth/callback?code=${CALLBACK_CODE}&state=${pending.state}`
-  );
+  const duplicateStatus = await manager.handleCallback(loopbackCallback(pending));
   assert.equal(duplicateStatus.status, "authenticated");
   assert.equal(calls.length, requestCountAfterExchange);
 });
 
-test("expired and state-mismatched callbacks cannot exchange a code", async (t) => {
+test("loopback listener receives the browser redirect in the creating process", async (t) => {
   const originalFetch = global.fetch;
   t.after(() => {
     global.fetch = originalFetch;
   });
-  const { DesktopAuthManager, expirePending, getPending } = loadDesktopAuthManager();
+  const { DesktopAuthManager, getPending, getStoredSession } = loadDesktopAuthManager();
+  const manager = managerFrom(DesktopAuthManager);
+  global.fetch = async (url) => {
+    if (url.endsWith("/authorizations")) {
+      return jsonResponse(201, {
+        authorization_request_id: REQUEST_ID,
+        authorization_url: `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`,
+        expires_in: 600,
+      });
+    }
+    if (url.endsWith("/desktop/token")) {
+      return jsonResponse(200, {
+        access_token: "access-token-abcdefghijklmnopqrstuvwxyz",
+        refresh_token: "refresh-token-abcdefghijklmnopqrstuvwxyz",
+        expires_in: 900,
+        refresh_expires_in: 3600,
+        session_id: "desktop-session-loopback",
+        user: { id: "user-loopback", email: "loopback@example.com" },
+      });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  await manager.startAuthorization();
+  const response = await originalFetch(loopbackCallback(getPending()));
+
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /VoiceLab sign-in complete/);
+  assert.equal(manager.getPublicStatus().status, "authenticated");
+  assert.equal(getStoredSession().sessionId, "desktop-session-loopback");
+  assert.equal(getPending(), null);
+});
+
+test("expired callbacks cannot exchange and state mismatch waits for an explicit reopen", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const { DesktopAuthManager, expirePending, getOpenCount, getOpenedUrl, getPending } =
+    loadDesktopAuthManager();
   const manager = managerFrom(DesktopAuthManager);
   let exchanges = 0;
   global.fetch = async (url) => {
@@ -323,16 +368,22 @@ test("expired and state-mismatched callbacks cannot exchange a code", async (t) 
 
   await manager.startAuthorization();
   const validState = getPending().state;
-  await assert.rejects(
-    manager.handleCallback(
-      `voicelab://auth/callback?v=1&code=${CALLBACK_CODE}&state=${"x".repeat(43)}`
-    ),
-    (error) => error.code === "AUTH_STATE_MISMATCH"
+  const recovered = await manager.handleCallback(
+    loopbackCallback(getPending(), { state: "x".repeat(43), version: "1" })
   );
+  assert.equal(recovered.status, "waiting-for-browser");
+  assert.equal(recovered.errorCode, "AUTH_STATE_MISMATCH");
+  assert.equal(recovered.errorMessage, "Authentication state mismatch");
+  assert.equal(getOpenCount(), 1);
+  assert.equal(getOpenedUrl(), `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`);
   assert.equal(getPending().state, validState);
+  const reopened = await manager.reopenAuthorization();
+  assert.equal(reopened.status, "waiting-for-browser");
+  assert.equal(reopened.errorCode, null);
+  assert.equal(getOpenCount(), 2);
   expirePending();
   const status = await manager.handleCallback(
-    `voicelab://auth/callback?v=1&code=${CALLBACK_CODE}&state=${validState}`
+    loopbackCallback({ ...getPending(), state: validState }, { version: "1" })
   );
   assert.equal(status.status, "expired");
   assert.equal(exchanges, 0);
@@ -368,7 +419,7 @@ test("duplicate callbacks exchange exactly once while the first exchange is acti
     });
   };
   await manager.startAuthorization();
-  const callback = `voicelab://auth/callback?v=1&code=${CALLBACK_CODE}&state=${getPending().state}`;
+  const callback = loopbackCallback(getPending(), { version: "1" });
 
   const first = manager.handleCallback(callback);
   await new Promise((resolve) => setImmediate(resolve));
@@ -403,7 +454,7 @@ test("callback parser rejects duplicate, extra, and wrong-version parameters", (
   }
 });
 
-test("starting and cold-bootstrapping a new authorization preserves the current session", async (t) => {
+test("starting authorization preserves the session and restart discards the stale loopback request", async (t) => {
   const originalFetch = global.fetch;
   t.after(() => {
     global.fetch = originalFetch;
@@ -428,7 +479,6 @@ test("starting and cold-bootstrapping a new authorization preserves the current 
         authorization_url: `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`,
       });
     }
-    if (url.endsWith("/api/v2/auth/me")) return jsonResponse(200, { user: existing.user });
     throw new Error(`Unexpected request: ${url}`);
   };
 
@@ -440,6 +490,127 @@ test("starting and cold-bootstrapping a new authorization preserves the current 
   const restarted = managerFrom(DesktopAuthManager);
   const status = await restarted.initialize();
   assert.equal(status.status, "authenticated");
-  assert.equal(calls.length, 2);
-  assert.ok(getPending());
+  assert.equal(calls.length, 1);
+  assert.equal(getPending(), null);
+});
+
+test("canonicalizes Go user aliases before storing and publishing authentication", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const { DesktopAuthManager, getPending, getStoredSession } = loadDesktopAuthManager();
+  const manager = managerFrom(DesktopAuthManager);
+  const calls = [];
+  global.fetch = async (url) => {
+    calls.push(url);
+    if (url.endsWith("/authorizations")) {
+      return jsonResponse(201, {
+        authorization_request_id: REQUEST_ID,
+        authorization_url: `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`,
+      });
+    }
+    if (url.endsWith("/desktop/token")) {
+      return jsonResponse(200, {
+        access_token: "access-token-abcdefghijklmnopqrstuvwxyz",
+        refresh_token: "refresh-token-abcdefghijklmnopqrstuvwxyz",
+        user: {
+          user_id: 73,
+          username: "desktop@example.com",
+          full_name: "Desktop Person",
+          avatar_url: "https://cdn.voicelab.uz/avatar/user-73.png",
+          access_token: "must-not-reach-renderer",
+          refresh_token: "must-not-be-persisted-in-user",
+          internal_role: "operator",
+        },
+      });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  await manager.startAuthorization();
+  const status = await manager.handleCallback(loopbackCallback(getPending()));
+
+  assert.equal(status.status, "authenticated");
+  assert.deepEqual(status.user, {
+    id: "73",
+    email: "desktop@example.com",
+    name: "Desktop Person",
+    image: "https://cdn.voicelab.uz/avatar/user-73.png",
+  });
+  assert.deepEqual(getStoredSession().user, status.user);
+  assert.deepEqual(Object.keys(getStoredSession().user).sort(), ["email", "id", "image", "name"]);
+  assert.equal(
+    calls.some((url) => url.endsWith("/api/v2/auth/me")),
+    false
+  );
+});
+
+test("rejects oversized identities and unsafe avatar URLs from auth responses", () => {
+  const { DesktopAuthManager } = loadDesktopAuthManager();
+
+  assert.equal(
+    DesktopAuthManager.normalizedUser({
+      user: { id: "u".repeat(257), email: "desktop@example.com" },
+    }),
+    null
+  );
+  assert.deepEqual(
+    DesktopAuthManager.normalizedUser({
+      user: {
+        id: "user-safe",
+        email: "desktop@example.com",
+        name: `Visible\u202e Name ${"n".repeat(300)}`,
+        image: "javascript:alert(1)",
+        password: "must-not-cross-boundary",
+      },
+    }),
+    {
+      id: "user-safe",
+      email: "desktop@example.com",
+      name: `Visible Name ${"n".repeat(243)}`,
+      image: null,
+    }
+  );
+});
+
+test("logout prevents a late authorization exchange from restoring credentials", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const { DesktopAuthManager, getPending, getStoredSession } = loadDesktopAuthManager();
+  const manager = managerFrom(DesktopAuthManager);
+  let resolveExchange;
+  global.fetch = async (url) => {
+    if (url.endsWith("/authorizations")) {
+      return jsonResponse(201, {
+        authorization_request_id: REQUEST_ID,
+        authorization_url: `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`,
+      });
+    }
+    if (url.endsWith("/desktop/token")) {
+      return new Promise((resolve) => {
+        resolveExchange = () =>
+          resolve(
+            jsonResponse(200, {
+              access_token: "late-access-token-abcdefghijklmnopqrstuvwxyz",
+              refresh_token: "late-refresh-token-abcdefghijklmnopqrstuvwxyz",
+              user: { id: "late-user", email: "late@example.com" },
+            })
+          );
+      });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  await manager.startAuthorization();
+  const exchange = manager.handleCallback(loopbackCallback(getPending()));
+  await new Promise((resolve) => setImmediate(resolve));
+  await manager.logout();
+  resolveExchange();
+
+  assert.equal((await exchange).status, "signed-out");
+  assert.equal(getStoredSession(), null);
+  assert.equal(manager.getPublicStatus().status, "signed-out");
 });

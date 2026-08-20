@@ -2247,8 +2247,18 @@ class DatabaseManager {
       );
       stmt.run(
         tokens.google_email,
-        tokens.access_token,
-        tokens.refresh_token,
+        this.localDataProtection.protect(
+          "google_calendar_tokens",
+          tokens.google_email,
+          "access_token",
+          tokens.access_token
+        ),
+        this.localDataProtection.protect(
+          "google_calendar_tokens",
+          tokens.google_email,
+          "refresh_token",
+          tokens.refresh_token
+        ),
         tokens.expires_at,
         tokens.scope
       );
@@ -2262,7 +2272,9 @@ class DatabaseManager {
   getGoogleTokens() {
     try {
       if (!this.db) throw new Error("Database not initialized");
-      return this.db.prepare("SELECT * FROM google_calendar_tokens LIMIT 1").get() || null;
+      return this._decodeGoogleTokens(
+        this.db.prepare("SELECT * FROM google_calendar_tokens LIMIT 1").get() || null
+      );
     } catch (error) {
       debugLogger.error("Error getting Google tokens", { error: error.message }, "gcal");
       throw error;
@@ -2272,9 +2284,9 @@ class DatabaseManager {
   getGoogleTokensByEmail(email) {
     try {
       if (!this.db) throw new Error("Database not initialized");
-      return (
+      return this._decodeGoogleTokens(
         this.db.prepare("SELECT * FROM google_calendar_tokens WHERE google_email = ?").get(email) ||
-        null
+          null
       );
     } catch (error) {
       debugLogger.error("Error getting Google tokens by email", { error: error.message }, "gcal");
@@ -2334,11 +2346,33 @@ class DatabaseManager {
   getAllGoogleTokens() {
     try {
       if (!this.db) throw new Error("Database not initialized");
-      return this.db.prepare("SELECT * FROM google_calendar_tokens").all();
+      return this.db
+        .prepare("SELECT * FROM google_calendar_tokens")
+        .all()
+        .map((row) => this._decodeGoogleTokens(row));
     } catch (error) {
       debugLogger.error("Error getting all Google tokens", { error: error.message }, "gcal");
       throw error;
     }
+  }
+
+  _decodeGoogleTokens(row) {
+    if (!row) return null;
+    return {
+      ...row,
+      access_token: this.localDataProtection.reveal(
+        "google_calendar_tokens",
+        row.google_email,
+        "access_token",
+        row.access_token
+      ),
+      refresh_token: this.localDataProtection.reveal(
+        "google_calendar_tokens",
+        row.google_email,
+        "refresh_token",
+        row.refresh_token
+      ),
+    };
   }
 
   getGoogleAccounts() {

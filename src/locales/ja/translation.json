@@ -802,7 +802,7 @@
       "continueWithApple": "Apple で続ける",
       "continueWithGoogle": "Google で続ける",
       "continueWithMicrosoft": "Microsoft で続ける",
-      "protocolUnavailable": "ブラウザでのサインインを利用できません — システムの「既定のアプリ」設定で openwhispr:// プロトコルを再登録してください。"
+      "protocolUnavailable": "ブラウザでのサインインを利用できません — システムの「既定のアプリ」設定で voicelab:// プロトコルを再登録してください。"
     },
     "welcomeSubtitle": "音声でどこでもディクテーション",
     "welcomeTitle": "VoiceLab へようこそ",
@@ -1330,7 +1330,7 @@
         "failedDescription": "アカウントの削除中にエラーが発生しました。ローカルデータが部分的に削除された可能性があります。もう一度お試しください。"
       },
       "voiceLabAccount": {
-        "sectionDescription": "VoiceLab Cloud は、サインインしたアカウントと共有 AI クレジット ウォレットを使用します。",
+        "sectionDescription": "VoiceLab CloudはVoiceLabサブスクリプションを使用します。",
         "label": "VoiceLab アカウント",
         "description": "一度サインインしてください。個別の音声 API キーは必要ありません。",
         "openSpace": "ボイスラボを開く",
@@ -1425,7 +1425,7 @@
       "open": "開く",
       "removeModels": {
         "confirmText": "モデルを削除",
-        "description": "ローカルにキャッシュされたすべての Whisper モデル（{{path}}）を削除し、ディスク容量を解放します。モデルピッカーから再度ダウンロードできます。",
+        "description": "ローカルにキャッシュされたすべての音声モデルを削除し、ディスク容量を解放します。モデルピッカーから再度ダウンロードできます。",
         "failedDescription": "モデルの削除中に問題が発生しました。もう一度お試しください。",
         "failedDescriptionShort": "キャッシュされたモデルを削除できませんでした。",
         "failedTitle": "モデルを削除できませんでした",
@@ -1622,7 +1622,7 @@
           "manualTitle": "設定に以下を追加してください",
           "manualDesc": "ご自身で設定してからリビルドしてください。",
           "flakeTitle": "flakeからインストールする場合",
-          "flakeDesc": "flakeからVoiceLabをインストールする場合、programs.openwhispr.enableを有効にするとydotool、uinputモジュール、グループのメンバーシップが自動で設定されます。",
+          "flakeDesc": "flakeからVoiceLabをインストールする場合、programs.voicelab.enableを有効にするとydotool、uinputモジュール、グループのメンバーシップが自動で設定されます。",
           "rebuildNote": "sudo nixos-rebuild switchを実行し、グループの変更と/dev/uinputのルールを反映させるためにログアウト後に再ログインしてください。<you>はあなたのユーザー名に置き換えてください。"
         }
       },
@@ -3087,14 +3087,14 @@
       "more": "もっと"
     },
     "wallet": {
-      "title": "AIクレジットウォレット",
-      "shared": "VoiceLab 製品間で 1 つのバランス",
-      "balance": "バランス",
-      "available": "利用可能",
-      "reserved": "予約済み",
-      "unavailable": "ウォレットが一時的に利用できなくなりました。",
+      "title": "VoiceLabプランと使用量",
+      "shared": "プランと請求はVoiceLabで管理されます。",
+      "balance": "今日の使用量",
+      "available": "今日の残り",
+      "reserved": "1日の上限",
+      "unavailable": "使用量データはまだありません。",
       "updated": "{{time}} を更新しました",
-      "live": "ライブバランス",
+      "live": "次の音声入力後に使用量が表示されます。",
       "manage": "請求の管理"
     },
     "creditShortage": {
@@ -3162,7 +3162,7 @@
       },
       "ready": {
         "title": "準備ができて",
-        "account": "VoiceLab アカウントと AI Credit ウォレットが接続されています。",
+        "account": "VoiceLab アカウントが接続されています。",
         "local": "ローカル転写が選択されています。",
         "provider": "詳細設定を開いてプロバイダーに接続します。",
         "start": "ディクテーションを開始する"
@@ -3201,7 +3201,7 @@
     },
     "settings": {
       "account": "アカウントとクレジット",
-      "accountDescription": "プロフィール、セッション、AI クレジット ウォレット",
+      "accountDescription": "プロフィール、安全なセッション、請求",
       "dictation": "ディクテーション",
       "dictationDescription": "言語、マイク、およびペーストの動作",
       "shortcuts": "ショートカット",
@@ -3220,7 +3220,7 @@
       "status": "セッション",
       "protected": "アクティブで保護されている",
       "signedOut": "サインインしていません",
-      "signedOutDescription": "サインインして、VoiceLab Cloud と AI クレジット ウォレットを使用します。"
+      "signedOutDescription": "VoiceLab Cloudを使用するにはサインインしてください。"
     }
   }
 }

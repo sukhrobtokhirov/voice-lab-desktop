@@ -81,3 +81,20 @@ test("preload exposes opaque credential operations instead of raw BYOK accessors
   assert.match(preloadSrc, /providerCredentialStatus:/);
   assert.match(preloadSrc, /providerSaveCredential:/);
 });
+
+test("scope-specific custom provider secrets never initialize from localStorage", () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "../../src/stores/settingsStore.ts"),
+    "utf8"
+  );
+  for (const key of [
+    "noteFormattingCustomApiKey",
+    "translationCustomApiKey",
+    "chatAgentCustomApiKey",
+    "dictationAgentCustomApiKey",
+  ]) {
+    assert.doesNotMatch(source, new RegExp(`${key}: readString\\(`), key);
+    assert.match(source, new RegExp(`set${key[0].toUpperCase()}${key.slice(1)}: createSecretSetter`));
+  }
+  assert.match(source, /providerSaveCredential\?\.\("cleanupCustom", legacyCustomSecret\)/);
+});

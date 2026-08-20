@@ -823,7 +823,7 @@
       "continueWithApple": "Continua con Apple",
       "continueWithGoogle": "Continua con Google",
       "continueWithMicrosoft": "Continua con Microsoft",
-      "protocolUnavailable": "Accesso dal browser non disponibile — registra di nuovo il protocollo openwhispr:// nelle impostazioni Applicazioni predefinite del sistema."
+      "protocolUnavailable": "Accesso dal browser non disponibile — registra di nuovo il protocollo voicelab:// nelle impostazioni Applicazioni predefinite del sistema."
     },
     "welcomeSubtitle": "Detta ovunque usando la tua voce",
     "welcomeTitle": "Benvenuto in VoiceLab"
@@ -1330,7 +1330,7 @@
         "failedDescription": "Qualcosa è andato storto durante l'eliminazione del tuo account. I tuoi dati locali potrebbero essere stati parzialmente rimossi. Riprova."
       },
       "voiceLabAccount": {
-        "sectionDescription": "VoiceLab Cloud utilizza il tuo account a cui hai effettuato l'accesso e il portafoglio di crediti AI condiviso.",
+        "sectionDescription": "VoiceLab Cloud utilizza il tuo abbonamento VoiceLab.",
         "label": "Conto VoiceLab",
         "description": "Accedi una volta; non è richiesta alcuna chiave API vocale separata.",
         "openSpace": "Apri VoiceLab",
@@ -1425,7 +1425,7 @@
       "open": "Apri",
       "removeModels": {
         "confirmText": "Elimina modelli",
-        "description": "Questa operazione elimina tutti i modelli Whisper memorizzati nella cache locale ({{path}}) e libera spazio su disco. Puoi scaricarli di nuovo dal selettore modelli.",
+        "description": "Questa operazione elimina tutti i modelli vocali memorizzati nella cache locale e libera spazio su disco. Puoi scaricarli di nuovo dal selettore modelli.",
         "failedDescription": "Qualcosa è andato storto nella rimozione dei modelli. Riprova.",
         "failedDescriptionShort": "Impossibile rimuovere i modelli in cache.",
         "failedTitle": "Impossibile rimuovere i modelli",
@@ -1622,7 +1622,7 @@
           "manualTitle": "Aggiungi questo alla tua configurazione",
           "manualDesc": "Configuralo tu stesso, poi ricostruisci.",
           "flakeTitle": "Stai installando tramite il nostro flake?",
-          "flakeDesc": "Se installi VoiceLab dal flake, programs.openwhispr.enable attiva ydotool, il modulo uinput e le appartenenze ai gruppi per te.",
+          "flakeDesc": "Se installi VoiceLab dal flake, programs.voicelab.enable attiva ydotool, il modulo uinput e le appartenenze ai gruppi per te.",
           "rebuildNote": "Esegui sudo nixos-rebuild switch, poi disconnettiti e riconnettiti affinché la modifica al gruppo e la regola /dev/uinput abbiano effetto. Sostituisci <you> con il tuo nome utente."
         }
       },
@@ -3087,14 +3087,14 @@
       "more": "Di più"
     },
     "wallet": {
-      "title": "Portafoglio di crediti AI",
-      "shared": "Un equilibrio tra i prodotti VoiceLab",
-      "balance": "Bilancia",
-      "available": "Disponibile",
-      "reserved": "Prenotato",
-      "unavailable": "Il portafoglio è temporaneamente non disponibile.",
+      "title": "Piano e utilizzo VoiceLab",
+      "shared": "Il piano e la fatturazione sono gestiti su VoiceLab.",
+      "balance": "Usato oggi",
+      "available": "Rimanente oggi",
+      "reserved": "Limite giornaliero",
+      "unavailable": "I dati di utilizzo non sono ancora disponibili.",
       "updated": "{{time}} aggiornato",
-      "live": "Equilibrio vivo",
+      "live": "L’utilizzo apparirà dopo la prossima dettatura.",
       "manage": "Gestisci la fatturazione"
     },
     "creditShortage": {
@@ -3162,7 +3162,7 @@
       },
       "ready": {
         "title": "Pronto",
-        "account": "Il tuo account VoiceLab e il portafoglio AI Credit sono collegati.",
+        "account": "Il tuo account VoiceLab è collegato.",
         "local": "È selezionata la trascrizione locale.",
         "provider": "Apri Impostazioni avanzate per connettere il tuo provider.",
         "start": "Inizia a dettare"
@@ -3201,7 +3201,7 @@
     },
     "settings": {
       "account": "Conto e crediti",
-      "accountDescription": "Profilo, sessione e portafoglio AI Credit",
+      "accountDescription": "Profilo, sessione sicura e fatturazione",
       "dictation": "Dettatura",
       "dictationDescription": "Comportamento di lingua, microfono e incolla",
       "shortcuts": "Scorciatoie",
@@ -3220,7 +3220,7 @@
       "status": "Sessione",
       "protected": "Attivo e protetto",
       "signedOut": "Non ho effettuato l'accesso",
-      "signedOutDescription": "Accedi per utilizzare VoiceLab Cloud e il tuo portafoglio di crediti AI."
+      "signedOutDescription": "Accedi per utilizzare VoiceLab Cloud."
     }
   }
 }

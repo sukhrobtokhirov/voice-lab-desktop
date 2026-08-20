@@ -94,8 +94,6 @@ import { useSettingsLayout } from "./ui/useSettingsLayout";
 import UsageDisplay from "./UsageDisplay";
 import { cn } from "./lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
-import { startMigration, useMigration } from "../stores/noteStore.js";
-import { syncService } from "../services/SyncService.js";
 import { formatBytes } from "../utils/formatBytes";
 import { useSettingsStore } from "../stores/settingsStore";
 import { canManageSystemAudioInApp } from "../utils/systemAudioAccess";
@@ -245,6 +243,7 @@ interface AiModelsSectionProps {
 
 const CLEANUP_MODE_TOAST_KEY: Record<InferenceMode, string> = {
   openwhispr: "switchedCloud",
+  voicelab: "switchedCloud",
   providers: "switchedProviders",
   local: "switchedLocal",
   "self-hosted": "switchedSelfHosted",
@@ -588,8 +587,6 @@ export default function SettingsPage({
     setStartMinimized,
     panelStartPosition,
     setPanelStartPosition,
-    cloudBackupEnabled,
-    setCloudBackupEnabled,
     telemetryEnabled,
     setTelemetryEnabled,
     audioRetentionDays,
@@ -636,11 +633,6 @@ export default function SettingsPage({
 
   const [currentVersion, setCurrentVersion] = useState<string>("");
   const [isRemovingModels, setIsRemovingModels] = useState(false);
-  const cachePathHint =
-    typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent)
-      ? "%USERPROFILE%\\.cache\\openwhispr"
-      : "~/.cache/openwhispr";
-
   const {
     status: updateStatus,
     info: updateInfo,
@@ -658,8 +650,6 @@ export default function SettingsPage({
 
   const isUpdateAvailable =
     !updateStatus.isDevelopment && (updateStatus.updateAvailable || updateStatus.updateDownloaded);
-
-  const migration = useMigration();
 
   const permissionsHook = usePermissions(showAlertDialog);
   const systemAudio = useSystemAudioPermission();
@@ -1055,7 +1045,7 @@ export default function SettingsPage({
 
     showConfirmDialog({
       title: t("settingsPage.developer.removeModels.title"),
-      description: t("settingsPage.developer.removeModels.description", { path: cachePathHint }),
+      description: t("settingsPage.developer.removeModels.description"),
       confirmText: t("settingsPage.developer.removeModels.confirmText"),
       variant: "destructive",
       onConfirm: async () => {
@@ -1090,7 +1080,7 @@ export default function SettingsPage({
         }
       },
     });
-  }, [isRemovingModels, cachePathHint, showConfirmDialog, showAlertDialog, t]);
+  }, [isRemovingModels, showConfirmDialog, showAlertDialog, t]);
 
   const { isSignedIn, isLoaded, user } = useAuth();
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -1294,7 +1284,7 @@ export default function SettingsPage({
             <SectionHeader
               title={t("desktop.settings.account", { defaultValue: "Account & Credits" })}
               description={t("desktop.settings.accountDescription", {
-                defaultValue: "Your VoiceLab profile, desktop session and shared AI Credit wallet.",
+                defaultValue: "Your VoiceLab profile, secure desktop session and billing.",
               })}
             />
 
@@ -1386,7 +1376,7 @@ export default function SettingsPage({
                       </p>
                       <p className="mt-1 text-sm text-muted-foreground">
                         {t("desktop.session.signedOutDescription", {
-                          defaultValue: "Sign in to use VoiceLab Cloud and your AI Credit wallet.",
+                          defaultValue: "Sign in to use VoiceLab Cloud.",
                         })}
                       </p>
                     </div>
@@ -2457,93 +2447,7 @@ EOF`,
               />
 
               {isSignedIn && (
-                <div className="mb-4">
-                  <SettingsPanel className="mb-2">
-                    <SettingsPanelRow>
-                      <SettingsRow
-                        label={t("desktop.privacy.notesSync")}
-                        description={t("desktop.privacy.notesSyncDescription")}
-                      >
-                        <Toggle
-                          checked={cloudBackupEnabled}
-                          onChange={(v) => {
-                            setCloudBackupEnabled(v);
-                            if (v) {
-                              startMigration().catch(console.error);
-                              syncService.requestSyncAll("manual");
-                            }
-                          }}
-                        />
-                      </SettingsRow>
-                    </SettingsPanelRow>
-                  </SettingsPanel>
-                  {migration && (
-                    <div className="mt-2 space-y-1">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1.5">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          {t("settingsPage.privacy.cloudNotesMigration", {
-                            done: migration.done,
-                            total: migration.total,
-                          })}
-                        </span>
-                        <span>{Math.round((migration.done / migration.total) * 100)}%</span>
-                      </div>
-                      <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full bg-primary transition-all duration-300 ease-out"
-                          style={{ width: `${(migration.done / migration.total) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                  {!migration && cloudBackupEnabled && isSignedIn && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {t("settingsPage.privacy.cloudNotesMigrationDone")}
-                    </p>
-                  )}
-                  {cloudBackupEnabled &&
-                    isSignedIn &&
-                    (() => {
-                      const lastSyncedAt = localStorage.getItem("lastSyncedAt");
-                      if (!lastSyncedAt) return null;
-                      const date = new Date(lastSyncedAt);
-                      const now = new Date();
-                      const diffMs = now.getTime() - date.getTime();
-                      const diffMin = Math.floor(diffMs / 60000);
-                      const diffHr = Math.floor(diffMs / 3600000);
-                      let relative: string;
-                      if (diffMin < 1) relative = t("settingsPage.privacy.justNow");
-                      else if (diffMin < 60)
-                        relative = t("settingsPage.privacy.minutesAgo", { count: diffMin });
-                      else if (diffHr < 24)
-                        relative = t("settingsPage.privacy.hoursAgo", { count: diffHr });
-                      else
-                        relative = date.toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        });
-                      return (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {t("settingsPage.privacy.lastSynced", { time: relative })}
-                        </p>
-                      );
-                    })()}
-                </div>
-              )}
-
-              {isSignedIn && (
                 <SettingsPanel className="mb-4">
-                  <SettingsPanelRow>
-                    <SettingsRow
-                      label={t("desktop.privacy.accountSync")}
-                      description={t("desktop.privacy.accountSyncDescription")}
-                    >
-                      <Badge variant="outline">{t("desktop.privacy.alwaysOn")}</Badge>
-                    </SettingsRow>
-                  </SettingsPanelRow>
                   <SettingsPanelRow>
                     <SettingsRow
                       label={t("desktop.privacy.transcriptBackup")}
@@ -2995,7 +2899,7 @@ EOF`,
                   <SettingsPanelRow>
                     <SettingsRow
                       label={t("settingsPage.developer.modelCache")}
-                      description={cachePathHint}
+                      description={t("settingsPage.developer.dataManagementDescription")}
                     >
                       <div className="flex items-center gap-2">
                         <Button

@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "./lib/utils";
 import UsageDisplay from "./UsageDisplay";
 import { getCachedPlatform } from "../utils/platform";
+import { VOICELAB_AI_ENABLED } from "../lib/features";
 
 const platform = getCachedPlatform();
 
@@ -68,11 +69,15 @@ export default function ControlPanelSidebar({
       label: t("desktop.nav.vocabulary", { defaultValue: "Vocabulary" }),
       icon: BookOpen,
     },
-    {
-      id: "chat" as const,
-      label: "VoiceLab AI",
-      icon: MessageSquare,
-    },
+    ...(VOICELAB_AI_ENABLED
+      ? [
+          {
+            id: "chat" as const,
+            label: "VoiceLab AI",
+            icon: MessageSquare,
+          },
+        ]
+      : []),
     {
       id: "personal-notes" as const,
       label: t("sidebar.notes", { defaultValue: "Notes" }),

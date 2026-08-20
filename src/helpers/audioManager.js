@@ -61,6 +61,14 @@ const RECORDING_TIMESLICE_MS = 250; // flush chunks periodically so short record
 // Failure detector only: fires when the worklet or audio graph is dead and never flushes.
 const PREVIEW_FLUSH_WATCHDOG_MS = 1000;
 const REALTIME_MODELS = new Set(["gpt-4o-mini-transcribe", "gpt-4o-transcribe"]);
+const VOICELAB_PROVIDER = "voicelab";
+
+function canonicalProviderName(value) {
+  const provider = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return ["openwhispr", "openwhispr-cloud", "voicelab-cloud"].includes(provider)
+    ? VOICELAB_PROVIDER
+    : provider;
+}
 
 function dictationAgentReachable(settings) {
   return resolveDictationAgentReachability({
@@ -136,7 +144,7 @@ function resolveReasoningRoute(
   }
   if (kind === "translation") {
     const provider = isCloudTranslation
-      ? "openwhispr"
+      ? VOICELAB_PROVIDER
       : settings.translationProvider?.trim() || undefined;
     const isCustomTranslation = settings.translationMode === "providers" && provider === "custom";
     return {
@@ -165,7 +173,7 @@ function resolveReasoningRoute(
   }
   if (kind === "agent") {
     const provider = isCloudAgent
-      ? "openwhispr"
+      ? VOICELAB_PROVIDER
       : settings.dictationAgentProvider?.trim() || undefined;
     const isCustomAgent = settings.dictationAgentMode === "providers" && provider === "custom";
     return {
@@ -331,6 +339,8 @@ class AudioManager {
     this.sttConfig = null;
     this.lastAudioBlob = null;
     this.lastAudioMetadata = null;
+    this.lastRetryMetadata = null;
+    this._activeCloudRequestId = null;
     this._localSpeechGateState = null;
     this._streamingCommitActive = false;
     this._previewFlushResolve = null;
@@ -1144,11 +1154,26 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
   cancelProcessing() {
     if (this.isProcessing) {
+      if (this._activeCloudRequestId) {
+        void window.electronAPI?.cancelCloudTranscribe?.(this._activeCloudRequestId);
+        this._activeCloudRequestId = null;
+      }
       this.isProcessing = false;
+      this.lastAudioBlob = null;
+      this.lastAudioMetadata = null;
+      this.lastRetryMetadata = null;
       this.onStateChange?.({ isRecording: false, isProcessing: false });
       return true;
     }
     return false;
+  }
+
+  async retryLastCloudTranscription() {
+    if (this.isProcessing || !this.lastAudioBlob) return false;
+    this.isProcessing = true;
+    this.onStateChange?.({ isRecording: false, isProcessing: true });
+    await this.processAudio(this.lastAudioBlob, this.lastRetryMetadata || {});
+    return true;
   }
 
   async processAudio(audioBlob, metadata = {}) {
@@ -1177,27 +1202,43 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     try {
       const activeModel = "voicelab-cloud";
       const mode = "cloud";
-      const result = await this.processWithOpenWhisprCloud(audioBlob, metadata);
+      const result = await this.processWithVoiceLabCloud(audioBlob, metadata);
       if (!this.isProcessing) return;
+      this.lastRetryMetadata = null;
       this.lastAudioMetadata = {
-        durationMs: metadata?.durationSeconds ? Math.round(metadata.durationSeconds * 1000) : Math.round(performance.now() - pipelineStart),
+        durationMs: metadata?.durationSeconds
+          ? Math.round(metadata.durationSeconds * 1000)
+          : Math.round(performance.now() - pipelineStart),
         provider: result?.source || mode,
         model: activeModel || null,
       };
       this.onTranscriptionComplete?.(result);
-      if (result?.source === "openwhispr" || result?.source === "voicelab") window.dispatchEvent(new Event("usage-changed"));
+      if (result?.source === VOICELAB_PROVIDER) {
+        window.dispatchEvent(
+          new CustomEvent("usage-changed", {
+            detail: { usage: result?.usage ?? null },
+          })
+        );
+      }
       const roundTripDurationMs = Math.round(performance.now() - pipelineStart);
-      logger.info("Pipeline timing", {
-        mode,
-        model: activeModel,
-        audioDurationMs: metadata.durationSeconds ? Math.round(metadata.durationSeconds * 1000) : null,
-        transcriptionProcessingDurationMs: result?.timings?.transcriptionProcessingDurationMs ?? null,
-        reasoningProcessingDurationMs: result?.timings?.reasoningProcessingDurationMs ?? null,
-        roundTripDurationMs,
-        audioSizeBytes: audioBlob.size,
-        audioFormat: audioBlob.type,
-        outputTextLength: result?.text?.length,
-      }, "performance");
+      logger.info(
+        "Pipeline timing",
+        {
+          mode,
+          model: activeModel,
+          audioDurationMs: metadata.durationSeconds
+            ? Math.round(metadata.durationSeconds * 1000)
+            : null,
+          transcriptionProcessingDurationMs:
+            result?.timings?.transcriptionProcessingDurationMs ?? null,
+          reasoningProcessingDurationMs: result?.timings?.reasoningProcessingDurationMs ?? null,
+          roundTripDurationMs,
+          audioSizeBytes: audioBlob.size,
+          audioFormat: audioBlob.type,
+          outputTextLength: result?.text?.length,
+        },
+        "performance"
+      );
     } catch (error) {
       const errorAtMs = Math.round(performance.now() - pipelineStart);
 
@@ -1210,24 +1251,33 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         "performance"
       );
 
+      if (error.code === "CANCELLED") return;
+
       if (error.message !== "No audio detected") {
         this.onError?.({
           title: "Transcription Error",
           description: `Transcription failed: ${error.message}`,
           code: error.code,
           messageKey: error.messageKey,
+          status: error.status,
+          serverCode: error.serverCode,
+          requestId: error.requestId,
+          retryAfterSeconds: error.retryAfterSeconds,
+          max_duration_seconds: error.max_duration_seconds,
+          fields: error.fields,
         });
 
         const isAuthenticationFailure =
           error.code === "AUTH_EXPIRED" || error.code === "AUTH_REQUIRED";
 
-        // Authentication failures are account state, not useful workspace items.
-        // Keep retryable transcription failures with audio for the existing retry flow.
-        if (this.lastAudioBlob && !isAuthenticationFailure) {
-          this.saveFailedTranscription(error.message, error.code || null, metadata);
-        } else if (isAuthenticationFailure) {
+        // API failures are transient request state, not workspace history items.
+        // Keep retryable audio only in memory until retry, dismissal, or a new recording.
+        if (isAuthenticationFailure) {
           this.lastAudioBlob = null;
           this.lastAudioMetadata = null;
+          this.lastRetryMetadata = null;
+        } else if (this.lastAudioBlob) {
+          this.lastRetryMetadata = metadata;
         }
       }
     } finally {
@@ -1566,7 +1616,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           settings.translationSourceLanguage,
           settings.translationTargetLanguage
         ),
-        translateIsCloud: route.config?.provider === "openwhispr",
+        translateIsCloud: canonicalProviderName(route.config?.provider) === VOICELAB_PROVIDER,
         onCleanupError: (cleanupError) => {
           const { level = "error", channel, extra } = cleanup.log || {};
           logger[level](
@@ -1688,7 +1738,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         logger.logReasoning("SENDING_TO_REASONING", {
           preparedTextLength: normalizedText.length,
           model: targetModel,
-          provider: route.config?.provider || cleanupProvider,
+          provider: canonicalProviderName(route.config?.provider || cleanupProvider),
           path: route.kind,
           disableThinking: reasoningConfig?.disableThinking,
         });
@@ -1725,7 +1775,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     return normalizedText;
   }
 
-  async processWithOpenWhisprCloud(audioBlob, metadata = {}) {
+  async processWithVoiceLabCloud(audioBlob, metadata = {}) {
     if (!navigator.onLine) {
       const err = new Error("You're offline. Cloud transcription requires an internet connection.");
       err.code = "OFFLINE";
@@ -1758,13 +1808,16 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     const dictionaryPrompt = this.getCustomDictionaryPrompt();
     if (dictionaryPrompt) opts.prompt = dictionaryPrompt;
 
-    // Use withSessionRefresh to handle AUTH_EXPIRED automatically
     const transcriptionStart = performance.now();
-    const result = await withSessionRefresh(async () => {
+    const requestId = globalThis.crypto.randomUUID();
+    opts.requestId = requestId;
+    this._activeCloudRequestId = requestId;
+    let result;
+    try {
       const res = await window.electronAPI.cloudTranscribe(arrayBuffer, opts);
       if (!res.success) {
         const err = new Error(res.error || "Cloud transcription failed");
-        err.code = res.code;
+        Object.assign(err, res);
         if (res.messageKey) err.messageKey = res.messageKey;
         else if (res.code === "LIMIT_REACHED") {
           err.messageKey =
@@ -1772,8 +1825,10 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         }
         throw err;
       }
-      return res;
-    });
+      result = res;
+    } finally {
+      if (this._activeCloudRequestId === requestId) this._activeCloudRequestId = null;
+    }
     timings.transcriptionProcessingDurationMs = Math.round(performance.now() - transcriptionStart);
 
     const rawText = result.text;
@@ -1891,7 +1946,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       success: true,
       text: processedText,
       rawText,
-      source: "openwhispr",
+      source: VOICELAB_PROVIDER,
       timings,
       limitReached: result.limitReached,
       wordsUsed: result.wordsUsed,
@@ -2090,17 +2145,17 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     }
 
     try {
-      const provider = String(this.lastAudioMetadata?.provider || "").toLowerCase();
+      const provider = canonicalProviderName(this.lastAudioMetadata?.provider);
       const syncSource = provider.startsWith("local")
         ? "local"
-        : provider && !["voicelab", "voicelab-cloud", "openwhispr"].includes(provider)
+        : provider && provider !== VOICELAB_PROVIDER
           ? "byok"
           : null;
       const result = await window.electronAPI.saveTranscription(text, rawText, {
         clientTranscriptionId,
         routeKind: this.translationRequested ? "translation" : null,
         syncSource,
-        provider: this.lastAudioMetadata?.provider || null,
+        provider: provider || null,
         model: this.lastAudioMetadata?.model || null,
         audioDurationMs: this.lastAudioMetadata?.durationMs || null,
       });
@@ -2261,7 +2316,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
             language: warmupLang && warmupLang !== "auto" ? warmupLang : undefined,
             keyterms: this.getKeyterms(),
             model: cloudTranscriptionModel,
-            mode: cloudTranscriptionMode === "byok" ? "byok" : "openwhispr",
+            mode: cloudTranscriptionMode === "byok" ? "byok" : VOICELAB_PROVIDER,
             environment: cortiEnvironment,
             tenant: cortiTenant,
           });
@@ -2553,7 +2608,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           language: sttLanguage && sttLanguage !== "auto" ? sttLanguage : undefined,
           keyterms: this.getKeyterms(),
           model: cloudTranscriptionModel,
-          mode: cloudTranscriptionMode === "byok" ? "byok" : "openwhispr",
+          mode: cloudTranscriptionMode === "byok" ? "byok" : VOICELAB_PROVIDER,
           environment: cortiEnvironment,
           tenant: cortiTenant,
         });
@@ -2649,7 +2704,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       } else if (error.code === "AUTH_EXPIRED" || error.code === "AUTH_REQUIRED") {
         errorTitle = "Sign-in Required";
         errorDescription =
-          "Your OpenWhispr Cloud session is unavailable. Please sign in again from Settings.";
+          "Your VoiceLab Cloud session is unavailable. Please sign in again from Settings.";
       } else if (error.code === "NETWORK_ERROR") {
         errorTitle = "streaming.errors.cloudUnreachable.title";
         errorDescription = error.messageKey || "streaming.errors.cloudUnreachable.generic";
@@ -2938,11 +2993,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     if (!finalText && durationSeconds > 2 && fallbackBlob?.size > 0) {
       const target = resolveStreamingFallbackTarget(getSettings());
       if (target === "skip") {
-        logger.warn(
-          "Skipping batch fallback: OpenWhispr Cloud session signed out",
-          {},
-          "streaming"
-        );
+        logger.warn("Skipping batch fallback: VoiceLab Cloud session signed out", {}, "streaming");
       } else {
         logger.info(
           "Streaming produced no text, falling back to batch transcription",
@@ -2953,7 +3004,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           // Cloud records usage server-side via /api/transcribe; BYOK has no metering.
           const batchResult =
             target === "cloud"
-              ? await this.processWithOpenWhisprCloud(fallbackBlob, { durationSeconds })
+              ? await this.processWithVoiceLabCloud(fallbackBlob, { durationSeconds })
               : await this.processWithOpenAIAPI(fallbackBlob, { durationSeconds });
           if (batchResult?.text) {
             finalText = batchResult.text;

@@ -117,7 +117,7 @@ function convertToWav(inputPath, outputPath, options = {}) {
     if (!ffmpegPath) {
       reject(
         new Error(
-          "FFmpeg not found - the bundled FFmpeg is missing from this install and no system FFmpeg was found on PATH; reinstalling OpenWhispr should fix this"
+          "FFmpeg not found - the bundled FFmpeg is missing from this install and no system FFmpeg was found on PATH; reinstalling VoiceLab Desktop should fix this"
         )
       );
       return;
@@ -356,7 +356,7 @@ async function mergeAudioSegments(segments) {
   const ffmpegPath = getFFmpegPath();
   if (!ffmpegPath) throw new Error("FFmpeg not found - required for audio segment recovery");
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openwhispr-audio-merge-"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-audio-merge-"));
   const outputPath = path.join(tempDir, "merged.webm");
   try {
     const inputPaths = segments.map((segment, index) => {
@@ -471,7 +471,9 @@ async function prepareCloudSttAudio(input, options = {}) {
     buffer = Buffer.isBuffer(input) ? input : Buffer.from(input);
   }
 
-  const detected = detectAudioContainer(buffer) || hintExt || null;
+  // Only the bytes may authorize passthrough. A filename extension is merely an
+  // FFmpeg input hint and must never decide the MIME type sent to VoiceLab.
+  const detected = detectAudioContainer(buffer);
   const passthrough = detected && CLOUD_STT_FORMATS[detected];
   if (passthrough) {
     return {
@@ -510,11 +512,7 @@ async function prepareCloudSttAudio(input, options = {}) {
 
 function getAudioDurationSeconds(inputPath) {
   return new Promise((resolve, reject) => {
-    const processHandle = spawn(getFFmpegPath(), [
-      "-hide_banner",
-      "-i",
-      inputPath,
-    ]);
+    const processHandle = spawn(getFFmpegPath(), ["-hide_banner", "-i", inputPath]);
     let stderr = "";
     processHandle.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
@@ -527,10 +525,7 @@ function getAudioDurationSeconds(inputPath) {
         reject(new Error("Audio duration could not be measured"));
         return;
       }
-      const duration =
-        Number(match[1]) * 3600
-        + Number(match[2]) * 60
-        + Number(match[3]);
+      const duration = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
       if (!Number.isFinite(duration) || duration <= 0) {
         reject(new Error("Audio duration is invalid"));
         return;

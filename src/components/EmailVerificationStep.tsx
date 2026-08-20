@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { OPENWHISPR_API_URL } from "../config/constants";
+import { VOICELAB_API_BASE } from "../config/constants";
 import { resendVerificationEmail } from "../lib/auth";
 import { Button } from "./ui/button";
 import { Mail, Loader2, Check, RefreshCw } from "lucide-react";
@@ -31,9 +31,9 @@ export default function EmailVerificationStep({
   }, [resendCooldown]);
 
   useEffect(() => {
-    if (!OPENWHISPR_API_URL || verified) return;
+    if (!VOICELAB_API_BASE || verified) return;
 
-    const url = `${OPENWHISPR_API_URL}/api/auth/verification-status?email=${encodeURIComponent(email)}`;
+    const url = `${VOICELAB_API_BASE}/api/auth/verification-status?email=${encodeURIComponent(email)}`;
 
     pollRef.current = setInterval(async () => {
       try {

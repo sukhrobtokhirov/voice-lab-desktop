@@ -5,9 +5,7 @@ const root = path.resolve(__dirname, "..");
 const templatePath = path.join(root, "preload.js");
 const outputDir = path.join(root, "preloads");
 const source = fs.readFileSync(templatePath, "utf8");
-const allNames = [...source.matchAll(/^ {2}([A-Za-z][A-Za-z0-9]*):/gm)].map(
-  (match) => match[1]
-);
+const allNames = [...source.matchAll(/^ {2}([A-Za-z][A-Za-z0-9]*):/gm)].map((match) => match[1]);
 
 const windowSpecific = new Set([
   "onMeetingNotificationData",
@@ -28,12 +26,58 @@ const windowSpecific = new Set([
 ]);
 
 const controlOnly = new Set([
+  "clearTranscriptions",
+  "deleteTranscription",
+  "deleteTranscriptionAudio",
+  "setDictionary",
+  "createDictionaryEntry",
+  "updateDictionaryEntry",
+  "deleteDictionaryEntry",
+  "decideLegacyDictionary",
+  "saveNote",
+  "updateNote",
+  "deleteNote",
+  "semanticReindexAll",
+  "updateNoteCloudId",
+  "createFolder",
+  "deleteFolder",
+  "renameFolder",
+  "createAction",
+  "updateAction",
+  "deleteAction",
+  "deleteAllAudio",
+  "cleanupApp",
+  "noteFilesSetEnabled",
+  "noteFilesSetPath",
+  "noteFilesRebuild",
+  "noteFilesPickFolder",
+  "downloadDiarizationModels",
+  "deleteDiarizationModels",
+  "llamaCppInstall",
+  "llamaCppUninstall",
+  "downloadLlamaVulkanBinary",
+  "deleteLlamaVulkanBinary",
+  "modelDownload",
+  "modelCancelDownload",
+  "modelDelete",
+  "modelDeleteAll",
+  "setAutoStartEnabled",
+  "gcalStartOAuth",
+  "gcalDisconnect",
+  "gcalGetConnectionStatus",
+  "gcalGetCalendars",
+  "gcalSetCalendarSelection",
+  "gcalSetPrimaryOnly",
+  "gcalSyncEvents",
+  "gcalGetUpcomingEvents",
+  "gcalGetEvent",
   "checkForUpdates",
   "downloadUpdate",
   "installUpdate",
   "getUpdateStatus",
   "getUpdateInfo",
   "workspaceApiRequest",
+  "armDisplayMediaCapture",
   "providerSaveCredential",
   "providerSaveEndpoint",
   "providerListModels",
@@ -57,6 +101,7 @@ const controlOnly = new Set([
   "authRefreshSession",
   "authLogout",
   "authDeleteAccount",
+  "desktopPricing",
   "onDictationComplete",
 ]);
 

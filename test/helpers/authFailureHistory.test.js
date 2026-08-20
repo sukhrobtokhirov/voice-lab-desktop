@@ -6,11 +6,16 @@ const assert = require("node:assert/strict");
 const root = path.resolve(__dirname, "../..");
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
-test("does not save new authentication failures as transcriptions", () => {
+test("does not save cloud API failures as workspace transcriptions", () => {
   const source = read("src/helpers/audioManager.js");
+  const processAudio = source.slice(
+    source.indexOf("async processAudio("),
+    source.indexOf("async processWithLocalWhisper(")
+  );
 
-  assert.match(source, /error\.code === "AUTH_EXPIRED" \|\| error\.code === "AUTH_REQUIRED"/);
-  assert.match(source, /this\.lastAudioBlob && !isAuthenticationFailure/);
+  assert.match(processAudio, /error\.code === "AUTH_EXPIRED" \|\| error\.code === "AUTH_REQUIRED"/);
+  assert.doesNotMatch(processAudio, /saveFailedTranscription/);
+  assert.match(processAudio, /this\.lastRetryMetadata = metadata/);
 });
 
 test("filters old authentication failures from initial and live history", () => {

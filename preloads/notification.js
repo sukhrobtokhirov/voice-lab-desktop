@@ -61,8 +61,7 @@ const fullElectronAPI = {
   setDictionary: (words) => ipcRenderer.invoke("db-set-dictionary", words),
   getDictionaryState: () => ipcRenderer.invoke("desktop-dictionary-state"),
   createDictionaryEntry: (input) => ipcRenderer.invoke("desktop-dictionary-create", input),
-  updateDictionaryEntry: (id, input) =>
-    ipcRenderer.invoke("desktop-dictionary-update", id, input),
+  updateDictionaryEntry: (id, input) => ipcRenderer.invoke("desktop-dictionary-update", id, input),
   deleteDictionaryEntry: (id) => ipcRenderer.invoke("desktop-dictionary-delete", id),
   decideLegacyDictionary: (decision) =>
     ipcRenderer.invoke("desktop-dictionary-legacy-decision", decision),
@@ -428,6 +427,7 @@ const fullElectronAPI = {
   checkMicrophoneAccess: () => ipcRenderer.invoke("check-microphone-access"),
   checkSystemAudioAccess: () => ipcRenderer.invoke("check-system-audio-access"),
   requestSystemAudioAccess: () => ipcRenderer.invoke("request-system-audio-access"),
+  armDisplayMediaCapture: () => ipcRenderer.invoke("arm-display-media-capture"),
   openMicrophoneSettings: () => ipcRenderer.invoke("open-microphone-settings"),
   openSoundInputSettings: () => ipcRenderer.invoke("open-sound-input-settings"),
   openAccessibilitySettings: () => ipcRenderer.invoke("open-accessibility-settings"),
@@ -449,15 +449,16 @@ const fullElectronAPI = {
   },
   onDesktopProtocolError: registerListener("desktop-protocol-error"),
 
-  // OpenWhispr Cloud API
+  // VoiceLab Cloud API
   cloudHealthCheck: () => ipcRenderer.invoke("cloud-health-check"),
   cloudTranscribe: (audioBuffer, opts) => ipcRenderer.invoke("cloud-transcribe", audioBuffer, opts),
+  cancelCloudTranscribe: (requestId) => ipcRenderer.invoke("cancel-cloud-transcribe", requestId),
   cloudReason: (text, opts) => ipcRenderer.invoke("cloud-reason", text, opts),
   cloudStreamingUsage: (text, audioDurationSeconds, opts) =>
     ipcRenderer.invoke("cloud-streaming-usage", text, audioDurationSeconds, opts),
   cloudUsage: () => ipcRenderer.invoke("cloud-usage"),
-  openVoiceLabBilling: (source = "dictate") =>
-    ipcRenderer.invoke("open-voicelab-billing", source),
+  desktopPricing: () => ipcRenderer.invoke("desktop-pricing"),
+  openVoiceLabBilling: (source = "dictate") => ipcRenderer.invoke("open-voicelab-billing", source),
   cloudCheckout: (opts) => ipcRenderer.invoke("cloud-checkout", opts),
   cloudBillingPortal: () => ipcRenderer.invoke("cloud-billing-portal"),
   cloudSwitchPlan: (opts) => ipcRenderer.invoke("cloud-switch-plan", opts),

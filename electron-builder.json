@@ -12,6 +12,16 @@
   "directories": {
     "output": "dist"
   },
+  "asar": true,
+  "electronFuses": {
+    "runAsNode": false,
+    "enableCookieEncryption": true,
+    "enableNodeOptionsEnvironmentVariable": false,
+    "enableNodeCliInspectArguments": false,
+    "enableEmbeddedAsarIntegrityValidation": true,
+    "onlyLoadAppFromAsar": true,
+    "grantFileProtocolExtraPrivileges": true
+  },
   "npmRebuild": true,
   "buildDependenciesFromSource": false,
   "files": [
@@ -158,6 +168,10 @@
     ],
     "extendInfo": {
       "LSUIElement": false,
+      "NSAppTransportSecurity": {
+        "NSAllowsArbitraryLoads": false,
+        "NSAllowsLocalNetworking": true
+      },
       "NSMicrophoneUsageDescription": "VoiceLab uses the microphone to capture your voice for transcription.",
       "NSAudioCaptureUsageDescription": "VoiceLab uses system audio to capture other participants' audio from calls and meetings.",
       "NSAccessibilityUsageDescription": "VoiceLab needs accessibility permissions to paste transcribed text into other applications."
@@ -177,6 +191,7 @@
     "target": ["AppImage", "deb", "rpm", "tar.gz"],
     "icon": "src/assets/icon.png",
     "category": "Utility",
+    "syncDesktopName": true,
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
   },
   "flatpak": {

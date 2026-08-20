@@ -75,7 +75,14 @@ export default function AuthenticationStep({ onAuthComplete }: AuthenticationSte
   }, [isLoaded, isSignedIn, onAuthComplete, user]);
 
   useEffect(() => {
-    if (waiting || authStatus === "authenticated") setOpening(false);
+    if (waiting) {
+      setOpening(false);
+      setError(authErrorCode ? localizedAuthError(t, authErrorCode) : null);
+    }
+    if (authStatus === "authenticated") {
+      setOpening(false);
+      setError(null);
+    }
     if (authStatus === "cancelled") {
       setOpening(false);
       setError(t("auth.desktopCancelled"));
@@ -136,9 +143,7 @@ export default function AuthenticationStep({ onAuthComplete }: AuthenticationSte
           alt="VoiceLab"
           className="mx-auto mb-5 h-8 w-auto max-w-44 dark:invert"
         />
-        <h2 className="text-2xl font-medium tracking-[-0.03em]">
-          {t("auth.desktopTitle")}
-        </h2>
+        <h2 className="text-2xl font-medium tracking-[-0.03em]">{t("auth.desktopTitle")}</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           {waiting ? t("auth.desktopWaiting") : t("auth.desktopBrowserHint")}
         </p>
@@ -189,7 +194,11 @@ export default function AuthenticationStep({ onAuthComplete }: AuthenticationSte
           onClick={start}
           disabled={busy || protocolReady !== true}
         >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUpRight className="h-4 w-4" />}
+          {busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <ArrowUpRight className="h-4 w-4" />
+          )}
           {busy ? t("auth.desktopOpening") : t("auth.desktopOpenBrowser")}
         </Button>
       )}

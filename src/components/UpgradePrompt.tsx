@@ -17,7 +17,7 @@ interface UpgradePromptProps {
 export default function UpgradePrompt({ open, onOpenChange, shortage }: UpgradePromptProps) {
   const { t } = useTranslation();
   const usage = useUsage();
-  const available = shortage?.availableCredits ?? usage?.availableCredits ?? "0";
+  const available = shortage?.availableCredits ?? usage?.availableCredits ?? "—";
   const required = shortage?.requiredCredits;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

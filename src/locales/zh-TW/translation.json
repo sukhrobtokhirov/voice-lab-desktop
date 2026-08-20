@@ -801,7 +801,7 @@
       "continueWithApple": "使用 Apple 繼續",
       "continueWithGoogle": "使用 Google 繼續",
       "continueWithMicrosoft": "使用 Microsoft 繼續",
-      "protocolUnavailable": "無法透過瀏覽器登入 — 請在系統的「預設應用程式」設定中重新註冊 openwhispr:// 協定。"
+      "protocolUnavailable": "無法透過瀏覽器登入 — 請在系統的「預設應用程式」設定中重新註冊 voicelab:// 協定。"
     },
     "welcomeSubtitle": "隨時隨地用語音輸入文字",
     "welcomeTitle": "歡迎使用 VoiceLab",
@@ -1269,12 +1269,7 @@
           "annualEquivalent": "$16.67",
           "includesPrefix": "所有 Pro 功能 +",
           "badge": "最熱門",
-          "features": [
-            "無限會議錄製",
-            "代理模式",
-            "與您的資料對話",
-            "優先支援"
-          ],
+          "features": ["無限會議錄製", "代理模式", "與您的資料對話", "優先支援"],
           "cta": "開始使用",
           "switchToAnnual": "切換為年付"
         },
@@ -1330,7 +1325,7 @@
         "failedDescription": "刪除您的帳戶時發生錯誤。您的本地資料可能已被部分刪除。請重試。"
       },
       "voiceLabAccount": {
-        "sectionDescription": "VoiceLab Cloud 使用您的登入帳號和共用的 AI Credit 錢包。",
+        "sectionDescription": "VoiceLab Cloud 使用您的 VoiceLab 訂閱。",
         "label": "語音實驗室帳戶",
         "description": "登入一次；不需要單獨的語音 API 金鑰。",
         "openSpace": "開啟語音實驗室",
@@ -1425,7 +1420,7 @@
       "open": "開啟",
       "removeModels": {
         "confirmText": "刪除模型",
-        "description": "這將刪除所有本機快取的 Whisper 模型（{{path}}），並釋放磁碟空間。你可以從模型選擇器重新下載。",
+        "description": "這將刪除所有本機快取的語音模型，並釋放磁碟空間。你可以從模型選擇器重新下載。",
         "failedDescription": "移除模型時發生錯誤。請再試一次。",
         "failedDescriptionShort": "無法移除快取的模型。",
         "failedTitle": "無法移除模型",
@@ -1622,7 +1617,7 @@
           "manualTitle": "將以下內容加入你的設定",
           "manualDesc": "自行設定後重新建置。",
           "flakeTitle": "透過我們的 flake 安裝？",
-          "flakeDesc": "若你從 flake 安裝 VoiceLab，programs.openwhispr.enable 會自動啟用 ydotool、uinput 模組及所需的群組成員資格。",
+          "flakeDesc": "若你從 flake 安裝 VoiceLab，programs.voicelab.enable 會自動啟用 ydotool、uinput 模組及所需的群組成員資格。",
           "rebuildNote": "執行 sudo nixos-rebuild switch，然後登出並重新登入，使群組變更與 /dev/uinput 規則生效。將 <you> 替換為你的使用者名稱。"
         }
       },
@@ -3087,14 +3082,14 @@
       "more": "更多的"
     },
     "wallet": {
-      "title": "AI信用錢包",
-      "shared": "VoiceLab 產品之間的平衡",
-      "balance": "平衡",
-      "available": "可用的",
-      "reserved": "預訂的",
-      "unavailable": "錢包暫時無法使用。",
+      "title": "VoiceLab 方案與用量",
+      "shared": "方案與帳單在 VoiceLab 管理。",
+      "balance": "今日已用",
+      "available": "今日剩餘",
+      "reserved": "每日上限",
+      "unavailable": "用量資料尚不可用。",
       "updated": "更新了{{time}}",
-      "live": "即時餘額",
+      "live": "下次聽寫後將顯示用量。",
       "manage": "管理帳單"
     },
     "creditShortage": {
@@ -3162,7 +3157,7 @@
       },
       "ready": {
         "title": "準備好",
-        "account": "您的 VoiceLab 帳戶和 AI Credit 錢包已連線。",
+        "account": "您的 VoiceLab 帳戶已連線。",
         "local": "選擇本地轉錄。",
         "provider": "開啟高級設定以連接您的提供者。",
         "start": "開始聽寫"
@@ -3201,7 +3196,7 @@
     },
     "settings": {
       "account": "帳戶及積分",
-      "accountDescription": "個人資料、會話和 AI Credit 錢包",
+      "accountDescription": "個人資料、安全工作階段和帳單",
       "dictation": "聽寫",
       "dictationDescription": "語言、麥克風和貼上行為",
       "shortcuts": "快速方式",
@@ -3220,7 +3215,7 @@
       "status": "會議",
       "protected": "主動且受保護",
       "signedOut": "未登入",
-      "signedOutDescription": "登入以使用 VoiceLab Cloud 和您的 AI Credit 錢包。"
+      "signedOutDescription": "登入以使用 VoiceLab Cloud。"
     }
   }
 }

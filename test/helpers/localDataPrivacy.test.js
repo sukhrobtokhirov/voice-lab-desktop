@@ -145,6 +145,14 @@ function createLegacyDatabase() {
       account_id TEXT NOT NULL,
       payload_json TEXT NOT NULL
     );
+    CREATE TABLE google_calendar_tokens (
+      id INTEGER PRIMARY KEY,
+      google_email TEXT NOT NULL UNIQUE,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      scope TEXT NOT NULL
+    );
     INSERT INTO transcriptions VALUES
       (1, 'tx-1', 'private transcript', 'raw private transcript', 'provider leaked text');
     INSERT INTO notes VALUES
@@ -163,6 +171,8 @@ function createLegacyDatabase() {
       ('account-a', 'sync-1', 'Meeting title', 'synced transcript', '{"duration_ms":1200}');
     INSERT INTO sync_outbox VALUES
       ('mutation-1', 'account-a', '{"text":"pending transcript"}');
+    INSERT INTO google_calendar_tokens VALUES
+      (1, 'calendar@example.com', 'access-token-secret', 'refresh-token-secret', 9999999999999, 'calendar.read');
   `);
   return { sqlite, db: sqliteAdapter(sqlite) };
 }
@@ -210,6 +220,20 @@ test("versioned online migration encrypts sensitive columns and builds HMAC inde
       "Private agent message"
     );
 
+    const googleTokens = sqlite.prepare("SELECT * FROM google_calendar_tokens").get();
+    assert.match(googleTokens.access_token, /^vlabf:1:/);
+    assert.match(googleTokens.refresh_token, /^vlabf:1:/);
+    assert.doesNotMatch(googleTokens.access_token, /access-token-secret/);
+    assert.equal(
+      protection.reveal(
+        "google_calendar_tokens",
+        "calendar@example.com",
+        "access_token",
+        googleTokens.access_token
+      ),
+      "access-token-secret"
+    );
+
     const dictionary = sqlite.prepare("SELECT * FROM custom_dictionary WHERE id = 1").get();
     assert.match(dictionary.word, /^vlabf:1:/);
     assert.match(dictionary.word_hmac, /^[a-f0-9]{64}$/);
@@ -230,7 +254,7 @@ test("versioned online migration encrypts sensitive columns and builds HMAC inde
         "SELECT completed_at FROM local_data_migrations WHERE completed_at IS NOT NULL"
       )
       .all();
-    assert.equal(states.length, 8);
+    assert.equal(states.length, 9);
   } finally {
     sqlite.close();
     fs.rmSync(dir, { recursive: true, force: true });

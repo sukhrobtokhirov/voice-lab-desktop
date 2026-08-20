@@ -6,14 +6,58 @@ const path = require("node:path");
 const root = path.join(__dirname, "..", "..");
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
-test("desktop speech uses the authenticated Go usage and STT contracts", () => {
+function classMethodContaining(source, marker) {
+  const markerIndex = source.indexOf(marker);
+  assert.notEqual(markerIndex, -1, `Expected source to contain ${marker}`);
+
+  const methodStart = source.lastIndexOf("\n  async ", markerIndex);
+  assert.notEqual(methodStart, -1, `Expected ${marker} to be inside an async class method`);
+
+  const nextMethod = source.indexOf("\n  async ", markerIndex + marker.length);
+  return source.slice(methodStart, nextMethod === -1 ? source.length : nextMethod);
+}
+
+test("desktop speech uses the authenticated synchronous desktop STT contract", () => {
   const client = read("src/helpers/voiceLabApiClient.js");
+  const sttRequest = classMethodContaining(client, '"/v1/desktop/stt"');
+
   assert.match(client, /Authorization: `Bearer \$\{accessToken\}`/);
-  assert.match(client, /\/api\/v1\/account\/usage/);
-  assert.match(client, /\/api\/v1\/stt/);
-  assert.match(client, /\/api\/v1\/stt\/transcriptions\//);
+  assert.match(sttRequest, /authenticatedFetch\("\/v1\/desktop\/stt"/);
+  assert.match(sttRequest, /method:\s*"POST"/);
+  assert.match(sttRequest, /form\.append\(\s*"audio"/);
+  assert.match(sttRequest, /form\.append\(\s*"language"\s*,\s*language\s*\)/);
+
+  assert.doesNotMatch(client, /["'`]\/api\/v1\/stt(?:\/|["'`])/);
+  assert.doesNotMatch(client, /stt\/transcriptions|waitForOperation|resumePendingDictations/);
+  assert.doesNotMatch(sttRequest, /Idempotency-Key|idempotencyKey|include_speakers/);
   assert.doesNotMatch(client, /\/api\/v1\/desktop\/(wallet|dictation)/);
   assert.doesNotMatch(client, /X-Api-Key|AISHA_API_KEY/);
+});
+
+test("desktop STT is one request and is cancellable through IPC", () => {
+  const ipcHandlers = read("src/helpers/ipcHandlers.js");
+  const preload = read("preload.js");
+
+  assert.doesNotMatch(
+    ipcHandlers,
+    /CLOUD_INLINE_LIMIT|chunkedCloudTranscribe|resumePendingDesktopDictations/
+  );
+  assert.doesNotMatch(ipcHandlers, /include_speakers/);
+
+  assert.match(
+    preload,
+    /cancelCloudTranscribe:\s*\(requestId\)\s*=>[\s\S]*?ipcRenderer\.invoke\("cancel-cloud-transcribe",\s*requestId\)/
+  );
+  assert.match(ipcHandlers, /this\._handle\("cancel-cloud-transcribe"/);
+
+  const cancelHandler = ipcHandlers.slice(
+    ipcHandlers.indexOf('this._handle("cancel-cloud-transcribe"'),
+    ipcHandlers.indexOf(
+      "\n    this._handle(",
+      ipcHandlers.indexOf('this._handle("cancel-cloud-transcribe"') + 1
+    )
+  );
+  assert.match(cancelHandler, /abort|cancel/i);
 });
 
 test("desktop release has no local speech runtime or whisper.cpp packaging", () => {
@@ -51,6 +95,29 @@ test("legacy transcription choices are migrated to VoiceLab Cloud", () => {
   assert.match(settingsStore, /localStorage\.setItem\("useLocalWhisper", "false"\)/);
 });
 
+test("runtime provider identities and public transcription sources are VoiceLab-only", () => {
+  const audioManager = read("src/helpers/audioManager.js");
+  const apiClient = read("src/helpers/voiceLabApiClient.js");
+  const reasoningService = read("src/services/ReasoningService.ts");
+  const provider = read("src/services/ai/inferenceProviders/voicelab.ts");
+
+  assert.match(audioManager, /source:\s*VOICELAB_PROVIDER/);
+  assert.doesNotMatch(audioManager, /processWithOpenWhisprCloud|source:\s*["']openwhispr/);
+  assert.match(apiClient, /source:\s*"voicelab"/);
+  assert.match(apiClient, /sttProvider:\s*"voicelab"/);
+  assert.doesNotMatch(apiClient, /source:\s*["']openwhispr/);
+
+  assert.match(reasoningService, /inferenceProviders\/voicelab/);
+  assert.match(provider, /id:\s*"voicelab"/);
+  assert.match(provider, /provider:\s*"voicelab"/);
+  assert.match(provider, /VOICELAB_(?:START|SUCCESS)/);
+  assert.doesNotMatch(provider, /OpenWhispr|OPENWHISPR|openwhispr/);
+  assert.equal(
+    fs.existsSync(path.join(root, "src", "services", "ai", "inferenceProviders", "openwhispr.ts")),
+    false
+  );
+});
+
 test("renderer preloads expose only the authenticated VoiceLab speech boundary", () => {
   const sources = [read("preload.js")];
   const generatedDir = path.join(root, "preloads");
@@ -76,6 +143,7 @@ test("renderer preloads expose only the authenticated VoiceLab speech boundary",
   }
 
   assert.match(preloadSurface, /\bcloudTranscribe\b/);
+  assert.match(preloadSurface, /\bcancelCloudTranscribe\b/);
   assert.match(preloadSurface, /\btranscribeAudioFileCloud\b/);
 });
 
@@ -89,7 +157,7 @@ test("dictation, retry, meeting, and upload routes are pinned to VoiceLab cloud"
     audioManager.indexOf("async processAudio("),
     audioManager.indexOf("async processWithLocalWhisper(")
   );
-  assert.match(processAudio, /processWithOpenWhisprCloud\(audioBlob, metadata\)/);
+  assert.match(processAudio, /processWithVoiceLabCloud\(audioBlob, metadata\)/);
   assert.doesNotMatch(processAudio, /processWithLocal|processWithOpenAIAPI|providerTranscribe/);
   assert.match(audioManager, /shouldUseStreaming\(_isSignedInOverride\)[\s\S]*?return false;/);
 

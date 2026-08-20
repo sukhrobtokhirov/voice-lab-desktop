@@ -10,7 +10,7 @@ import { buildCortiOnboardingPayloads } from "../../helpers/reasoningRouting";
 import { USE_CASE_IDS } from "./useCases";
 
 const CORTI_SIGNUP_URL =
-  "https://www.corti.ai/?utm_source=referral&utm_content=&utm_campaign=openwhispr";
+  "https://www.corti.ai/?utm_source=referral&utm_content=&utm_campaign=voicelab";
 
 interface FinishStepProps {
   isCloudUser: boolean;
@@ -48,7 +48,7 @@ export default function FinishStep({
   const startWithCorti = () => {
     // Transcription always routes to Corti. Reasoning routes to Corti only in the
     // EU with an API key (Corti Models is EU-only); otherwise the HIPAA-compliant
-    // OpenWhispr Cloud handles language features so PHI never reaches a third party.
+    // VoiceLab Cloud handles language features so PHI never reaches a third party.
     const reasoningProvider = modelRegistry.getCloudProviders().find((p) => p.id === "corti");
     const { transcription, reasoning } = buildCortiOnboardingPayloads(
       cortiProvider,
@@ -130,7 +130,7 @@ export default function FinishStep({
               {t("onboarding.finish.corti.regionHint")}
             </p>
           </div>
-          {/* Corti Models (LLM) is EU-only; US projects use OpenWhispr Cloud for
+          {/* Corti Models (LLM) is EU-only; US projects use VoiceLab Cloud for
               language features, so the key is only collected in the EU region. */}
           {cortiEnvironment === "eu" && (
             <div className="space-y-1.5">

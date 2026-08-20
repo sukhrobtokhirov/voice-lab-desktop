@@ -1,5 +1,5 @@
 #!/bin/bash
-# Post-remove script for OpenWhispr (deb)
+# Post-remove script for VoiceLab (deb)
 # Best-effort: must never fail package removal, and must never run on upgrade.
 
 set -uo pipefail
@@ -27,16 +27,16 @@ if [ -z "$REAL_HOME" ]; then
   exit 0
 fi
 
-CACHE_DIR="$REAL_HOME/.cache/openwhispr"
-MODELS_DIR="$CACHE_DIR/models"
+for CACHE_DIR in "$REAL_HOME/.cache/voicelab" "$REAL_HOME/.cache/openwhispr"; do
+  MODELS_DIR="$CACHE_DIR/models"
+  if [ -d "$MODELS_DIR" ]; then
+    rm -rf "$MODELS_DIR" 2>/dev/null || true
+    echo "Removed VoiceLab cached models"
+  fi
 
-if [ -d "$MODELS_DIR" ]; then
-  rm -rf "$MODELS_DIR" 2>/dev/null || true
-  echo "Removed OpenWhispr cached models"
-fi
-
-if [ -d "$CACHE_DIR" ]; then
-  rmdir "$CACHE_DIR" 2>/dev/null || true
-fi
+  if [ -d "$CACHE_DIR" ]; then
+    rmdir "$CACHE_DIR" 2>/dev/null || true
+  fi
+done
 
 exit 0

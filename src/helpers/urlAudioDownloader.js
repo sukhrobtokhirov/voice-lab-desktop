@@ -9,7 +9,11 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const debugLogger = require("./debugLogger");
-const { getSafeTempDir } = require("./safeTempDir");
+const {
+  getSafeTempDir,
+  reserveSafeTempFile,
+  getReservedTempWriteOptions,
+} = require("./safeTempDir");
 const { getFFmpegPath } = require("./ffmpegUtils");
 
 const YOUTUBE_HOSTS = new Set([
@@ -26,14 +30,23 @@ const MAX_DOWNLOAD_BYTES = 500 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
 // Reject absurdly long videos before downloading.
 const MAX_DURATION_SECONDS = 6 * 60 * 60;
-const USER_AGENT = "OpenWhispr/1.0";
+const USER_AGENT = "VoiceLab/1.0";
 
 // Writable yt-dlp cache, seeded from the read-only bundle so the binary can
 // self-update (the bundled copy is read-only / inside the signed bundle).
-// OPENWHISPR_YTDLP_CACHE_DIR overrides the location (relocate it, or isolate it in tests).
-const YT_DLP_CACHE_DIR =
-  process.env.OPENWHISPR_YTDLP_CACHE_DIR ||
-  path.join(os.homedir(), ".cache", "openwhispr", "yt-dlp");
+// The old environment variable and cache directory remain readable so upgrades
+// keep their downloaded binary without exposing the previous brand to new installs.
+function resolveYtDlpCacheDir() {
+  if (process.env.VOICELAB_YTDLP_CACHE_DIR) return process.env.VOICELAB_YTDLP_CACHE_DIR;
+  if (process.env.OPENWHISPR_YTDLP_CACHE_DIR) return process.env.OPENWHISPR_YTDLP_CACHE_DIR;
+
+  const cacheRoot = path.join(os.homedir(), ".cache");
+  const canonicalDir = path.join(cacheRoot, "voicelab", "yt-dlp");
+  const legacyDir = path.join(cacheRoot, "openwhispr", "yt-dlp");
+  return !fs.existsSync(canonicalDir) && fs.existsSync(legacyDir) ? legacyDir : canonicalDir;
+}
+
+const YT_DLP_CACHE_DIR = resolveYtDlpCacheDir();
 const YT_DLP_UPDATE_THROTTLE_MS = 24 * 60 * 60 * 1000;
 // Bound the self-update so a stalled GitHub request can never hang a download
 // or wedge the single-flight flag. Overridable via options.timeoutMs for tests.
@@ -177,7 +190,7 @@ function detectUrlType(urlString) {
   try {
     parsed = new URL(urlString);
   } catch {
-    const err = new Error(`Invalid URL: ${urlString}`);
+    const err = new Error("Invalid URL");
     err.code = "INVALID_URL";
     throw err;
   }
@@ -846,7 +859,7 @@ async function downloadYouTube(url, onProgress, abortSignal) {
     throw err;
   }
 
-  const tempBase = path.join(getSafeTempDir(), `ow-url-${Date.now()}-${videoId}`);
+  const tempBase = path.join(getSafeTempDir(), `ow-url-${crypto.randomUUID()}-${videoId}`);
 
   const extractionArgs = [
     ...proxyArgs,
@@ -899,6 +912,9 @@ async function downloadYouTube(url, onProgress, abortSignal) {
     }
 
     const tempPath = selectYtDlpOutput(getSafeTempDir(), path.basename(tempBase));
+    try {
+      fs.chmodSync(tempPath, 0o600);
+    } catch {}
     const sizeBytes = fs.statSync(tempPath).size;
 
     // --max-filesize doesn't enforce for unknown-size streams; re-check after the fact.
@@ -976,7 +992,7 @@ function streamToFile(
       reject(Object.assign(new Error("Download cancelled"), { code: "DOWNLOAD_CANCELLED" }));
       return;
     }
-    const fileStream = fs.createWriteStream(tempPath);
+    const fileStream = fs.createWriteStream(tempPath, getReservedTempWriteOptions(tempPath));
     let downloaded = 0;
     let settled = false;
 
@@ -1266,7 +1282,7 @@ async function downloadViaProxy(url, onProgress, abortSignal, redirectCount = 0)
   const { response, contentLength, request } = settledResponse;
 
   const { title, ext } = deriveTitleAndExt(new URL(url).pathname);
-  const tempPath = path.join(getSafeTempDir(), `ow-url-${Date.now()}.${ext}`);
+  const tempPath = reserveSafeTempFile("ow-url-", `.${ext}`);
 
   onProgress?.({ stage: "downloading", percent: 0, title });
 
@@ -1386,7 +1402,6 @@ async function downloadDirect(url, onProgress, abortSignal, redirectCount = 0) {
   }
 
   const { title, ext } = deriveTitleAndExt(headParsed.pathname);
-  const tempPath = path.join(getSafeTempDir(), `ow-url-${Date.now()}.${ext}`);
 
   onProgress?.({ stage: "downloading", percent: 0, title });
 
@@ -1432,6 +1447,7 @@ async function downloadDirect(url, onProgress, abortSignal, redirectCount = 0) {
     }
   }
 
+  const tempPath = reserveSafeTempFile("ow-url-", `.${ext}`);
   const sizeBytes = await streamToFile(response, tempPath, {
     contentLength,
     title,
@@ -1450,13 +1466,27 @@ async function downloadDirect(url, onProgress, abortSignal, redirectCount = 0) {
 
 async function download(url, onProgress, abortSignal) {
   const type = detectUrlType(url);
-  debugLogger.log("URL audio download starting", { url, type });
+  debugLogger.log("URL audio download starting", safeDownloadLogMetadata(url, type));
 
   if (type === "youtube") {
     return downloadYouTube(url, onProgress, abortSignal);
   }
 
   return downloadDirect(url, onProgress, abortSignal);
+}
+
+function safeDownloadLogMetadata(url, type) {
+  try {
+    const parsed = new URL(url);
+    return {
+      type,
+      protocol: parsed.protocol,
+      hasQuery: parsed.search.length > 0,
+      hasCredentials: Boolean(parsed.username || parsed.password),
+    };
+  } catch {
+    return { type: "invalid" };
+  }
 }
 
 module.exports = {
@@ -1470,6 +1500,7 @@ module.exports = {
   ssrfSafeLookup,
   maybeUpdateYtDlp,
   downloadViaProxy,
+  safeDownloadLogMetadata,
   // Test-only seam: lets the regression test confirm the single-flight flag is cleared.
   _isYtDlpUpdateInFlight: () => ytDlpUpdateInFlight,
   // Test-only seam: injects a fake electron net for downloadViaProxy tests.

@@ -25,6 +25,7 @@ const {
   ipcMain,
   session,
   systemPreferences,
+  webContents,
 } = require("electron");
 const path = require("path");
 const tls = require("tls");
@@ -54,7 +55,9 @@ const DEFAULT_OAUTH_PROTOCOL_BY_CHANNEL = {
   staging: "voicelab-staging",
   production: "voicelab",
 };
-const BASE_WINDOWS_APP_ID = "com.gizmolabs.openwhispr";
+const BASE_WINDOWS_APP_ID = "uz.voicelab.desktop";
+const CHANNEL_ENV = "VOICELAB_CHANNEL";
+const LEGACY_CHANNEL_ENV = "OPENWHISPR_CHANNEL";
 
 function isElectronBinaryExec() {
   const execPath = (process.execPath || "").toLowerCase();
@@ -86,7 +89,9 @@ function resolveAppChannel() {
     return "production";
   }
 
-  const rawChannel = (process.env.OPENWHISPR_CHANNEL || "").trim().toLowerCase();
+  const rawChannel = (process.env[CHANNEL_ENV] || process.env[LEGACY_CHANNEL_ENV] || "")
+    .trim()
+    .toLowerCase();
 
   if (VALID_CHANNELS.has(rawChannel)) {
     return rawChannel;
@@ -96,15 +101,37 @@ function resolveAppChannel() {
 }
 
 const APP_CHANNEL = resolveAppChannel();
-process.env.OPENWHISPR_CHANNEL = APP_CHANNEL;
+process.env[CHANNEL_ENV] = APP_CHANNEL;
 
 function configureChannelUserDataPath() {
-  if (APP_CHANNEL === "production") {
-    return;
+  const fs = require("fs");
+  const appDataPath = app.getPath("appData");
+  const defaultPath = app.getPath("userData");
+  const channelSuffix = APP_CHANNEL === "production" ? "" : `-${APP_CHANNEL}`;
+  const canonicalPath = path.join(appDataPath, `VoiceLab${channelSuffix}`);
+  const legacyPaths = [
+    ...(APP_CHANNEL === "production" ? [defaultPath] : []),
+    path.join(appDataPath, `OpenWhispr${channelSuffix}`),
+  ].filter((candidate, index, candidates) => {
+    return candidate !== canonicalPath && candidates.indexOf(candidate) === index;
+  });
+
+  if (!fs.existsSync(canonicalPath)) {
+    const legacyPath = legacyPaths.find((candidate) => fs.existsSync(candidate));
+    if (legacyPath) {
+      try {
+        fs.renameSync(legacyPath, canonicalPath);
+      } catch (error) {
+        // Keep using the old profile if an atomic migration is unavailable.
+        // This preserves auth tokens, encrypted settings, and local data.
+        console.warn(`[Startup] Could not migrate user data to VoiceLab: ${error.message}`);
+        app.setPath("userData", legacyPath);
+        return;
+      }
+    }
   }
 
-  const isolatedPath = path.join(app.getPath("appData"), `OpenWhispr-${APP_CHANNEL}`);
-  app.setPath("userData", isolatedPath);
+  app.setPath("userData", canonicalPath);
 }
 
 configureChannelUserDataPath();
@@ -135,7 +162,7 @@ if (process.platform === "linux" && process.env.XDG_SESSION_TYPE === "wayland") 
 // Set desktop filename so Wayland compositors can match windows to the .desktop entry.
 // This allows XDG portals (e.g. PipeWire) to persist permissions across sessions.
 if (process.platform === "linux") {
-  app.setDesktopName("open-whispr.desktop");
+  app.setDesktopName("voicelab.desktop");
 }
 
 // Group all windows under single taskbar entry on Windows
@@ -152,66 +179,13 @@ function getOAuthProtocol() {
 }
 
 const OAUTH_PROTOCOL = getOAuthProtocol();
-
-function resolveDesktopRuntimeAuthConfig() {
-  const defaults = {
-    development: {
-      apiBaseUrl: "http://localhost:8000",
-      browserOrigins: ["http://localhost:3000"],
-    },
-    staging: {
-      apiBaseUrl: "https://api-staging.voicelab.uz",
-      browserOrigins: ["https://staging.voicelab.uz"],
-    },
-    production: {
-      apiBaseUrl: "https://api.voicelab.uz",
-      browserOrigins: ["https://voicelab.uz"],
-    },
-  }[APP_CHANNEL];
-  const apiBaseUrl = (process.env.VOICELAB_DESKTOP_API_URL || defaults.apiBaseUrl).trim();
-  const configuredOrigins = (process.env.VOICELAB_DESKTOP_AUTH_ORIGINS || "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-  const browserOrigins = configuredOrigins.length ? configuredOrigins : defaults.browserOrigins;
-  const validateOrigin = (value, label) => {
-    const url = new URL(value);
-    const localDevelopment =
-      APP_CHANNEL === "development" &&
-      url.protocol === "http:" &&
-      ["localhost", "127.0.0.1"].includes(url.hostname);
-    if ((!localDevelopment && url.protocol !== "https:") || url.username || url.password) {
-      throw new Error(`${label} must use a trusted HTTPS origin`);
-    }
-    if ((url.pathname && url.pathname !== "/") || url.search || url.hash) {
-      throw new Error(`${label} must be an origin without path, query, or fragment`);
-    }
-    return url.origin;
-  };
-  const normalizedApiOrigin = validateOrigin(apiBaseUrl, "VOICELAB_DESKTOP_API_URL");
-  const normalizedBrowserOrigins = browserOrigins.map((origin) =>
-    validateOrigin(origin, "VOICELAB_DESKTOP_AUTH_ORIGINS")
-  );
-  const authWebBaseUrl = validateOrigin(
-    (process.env.VOICELAB_DESKTOP_AUTH_URL || normalizedBrowserOrigins[0]).trim(),
-    "VOICELAB_DESKTOP_AUTH_URL"
-  );
-  if (!normalizedBrowserOrigins.includes(authWebBaseUrl)) {
-    throw new Error("VOICELAB_DESKTOP_AUTH_URL must be included in VOICELAB_DESKTOP_AUTH_ORIGINS");
-  }
-  if (!/^[a-z][a-z0-9+.-]*$/.test(OAUTH_PROTOCOL)) {
-    throw new Error("OPENWHISPR_PROTOCOL is invalid");
-  }
-  return {
-    apiBaseUrl: normalizedApiOrigin,
-    authWebBaseUrl,
-    authorizationOrigins: normalizedBrowserOrigins,
-    billingOrigin: normalizedBrowserOrigins[0],
-    scheme: OAUTH_PROTOCOL,
-  };
-}
-
-const DESKTOP_AUTH_CONFIG = resolveDesktopRuntimeAuthConfig();
+const { resolveDesktopRuntimeAuthConfig } = require("./src/helpers/desktopRuntimeAuthConfig");
+const DESKTOP_AUTH_CONFIG = resolveDesktopRuntimeAuthConfig({
+  channel: APP_CHANNEL,
+  isPackaged: app.isPackaged,
+  scheme: OAUTH_PROTOCOL,
+  env: process.env,
+});
 
 const initialProtocolUrls = process.argv.filter((arg) => arg.startsWith(`${OAUTH_PROTOCOL}://`));
 
@@ -248,7 +222,7 @@ function restoreHtmlHandlerIfChanged(original) {
   }
 }
 
-// True source of truth for whether openwhispr:// resolves on Linux — the same
+// True source of truth for whether the VoiceLab OAuth scheme resolves on Linux — the same
 // MIME database xdg-open consults. Returns true for deb/rpm/flatpak/AUR installs
 // (scheme registered via the packaged .desktop MimeType) and false for AppImage/
 // tar.gz runs where it genuinely isn't registered, so we never enable a dead-end
@@ -271,7 +245,7 @@ function isOAuthSchemeRegistered() {
 // Register custom protocol for OAuth callbacks.
 // In development, always include the app path argument so macOS/Windows/Linux
 // can launch the project app instead of opening bare Electron.
-function registerOpenWhisprProtocol() {
+function registerVoiceLabProtocol() {
   const protocol = OAUTH_PROTOCOL;
   const htmlHandler = process.platform === "linux" ? getDefaultHtmlHandler() : null;
 
@@ -294,7 +268,7 @@ function registerOpenWhisprProtocol() {
 // fall back to probing the system MIME database for an actual handler. This keeps
 // OAuth enabled where the callback can resolve (deb/rpm/flatpak/AUR) and correctly
 // gated where it can't (AppImage/tar.gz with no scheme registration).
-const protocolRegistered = registerOpenWhisprProtocol() || isOAuthSchemeRegistered();
+const protocolRegistered = registerVoiceLabProtocol() || isOAuthSchemeRegistered();
 if (!protocolRegistered) {
   console.warn(`[Auth] Failed to register ${OAUTH_PROTOCOL}:// protocol handler`);
 }
@@ -308,23 +282,28 @@ if (!gotSingleInstanceLock) {
 const isLiveWindow = (window) => window && !window.isDestroyed();
 
 // Ensure macOS menus use the proper casing for the app name
-if (process.platform === "darwin" && app.getName() !== "OpenWhispr") {
-  app.setName("OpenWhispr");
+if (process.platform === "darwin" && app.getName() !== "VoiceLab") {
+  app.setName("VoiceLab");
 }
 
 // Add global error handling for uncaught exceptions
+function errorSummary(error) {
+  return {
+    name: typeof error?.name === "string" ? error.name.slice(0, 80) : "Error",
+    code: typeof error?.code === "string" ? error.code.slice(0, 80) : undefined,
+  };
+}
+
 process.on("uncaughtException", (error) => {
-  console.error("Uncaught Exception:", error);
+  console.error("Uncaught exception", errorSummary(error));
   // Don't exit the process for EPIPE errors as they're harmless
   if (error.code === "EPIPE") {
     return;
   }
-  // For other errors, log and continue
-  console.error("Error stack:", error.stack);
 });
 
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled rejection", errorSummary(reason));
 });
 
 // Import helper module classes (but don't instantiate yet - wait for app.whenReady())
@@ -335,6 +314,8 @@ const ClipboardManager = require("./src/helpers/clipboard");
 const DiarizationManager = require("./src/helpers/diarization");
 const TrayManager = require("./src/helpers/tray");
 const DesktopAuthManager = require("./src/helpers/desktopAuthManager");
+const { DisplayMediaGrantManager } = require("./src/helpers/displayMediaGrant");
+const { isAllowedRendererUrl } = require("./src/helpers/windowSecurity");
 const VoiceLabApiClient = require("./src/helpers/voiceLabApiClient");
 const dockManager = require("./src/helpers/dockManager");
 const IPCHandlers = require("./src/helpers/ipcHandlers");
@@ -352,6 +333,7 @@ const LinuxPortalAudioManager = require("./src/helpers/linuxPortalAudioManager")
 const WindowsLoopbackAudioManager = require("./src/helpers/windowsLoopbackAudioManager");
 const MeetingAecManager = require("./src/helpers/meetingAecManager");
 const MeetingDetectionEngine = require("./src/helpers/meetingDetectionEngine");
+const { assertTrustedIpcSender } = require("./src/helpers/ipcSecurity");
 const { i18nMain, changeLanguage } = require("./src/helpers/i18nMain");
 const { ensureYdotool } = require("./src/helpers/ensureYdotool");
 const sidecarRegistry = require("./src/helpers/sidecarRegistry");
@@ -367,11 +349,66 @@ let clipboardManager = null;
 let diarizationManager = null;
 let trayManager = null;
 let desktopAuthManager = null;
+let displayMediaGrantManager = null;
 let voiceLabApiClient = null;
 let updateManager = null;
 let globeKeyManager = null;
 let windowsKeyManager = null;
 let linuxKeyManager = null;
+
+function onTrustedIpc(channel, listener) {
+  ipcMain.on(channel, (event, ...args) => {
+    try {
+      assertTrustedIpcSender(event, channel, windowManager);
+      listener(event, ...args);
+    } catch {
+      console.warn(`Rejected IPC event: ${channel}`);
+    }
+  });
+}
+
+function handleTrustedIpc(channel, handler) {
+  ipcMain.handle(channel, async (event, ...args) => {
+    assertTrustedIpcSender(event, channel, windowManager);
+    return handler(event, ...args);
+  });
+}
+
+function isTrustedAppWebContents(contents) {
+  if (!contents || contents.isDestroyed()) return false;
+  const senderWindow = BrowserWindow.fromWebContents(contents);
+  const knownWindows = [
+    windowManager?.mainWindow,
+    windowManager?.controlPanelWindow,
+    windowManager?.agentWindow,
+    windowManager?.notificationWindow,
+    windowManager?.transcriptionPreviewWindow,
+    windowManager?.updateNotificationWindow,
+  ].filter(Boolean);
+  return (
+    Boolean(senderWindow && knownWindows.includes(senderWindow)) &&
+    isAllowedRendererUrl(contents.mainFrame?.url || contents.getURL())
+  );
+}
+
+function installSessionPermissionPolicy(targetSession) {
+  targetSession.setPermissionCheckHandler((contents, permission, _origin, details = {}) => {
+    return (
+      permission === "media" &&
+      isTrustedAppWebContents(contents) &&
+      details.mediaType !== "video"
+    );
+  });
+  targetSession.setPermissionRequestHandler((contents, permission, callback, details = {}) => {
+    const mediaTypes = Array.isArray(details.mediaTypes) ? details.mediaTypes : [];
+    callback(
+      permission === "media" &&
+        isTrustedAppWebContents(contents) &&
+        mediaTypes.length > 0 &&
+        mediaTypes.every((type) => type === "audio")
+    );
+  });
+}
 let textEditMonitor = null;
 let googleCalendarManager = null;
 let meetingDetectionEngine = null;
@@ -563,6 +600,9 @@ async function initializeCoreManagers() {
     authorizationOrigins: DESKTOP_AUTH_CONFIG.authorizationOrigins,
   });
   await desktopAuthManager.initialize();
+  displayMediaGrantManager = new DisplayMediaGrantManager({
+    isAllowedUrl: isAllowedRendererUrl,
+  });
   voiceLabApiClient = new VoiceLabApiClient({
     authManager: desktopAuthManager,
     apiBaseUrl: DESKTOP_AUTH_CONFIG.apiBaseUrl,
@@ -621,6 +661,7 @@ async function initializeCoreManagers() {
     meetingAecManager,
     getTrayManager: () => trayManager,
     desktopAuthManager,
+    displayMediaGrantManager,
     voiceLabApiClient,
     oauthProtocolRegistered: protocolRegistered,
     oauthProtocol: OAUTH_PROTOCOL,
@@ -714,9 +755,7 @@ async function flushPendingNoteDeepLink() {
           void flushPendingNoteDeepLink();
         }, 1000);
       } else {
-        console.warn("Note deep link could not resolve a local note", {
-          cloudId: pendingNoteCloudId,
-        });
+        console.warn("Note deep link could not resolve a local note");
         clearPendingNoteDeepLink();
       }
       return;
@@ -726,7 +765,7 @@ async function flushPendingNoteDeepLink() {
     clearPendingNoteDeepLink();
     await windowManager.queueNoteNavigation(payload);
   } catch (error) {
-    console.error("Note deep link failed:", error);
+    console.error("Note deep link failed", errorSummary(error));
     clearPendingNoteDeepLink();
   }
 }
@@ -755,7 +794,7 @@ function handleInvitationDeepLink(token) {
       }
     }
   } catch (error) {
-    console.error("Invitation deep link parse failed:", error);
+    console.error("Invitation deep link parse failed", errorSummary(error));
   }
 }
 
@@ -803,12 +842,14 @@ async function startApp() {
   windowManager.setFloatingIconAutoHide(environmentManager.getFloatingIconAutoHide());
   windowManager.setPanelStartPosition(environmentManager.getPanelStartPosition());
 
-  ipcMain.on("activation-mode-changed", (_event, mode) => {
+  onTrustedIpc("activation-mode-changed", (_event, mode) => {
+    if (!new Set(["tap", "push"]).has(mode)) return;
     windowManager.setActivationModeCache(mode);
     environmentManager.saveActivationMode(mode);
   });
 
-  ipcMain.on("floating-icon-auto-hide-changed", (_event, enabled) => {
+  onTrustedIpc("floating-icon-auto-hide-changed", (_event, enabled) => {
+    if (typeof enabled !== "boolean") return;
     windowManager.setFloatingIconAutoHide(enabled);
     environmentManager.saveFloatingIconAutoHide(enabled);
     // Relay to the floating icon window so it can react immediately
@@ -817,12 +858,14 @@ async function startApp() {
     }
   });
 
-  ipcMain.on("start-minimized-changed", (_event, enabled) => {
+  onTrustedIpc("start-minimized-changed", (_event, enabled) => {
+    if (typeof enabled !== "boolean") return;
     if (debugLogger) debugLogger.info("Start minimized changed", { enabled });
     environmentManager.saveStartMinimized(enabled);
   });
 
-  ipcMain.on("panel-start-position-changed", (_event, position) => {
+  onTrustedIpc("panel-start-position-changed", (_event, position) => {
+    if (!new Set(["bottom-left", "center", "bottom-right"]).has(position)) return;
     windowManager.setPanelStartPosition(position);
     environmentManager.savePanelStartPosition(position);
   });
@@ -933,7 +976,10 @@ async function startApp() {
     );
   }
 
-  ipcMain.handle("register-meeting-hotkey", async (_event, hotkey) => {
+  handleTrustedIpc("register-meeting-hotkey", async (_event, hotkey) => {
+    if (typeof hotkey !== "string" || hotkey.length > 128) {
+      return { success: false, message: "Invalid hotkey" };
+    }
     if (hotkey) {
       const result = await hotkeyManager.registerSlot("meeting", hotkey, meetingHotkeyCallback, {
         atomic: true,
@@ -1325,7 +1371,8 @@ async function startApp() {
     globeKeyManager.start();
     hotkeyManager.once("hotkey-loaded", syncSuppressedMouseButtons);
 
-    ipcMain.on("hotkey-listening-mode-changed", (_event, enabled) => {
+    onTrustedIpc("hotkey-listening-mode-changed", (_event, enabled) => {
+      if (typeof enabled !== "boolean") return;
       if (enabled) {
         globeKeyManager.setSuppressedMouseButtons([]);
       } else {
@@ -1349,7 +1396,7 @@ async function startApp() {
 
     // Allow renderer to request an accessibility check (e.g. on sign-in).
     // Also sends accessibility-missing events if untrusted.
-    ipcMain.handle("check-accessibility-trusted", () => {
+    handleTrustedIpc("check-accessibility-trusted", () => {
       const trusted = systemPreferences.isTrustedAccessibilityClient(false);
       if (!trusted) {
         checkAndNotifyAccessibility();
@@ -1358,7 +1405,8 @@ async function startApp() {
     });
 
     // Reset native key state when hotkey changes
-    ipcMain.on("hotkey-changed", (_event, _newHotkey) => {
+    onTrustedIpc("hotkey-changed", (_event, newHotkey) => {
+      if (typeof newHotkey !== "string" || newHotkey.length > 128) return;
       globeKeyDownTime = 0;
       globeKeyIsRecording = false;
       globeLastStopTime = 0;
@@ -1460,12 +1508,12 @@ async function startApp() {
     const STARTUP_DELAY_MS = 3000;
     setTimeout(() => windowManager.reconcileNativeKeyListeners(), STARTUP_DELAY_MS);
 
-    ipcMain.on("activation-mode-changed", () => {
+    onTrustedIpc("activation-mode-changed", () => {
       windowManager.resetWindowsPushState();
       windowManager.reconcileNativeKeyListeners();
     });
 
-    ipcMain.on("hotkey-changed", () => {
+    onTrustedIpc("hotkey-changed", () => {
       windowManager.resetWindowsPushState();
       windowManager.reconcileNativeKeyListeners();
     });
@@ -1473,7 +1521,8 @@ async function startApp() {
 }
 
 // Listen for usage limit reached from dictation overlay, forward to control panel
-ipcMain.on("limit-reached", (_event, data) => {
+onTrustedIpc("limit-reached", (_event, data) => {
+  if (!data || typeof data !== "object" || JSON.stringify(data).length > 4096) return;
   if (isLiveWindow(windowManager?.controlPanelWindow)) {
     windowManager.controlPanelWindow.webContents.send("limit-reached", data);
   }
@@ -1527,8 +1576,22 @@ if (gotSingleInstanceLock) {
       return new Promise((resolve) => setTimeout(resolve, delay));
     })
     .then(() => {
+      installSessionPermissionPolicy(session.defaultSession);
       if (process.platform === "win32") {
-        session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+        session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+          const frame = request.frame;
+          const requestingContents = frame ? webContents.fromFrame(frame) : null;
+          const authorized = displayMediaGrantManager?.consume({
+            webContentsId: requestingContents?.id,
+            processId: frame?.processId,
+            routingId: frame?.routingId,
+            url: frame?.url,
+            isTopLevel: Boolean(frame && frame.parent === null && frame.top === frame),
+          });
+          if (!authorized) {
+            callback(null);
+            return;
+          }
           // Only the loopback audio track is used; the video source is
           // discarded by the renderer, so skip thumbnail generation.
           desktopCapturer
@@ -1541,14 +1604,14 @@ if (gotSingleInstanceLock) {
               }
             })
             .catch((error) => {
-              console.error("Display media request failed:", error);
+              console.error("Display media request failed", errorSummary(error));
               callback(null);
             });
         });
       }
 
       startApp().catch((error) => {
-        console.error("Failed to start app:", error);
+        console.error("Failed to start app", errorSummary(error));
         dialog.showErrorBox(
           i18nMain.t("startup.error.title"),
           i18nMain.t("startup.error.message", { error: error.message })

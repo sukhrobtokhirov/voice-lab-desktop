@@ -46,6 +46,7 @@ const PROVIDER_CONFIG: Record<string, ProviderConfig> = {
   groq: { label: "Groq", apiKeyStorageKey: "groqApiKey" },
   openrouter: { label: "OpenRouter", apiKeyStorageKey: "openrouterApiKey" },
   tinfoil: { label: "Tinfoil", apiKeyStorageKey: "tinfoilApiKey" },
+  voicelab: { label: "VoiceLab Cloud" },
   openwhispr: { label: "VoiceLab Cloud" },
   custom: {
     label: "Custom endpoint",
