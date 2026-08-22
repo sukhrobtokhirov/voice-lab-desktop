@@ -273,7 +273,10 @@ export function getRecordingErrorDescription(error: RecordingError, t: TFunction
   };
   const copy = getCopy(error.code);
   if (copy) {
-    if (error.code === "RATE_LIMITED" && error.retryAfterSeconds) {
+    if (
+      (error.code === "RATE_LIMITED" || error.code === "CONCURRENCY_LIMIT") &&
+      error.retryAfterSeconds
+    ) {
       const language = i18next.resolvedLanguage?.split("-")[0] || "en";
       if (language === "uz")
         return withDiagnostics(

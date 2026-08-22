@@ -17,7 +17,18 @@ function jsonResponse(body, status = 200) {
       payload.session_id ??= "dss_test_refresh";
     }
   }
-  return new Response(payload == null ? null : JSON.stringify(payload), { status });
+  return new Response(payload == null ? null : JSON.stringify(payload), {
+    status,
+    headers: payload == null ? {} : { "Content-Type": "application/json" },
+  });
+}
+
+function unsignedJwt(payload) {
+  return [
+    Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url"),
+    Buffer.from(JSON.stringify(payload)).toString("base64url"),
+    "test-signature",
+  ].join(".");
 }
 
 function loadDesktopAuthManager(initialSession) {
@@ -104,7 +115,6 @@ test("refresh sends only the exact token grant and atomically rotates the creden
       expires_in: 900,
       refresh_expires_in: 3600,
       session_id: session.sessionId,
-      user: session.user,
     });
   };
 
@@ -125,6 +135,137 @@ test("refresh sends only the exact token grant and atomically rotates the creden
     "refresh_token",
   ]);
   assert.equal(getSession().refreshToken, `refresh-new-${"n".repeat(40)}`);
+});
+
+test("refresh restores display identity from the new access JWT when the response omits user", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const refreshOnlySession = {
+    kind: "desktop-go-v2",
+    accessToken: "",
+    accessExpiresAt: 0,
+    refreshToken: `refresh-old-${"r".repeat(40)}`,
+    refreshExpiresAt: 0,
+    sessionId: "",
+    user: null,
+  };
+  const { DesktopAuthManager, getSession } = loadDesktopAuthManager(refreshOnlySession);
+  const manager = managerFrom(DesktopAuthManager);
+  global.fetch = async () =>
+    jsonResponse({
+      access_token: unsignedJwt({
+        sub: "user-after-restart",
+        email: "desktop@example.com",
+        name: "Desktop Person",
+        picture: "https://cdn.voicelab.uz/avatar/user-after-restart.png",
+      }),
+      refresh_token: `refresh-new-${"n".repeat(40)}`,
+      session_id: "dss_after_restart",
+    });
+
+  const status = await manager.initialize();
+  assert.equal(status.status, "authenticated");
+  assert.deepEqual(status.user, {
+    id: "user-after-restart",
+    email: "desktop@example.com",
+    name: "Desktop Person",
+    image: "https://cdn.voicelab.uz/avatar/user-after-restart.png",
+  });
+  assert.equal(getSession().sessionId, "dss_after_restart");
+  assert.equal(await manager.getValidAccessToken(), getSession().accessToken);
+});
+
+test("refresh never reports an authenticated user when no display profile can be restored", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const refreshOnlySession = {
+    kind: "desktop-go-v2",
+    accessToken: "",
+    accessExpiresAt: 0,
+    refreshToken: `refresh-old-${"r".repeat(40)}`,
+    refreshExpiresAt: 0,
+    sessionId: "",
+    user: null,
+  };
+  const { DesktopAuthManager, getSession } = loadDesktopAuthManager(refreshOnlySession);
+  const manager = managerFrom(DesktopAuthManager);
+  global.fetch = async () =>
+    jsonResponse({
+      access_token: unsignedJwt({ sub: "user-without-display-profile" }),
+      refresh_token: `refresh-new-${"n".repeat(40)}`,
+      session_id: "dss_missing_profile",
+    });
+
+  const status = await manager.initialize();
+
+  assert.equal(status.status, "signed-out");
+  assert.equal(status.errorCode, "AUTH_PROFILE_REQUIRED");
+  assert.equal(status.user, null);
+  assert.equal(getSession(), null);
+});
+
+test("an expired local refresh credential signs the user out with an explicit reason", async () => {
+  const expiredSession = {
+    ...initialSession(),
+    refreshExpiresAt: Date.now() - 1,
+  };
+  const { DesktopAuthManager, getSession } = loadDesktopAuthManager(expiredSession);
+  const manager = managerFrom(DesktopAuthManager);
+
+  await assert.rejects(
+    manager.refreshSession({ force: true }),
+    (error) => error.code === "AUTH_EXPIRED"
+  );
+
+  assert.equal(getSession(), null);
+  assert.deepEqual(
+    {
+      status: manager.getPublicStatus().status,
+      errorCode: manager.getPublicStatus().errorCode,
+    },
+    { status: "signed-out", errorCode: "AUTH_EXPIRED" }
+  );
+});
+
+test("authenticated sessions proactively refresh before access-token expiry", async (t) => {
+  const originalSetTimeout = global.setTimeout;
+  const originalClearTimeout = global.clearTimeout;
+  const timers = [];
+  t.after(() => {
+    global.setTimeout = originalSetTimeout;
+    global.clearTimeout = originalClearTimeout;
+  });
+  global.setTimeout = (callback, delay) => {
+    const timer = { callback, delay, unref() {} };
+    timers.push(timer);
+    return timer;
+  };
+  global.clearTimeout = () => {};
+
+  const session = {
+    ...initialSession(),
+    accessExpiresAt: Date.now() + 15 * 60_000,
+  };
+  const { DesktopAuthManager } = loadDesktopAuthManager(session);
+  const manager = managerFrom(DesktopAuthManager);
+  let refreshes = 0;
+  manager.refreshSession = async ({ force }) => {
+    assert.equal(force, true);
+    refreshes += 1;
+  };
+
+  manager._setStatus("authenticated", { user: session.user });
+
+  assert.equal(timers.length, 1);
+  assert.ok(timers[0].delay <= 14 * 60_000);
+  assert.ok(timers[0].delay > 13 * 60_000);
+  timers[0].callback();
+  await Promise.resolve();
+  assert.equal(refreshes, 1);
 });
 
 test("ambiguous refresh transport failure clears the token to prevent rotated-token reuse", async (t) => {
@@ -155,7 +296,6 @@ test("refresh rejects a response that does not rotate the refresh credential", a
     jsonResponse({
       access_token: "new-access-token-abcdefghijklmnopqrstuvwxyz",
       refresh_token: session.refreshToken,
-      user: session.user,
     });
 
   await assert.rejects(
@@ -183,7 +323,7 @@ test("refresh fails closed on a malformed token response", async (t) => {
         session_id: "dss_invalid_shape",
         request_id: "req_invalid_shape",
       }),
-      { status: 200 }
+      { status: 200, headers: { "Content-Type": "application/json" } }
     );
 
   await assert.rejects(
@@ -191,6 +331,56 @@ test("refresh fails closed on a malformed token response", async (t) => {
     (error) => error.code === "AUTH_TOKEN_RESPONSE_INVALID"
   );
   assert.equal(getSession(), null);
+});
+
+test("refresh requires a fresh session_id instead of accepting the stored value", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const { DesktopAuthManager, getSession } = loadDesktopAuthManager(initialSession());
+  const manager = managerFrom(DesktopAuthManager);
+  global.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        access_token: "new-access-token-abcdefghijklmnopqrstuvwxyz",
+        refresh_token: `refresh-new-${"n".repeat(40)}`,
+        token_type: "Bearer",
+        expires_in: 900,
+        refresh_expires_in: 3600,
+        request_id: "req_missing_session_id",
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+
+  await assert.rejects(
+    manager.refreshSession({ force: true }),
+    (error) => error.code === "AUTH_TOKEN_RESPONSE_INVALID"
+  );
+  assert.equal(getSession(), null);
+});
+
+test("refresh ignores an unexpected user payload and preserves the current identity", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const session = initialSession();
+  const { DesktopAuthManager, getSession } = loadDesktopAuthManager(session);
+  const manager = managerFrom(DesktopAuthManager);
+  global.fetch = async () =>
+    jsonResponse({
+      access_token: "new-access-token-abcdefghijklmnopqrstuvwxyz",
+      refresh_token: `refresh-new-${"n".repeat(40)}`,
+      session_id: "dss_preserve_identity",
+      user: { id: "attacker", email: "attacker@example.com" },
+    });
+
+  const status = await manager.refreshSession({ force: true });
+  assert.equal(status.user.id, session.user.id);
+  assert.equal(status.user.email, session.user.email);
+  assert.equal(getSession().user.id, session.user.id);
+  assert.equal(getSession().user.email, session.user.email);
 });
 
 test("logout always clears local credentials and reports failed network revocation", async (t) => {
@@ -287,7 +477,6 @@ test("logout clears locally before revoke and a late refresh cannot restore the 
             jsonResponse({
               access_token: "late-access-token-abcdefghijklmnopqrstuvwxyz",
               refresh_token: `refresh-late-${"l".repeat(40)}`,
-              user: session.user,
             })
           );
       });
@@ -295,7 +484,7 @@ test("logout clears locally before revoke and a late refresh cannot restore the 
     if (url.endsWith("/desktop/logout")) {
       logoutRequest = { url, init };
       return new Promise((resolve) => {
-        resolveLogout = () => resolve(jsonResponse({ success: true }));
+        resolveLogout = () => resolve(new Response(null, { status: 204 }));
       });
     }
     throw new Error(`Unexpected request: ${url}`);
@@ -336,7 +525,6 @@ test("a new authorization supersedes an in-flight refresh without overwriting it
             jsonResponse({
               access_token: "late-access-token-abcdefghijklmnopqrstuvwxyz",
               refresh_token: `refresh-late-${"l".repeat(40)}`,
-              user: session.user,
             })
           );
       });

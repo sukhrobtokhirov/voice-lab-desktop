@@ -788,7 +788,7 @@ class ClipboardManager {
       let pasteResult = { restoreComplete: Promise.resolve() };
 
       if (platform === "darwin") {
-        method = this.resolveFastPasteBinary() ? "cgevent" : "applescript";
+        method = "applescript";
         this.safeLog("🔍 Checking accessibility permissions for paste operation...");
         const hasPermissions = await this.checkAccessibilityPermissions(allowClipboardFallback);
 
@@ -804,20 +804,13 @@ class ClipboardManager {
         }
 
         this.safeLog("✅ Permissions granted, attempting to paste...");
-        try {
-          pasteResult = await this.pasteMacOS(originalClipboard, {
-            ...options,
-            expectedClipboardText: text,
-          });
-        } catch (firstError) {
-          this.safeLog("⚠️ First paste attempt failed, retrying...", firstError?.message);
-          clipboard.writeText(text);
-          await new Promise((r) => setTimeout(r, 200));
-          pasteResult = await this.pasteMacOS(originalClipboard, {
-            ...options,
-            expectedClipboardText: text,
-          });
-        }
+        // Pasting is not safely retryable: a helper can deliver Cmd+V and then
+        // report an ambiguous failure, causing a retry to insert the same text
+        // twice. Use one System Events invocation and fail closed after it.
+        pasteResult = await this.pasteMacOS(originalClipboard, {
+          ...options,
+          expectedClipboardText: text,
+        });
       } else if (platform === "win32") {
         const winFastPaste = this.resolveWindowsFastPasteBinary();
         if (winFastPaste) {
@@ -855,87 +848,9 @@ class ClipboardManager {
   }
 
   async pasteMacOS(originalClipboard, options = {}) {
-    const fastPasteBinary = this.resolveFastPasteBinary();
-    const useFastPaste = !!fastPasteBinary;
-    const pasteDelay = options.fromStreaming ? (useFastPaste ? 15 : 50) : PASTE_DELAYS.darwin;
-
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        const pasteProcess = useFastPaste
-          ? spawn(fastPasteBinary)
-          : spawn("osascript", [
-              "-e",
-              'tell application "System Events" to key code 9 using command down',
-            ]);
-
-        let errorOutput = "";
-        let hasTimedOut = false;
-
-        pasteProcess.stderr.on("data", (data) => {
-          errorOutput += data.toString();
-        });
-
-        pasteProcess.on("close", (code) => {
-          if (hasTimedOut) return;
-          clearTimeout(timeoutId);
-          pasteProcess.removeAllListeners();
-
-          if (code === 0) {
-            this.safeLog(`Text pasted successfully via ${useFastPaste ? "CGEvent" : "osascript"}`);
-            if (originalClipboard != null) {
-              resolve({
-                restoreComplete: this._restoreClipboardAfterDelay(originalClipboard, {
-                  delayMs: RESTORE_DELAYS.darwin,
-                  expectedText: options.expectedClipboardText,
-                }),
-              });
-            } else {
-              resolve({ restoreComplete: Promise.resolve() });
-            }
-          } else if (useFastPaste) {
-            this.safeLog(
-              code === 2
-                ? "CGEvent binary lacks accessibility trust, falling back to osascript"
-                : `CGEvent paste failed (code ${code}), falling back to osascript`,
-              { stderr: errorOutput.trim() }
-            );
-            this.fastPasteChecked = true;
-            this.fastPastePath = null;
-            this.pasteMacOSWithOsascript(originalClipboard, options).then(resolve).catch(reject);
-          } else {
-            this.accessibilityCache = { value: null, expiresAt: 0 };
-            const stderr = errorOutput.trim();
-            const errorMsg = `Paste failed (code ${code}${stderr ? `: ${stderr}` : ""}). Text is copied to clipboard - please paste manually with Cmd+V.`;
-            reject(new Error(errorMsg));
-          }
-        });
-
-        pasteProcess.on("error", (error) => {
-          if (hasTimedOut) return;
-          clearTimeout(timeoutId);
-          pasteProcess.removeAllListeners();
-
-          if (useFastPaste) {
-            this.safeLog("CGEvent paste error, falling back to osascript");
-            this.fastPasteChecked = true;
-            this.fastPastePath = null;
-            this.pasteMacOSWithOsascript(originalClipboard, options).then(resolve).catch(reject);
-          } else {
-            const errorMsg = `Paste command failed: ${error.message}. Text is copied to clipboard - please paste manually with Cmd+V.`;
-            reject(new Error(errorMsg));
-          }
-        });
-
-        const timeoutId = setTimeout(() => {
-          hasTimedOut = true;
-          killProcess(pasteProcess, "SIGKILL");
-          pasteProcess.removeAllListeners();
-          const errorMsg =
-            "Paste operation timed out. Text is copied to clipboard - please paste manually with Cmd+V.";
-          reject(new Error(errorMsg));
-        }, 3000);
-      }, pasteDelay);
-    });
+    const delayMs = options.fromStreaming ? 50 : PASTE_DELAYS.darwin;
+    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    return this.pasteMacOSWithOsascript(originalClipboard, options);
   }
 
   async pasteMacOSWithOsascript(originalClipboard, options = {}) {

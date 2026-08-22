@@ -153,7 +153,10 @@ export const useAudioRecording = (toast, options = {}) => {
         }
         const title = getRecordingErrorTitle(error, t);
         const description = getRecordingErrorDescription(error, t);
-        const recovery = getRecordingRecoveryAction(error?.code);
+        const recovery =
+          error?.code === "CONCURRENCY_LIMIT" && error?.retryAfterSeconds
+            ? null
+            : getRecordingRecoveryAction(error?.code);
         const recoveryAction = recovery
           ? createElement(
               "button",

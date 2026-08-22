@@ -23,6 +23,7 @@ import {
 import { cn } from "../lib/utils";
 import type { NoteItem, FolderItem } from "../../types/electron";
 import { normalizeDbDate } from "../../utils/dateFormatting";
+import { displayFolderName, displayNoteTitle } from "./shared";
 
 const RE_HEADING = /#{1,6}\s+/g;
 const RE_EMPHASIS = /[*_~`]+/g;
@@ -132,7 +133,7 @@ export default function NoteListItem({
               isActive && "font-medium"
             )}
           >
-            {note.title || t("notes.list.untitled")}
+            {displayNoteTitle(note.title, t)}
           </p>
           <div className="flex items-center gap-0.5 shrink-0">
             <span className="text-xs text-muted-foreground dark:text-muted-foreground/30 tabular-nums group-hover:opacity-0 transition-opacity">
@@ -219,7 +220,9 @@ export default function NoteListItem({
                             }}
                             className="text-xs gap-2 rounded-md px-2 py-1"
                           >
-                            <span className="truncate flex-1">{folder.name}</span>
+                            <span className="truncate flex-1">
+                              {displayFolderName(folder.name, t)}
+                            </span>
                             {isCurrent && <Check size={9} className="text-primary shrink-0" />}
                           </DropdownMenuItem>
                         );

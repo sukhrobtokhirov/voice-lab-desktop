@@ -6,6 +6,7 @@ import { Button } from "../ui/button";
 import { cn } from "../lib/utils";
 import { formatDateGroup } from "../../utils/dateFormatting";
 import type { NoteItem } from "../../types/electron";
+import { displayNoteTitle } from "./shared";
 
 interface AddNotesToFolderDialogProps {
   open: boolean;
@@ -137,7 +138,7 @@ export default function AddNotesToFolderDialog({
                       </div>
                       <div className="flex-1 min-w-0 text-left">
                         <p className="text-xs text-foreground/80 truncate">
-                          {note.title || t("notes.list.untitled")}
+                          {displayNoteTitle(note.title, t)}
                         </p>
                       </div>
                       <div

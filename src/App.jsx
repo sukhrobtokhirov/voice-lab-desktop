@@ -321,7 +321,7 @@ export default function App() {
 
   const getMicButtonProps = () => {
     const baseClasses =
-      "rounded-full w-14 h-14 flex items-center justify-center relative overflow-hidden border-2 border-white/70 cursor-pointer";
+      "rounded-full w-[52px] h-[52px] flex items-center justify-center relative overflow-hidden border-2 border-white/70 cursor-pointer";
 
     switch (micState) {
       case "idle":
@@ -485,7 +485,7 @@ export default function App() {
 
               {/* Dynamic content based on state */}
               {micState === "idle" || micState === "hover" ? (
-                <SoundWaveIcon size={micState === "idle" ? 18 : 20} />
+                <SoundWaveIcon size={micState === "idle" ? 16 : 18} />
               ) : micState === "recording" ? (
                 <LoadingDots />
               ) : micState === "processing" ? (
@@ -493,7 +493,7 @@ export default function App() {
               ) : micState === "unavailable" ? (
                 <span className="text-white text-lg font-bold">!</span>
               ) : micState === "placed" ? (
-                <Check className="h-5 w-5 text-white" />
+                <Check className="h-[18px] w-[18px] text-white" />
               ) : null}
               <span className="sr-only">{micProps.tooltip}</span>
 

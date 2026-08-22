@@ -198,7 +198,7 @@ test("pasteText waits for prior clipboard restoration before starting the next p
   assert.deepEqual(events, ["start:first", "end:first", "start:second", "end:second"]);
 });
 
-test("pasteMacOS restores clipboard after the short macOS delay on successful fast paste", async () => {
+test("pasteMacOS uses one AppleScript paste and restores the clipboard", async () => {
   const spawnCalls = [];
   const TestClipboardManager = loadClipboardManager({
     spawn: createSuccessfulSpawn(spawnCalls),
@@ -207,7 +207,6 @@ test("pasteMacOS restores clipboard after the short macOS delay on successful fa
   const originalClipboard = { type: "text", data: "previous clipboard" };
   let restoreCall;
 
-  manager.resolveFastPasteBinary = () => "/tmp/openwhispr-fast-paste";
   manager._restoreClipboardAfterDelay = (original, options) => {
     restoreCall = { original, options };
     return Promise.resolve();
@@ -220,7 +219,11 @@ test("pasteMacOS restores clipboard after the short macOS delay on successful fa
   await result.restoreComplete;
 
   assert.equal(spawnCalls.length, 1);
-  assert.equal(spawnCalls[0].command, "/tmp/openwhispr-fast-paste");
+  assert.equal(spawnCalls[0].command, "osascript");
+  assert.deepEqual(spawnCalls[0].args, [
+    "-e",
+    'tell application "System Events" to key code 9 using command down',
+  ]);
   assert.equal(restoreCall.original, originalClipboard);
   assert.deepEqual(restoreCall.options, {
     delayMs: 450,

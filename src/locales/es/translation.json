@@ -130,6 +130,7 @@
   "common": {
     "retry": "Reintentar",
     "back": "Atrás",
+    "continue": "Continuar",
     "next": "Siguiente",
     "complete": "Completar",
     "reset": "Restablecer",
@@ -742,7 +743,7 @@
     "desktopTitle": "Inicia sesión en VoiceLab Desktop",
     "desktopBrowserHint": "El inicio de sesión seguro se abrirá en tu navegador y volverá automáticamente a la aplicación.",
     "desktopWaiting": "Completa el inicio de sesión en el navegador. VoiceLab Desktop continuará automáticamente.",
-    "desktopSecurity": "Tu contraseña nunca entra en la aplicación de escritorio. El sistema operativo protege el token de sesión.",
+    "desktopSecurity": "Tu contraseña nunca entra en la aplicación. El token de actualización se cifra en un almacén local privado.",
     "desktopOpenBrowser": "Continuar en el navegador",
     "desktopOpening": "Abriendo el inicio de sesión seguro…",
     "desktopReopen": "Abrir el navegador de nuevo",
@@ -751,6 +752,7 @@
     "desktopExpired": "Esta solicitud de inicio de sesión caducó. Inicia sesión de nuevo.",
     "desktopFailed": "No se pudo completar el inicio de sesión. Inténtalo de nuevo.",
     "desktopNetworkTimeout": "El servidor de autenticación tardó demasiado en responder. Comprueba tu conexión e inténtalo de nuevo.",
+    "desktopRetryAfter": "Inténtalo de nuevo en {{seconds}} segundos.",
     "desktopInvalidResponse": "El servidor de autenticación devolvió una respuesta no válida. Inténtalo de nuevo más tarde.",
     "desktopCallbackInvalid": "No se pudo verificar el enlace de retorno. Inicia sesión de nuevo.",
     "desktopSecurityError": "El enlace de inicio de sesión no superó las comprobaciones de seguridad de VoiceLab. Inicia sesión de nuevo.",
@@ -2213,6 +2215,9 @@
     },
     "folders": {
       "title": "Carpetas",
+      "personal": "Personal",
+      "meetings": "Reuniones",
+      "videos": "Vídeos",
       "soon": "Próximamente",
       "folderName": "Nombre de la carpeta",
       "couldNotCreate": "No se pudo crear la carpeta",
@@ -3084,6 +3089,8 @@
     "nav": {
       "history": "Historia",
       "vocabulary": "Vocabulario",
+      "studio": "Studio",
+      "stt": "STT",
       "more": "Más"
     },
     "wallet": {

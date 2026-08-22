@@ -2,6 +2,7 @@ const { app } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const { publicUpdateInfo } = require("./helpers/releaseNotes");
 const { resolveUpdateFeed } = require("./helpers/updateFeedConfig");
+const { isAllowedUpdate } = require("./helpers/versionComparison");
 
 class UpdateManager {
   constructor() {
@@ -68,6 +69,11 @@ class UpdateManager {
       autoUpdater.channel = nativeArch === "arm64" ? "latest-arm64" : "latest-x64";
     }
 
+    // Required only for the intentional one-time 1.x -> 0.1.0 product-version
+    // reset. Every candidate is still checked by isAllowedUpdate at the event,
+    // check, and download boundaries.
+    autoUpdater.allowDowngrade = true;
+
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.logger = console;
@@ -81,6 +87,13 @@ class UpdateManager {
         this.notifyRenderers("checking-for-update");
       },
       "update-available": (info) => {
+        if (!info?.version || !isAllowedUpdate(info.version, app.getVersion())) {
+          this.updateAvailable = false;
+          this._suppressNotification = false;
+          if (!this.updateDownloaded) this.lastUpdateInfo = null;
+          this.notifyRenderers("update-not-available", publicUpdateInfo(info));
+          return;
+        }
         this.updateAvailable = true;
         if (info) {
           this.lastUpdateInfo = publicUpdateInfo(info);
@@ -119,6 +132,14 @@ class UpdateManager {
         this.notifyRenderers("update-download-progress", progressObj);
       },
       "update-downloaded": (info) => {
+        if (!info?.version || !isAllowedUpdate(info.version, app.getVersion())) {
+          this.updateAvailable = false;
+          this.updateDownloaded = false;
+          this.isDownloading = false;
+          this.lastUpdateInfo = null;
+          this.notifyRenderers("update-not-available", publicUpdateInfo(info));
+          return;
+        }
         console.log("✅ Update downloaded successfully:", info?.version);
         this.updateDownloaded = true;
         this.isDownloading = false;
@@ -170,7 +191,11 @@ class UpdateManager {
       this._suppressNotification = true;
       const result = await autoUpdater.checkForUpdates();
 
-      if (result?.isUpdateAvailable && result?.updateInfo) {
+      if (
+        result?.isUpdateAvailable &&
+        result?.updateInfo?.version &&
+        isAllowedUpdate(result.updateInfo.version, app.getVersion())
+      ) {
         console.log("📋 Update available:", result.updateInfo.version);
         return {
           updateAvailable: true,
@@ -211,6 +236,19 @@ class UpdateManager {
         return {
           success: true,
           message: "Update already downloaded. Ready to install.",
+        };
+      }
+
+      if (
+        !this.updateAvailable ||
+        !this.lastUpdateInfo?.version ||
+        !isAllowedUpdate(this.lastUpdateInfo.version, app.getVersion())
+      ) {
+        this.updateAvailable = false;
+        this.lastUpdateInfo = null;
+        return {
+          success: false,
+          message: "No newer update is available",
         };
       }
 

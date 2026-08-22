@@ -130,6 +130,7 @@
   "common": {
     "retry": "Réessayer",
     "back": "Retour",
+    "continue": "Continuer",
     "next": "Suivant",
     "complete": "Terminer",
     "reset": "Réinitialiser",
@@ -742,7 +743,7 @@
     "desktopTitle": "Se connecter à VoiceLab Desktop",
     "desktopBrowserHint": "La connexion sécurisée s’ouvre dans votre navigateur, puis revient automatiquement dans l’application.",
     "desktopWaiting": "Terminez la connexion dans votre navigateur. VoiceLab Desktop continuera automatiquement.",
-    "desktopSecurity": "Votre mot de passe n’entre jamais dans l’application. Le jeton de session est protégé par votre système d’exploitation.",
+    "desktopSecurity": "Votre mot de passe n’entre jamais dans l’application. Le jeton d’actualisation est chiffré dans un stockage local privé.",
     "desktopOpenBrowser": "Continuer dans le navigateur",
     "desktopOpening": "Ouverture de la connexion sécurisée…",
     "desktopReopen": "Rouvrir le navigateur",
@@ -751,6 +752,7 @@
     "desktopExpired": "Cette demande de connexion a expiré. Recommencez la connexion.",
     "desktopFailed": "La connexion n’a pas pu être terminée. Réessayez.",
     "desktopNetworkTimeout": "Le serveur d’authentification a mis trop de temps à répondre. Vérifiez votre connexion et réessayez.",
+    "desktopRetryAfter": "Réessayez dans {{seconds}} secondes.",
     "desktopInvalidResponse": "Le serveur d’authentification a renvoyé une réponse non valide. Réessayez plus tard.",
     "desktopCallbackInvalid": "Le lien de retour n’a pas pu être vérifié. Recommencez la connexion.",
     "desktopSecurityError": "Le lien de connexion n’a pas passé les contrôles de sécurité VoiceLab. Recommencez la connexion.",
@@ -2278,6 +2280,9 @@
     },
     "folders": {
       "title": "Dossiers",
+      "personal": "Personnel",
+      "meetings": "Réunions",
+      "videos": "Vidéos",
       "soon": "Bientôt",
       "folderName": "Nom du dossier",
       "couldNotCreate": "Impossible de créer le dossier",
@@ -3084,6 +3089,8 @@
     "nav": {
       "history": "Histoire",
       "vocabulary": "Vocabulaire",
+      "studio": "Studio",
+      "stt": "STT",
       "more": "Plus"
     },
     "wallet": {

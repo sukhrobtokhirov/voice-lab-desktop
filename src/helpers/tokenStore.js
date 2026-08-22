@@ -12,6 +12,10 @@ const STORE_VERSION = 2;
 const STORE_MAGIC = Buffer.from("VLAB-AUTH\0V2\0", "utf8");
 const CANONICAL_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
+const USER_ID_MAX_LENGTH = 256;
+const USER_EMAIL_MAX_LENGTH = 320;
+const USER_NAME_MAX_LENGTH = 256;
+const USER_IMAGE_MAX_LENGTH = 2048;
 const storeFile = () => path.join(app.getPath("userData"), "auth-token.bin");
 const legacyStoreFile = () => path.join(app.getPath("userData"), "auth-token.json");
 const legacyMigrationSentinel = () =>
@@ -33,11 +37,45 @@ function createInstallationId() {
   return crypto.randomUUID().toLowerCase();
 }
 
+function safeProfileText(value, maximum, { collapseWhitespace = false } = {}) {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  let normalized = String(value)
+    .normalize("NFKC")
+    .replace(/[\p{Cc}\p{Cf}]+/gu, collapseWhitespace ? " " : "")
+    .trim();
+  if (collapseWhitespace) normalized = normalized.replace(/\s+/g, " ");
+  return normalized && normalized.length <= maximum ? normalized : null;
+}
+
+function safeProfileImage(value) {
+  if (typeof value !== "string" || value.length > USER_IMAGE_MAX_LENGTH) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistentProfile(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const id = safeProfileText(value.id, USER_ID_MAX_LENGTH);
+  const email = safeProfileText(value.email, USER_EMAIL_MAX_LENGTH);
+  if (!id || !email) return null;
+  return {
+    id,
+    email,
+    name: safeProfileText(value.name, USER_NAME_MAX_LENGTH, { collapseWhitespace: true }) || email,
+    image: safeProfileImage(value.image),
+  };
+}
+
 function emptyStore() {
   return {
     version: STORE_VERSION,
     installationId: createInstallationId(),
     session: null,
+    profile: null,
   };
 }
 
@@ -70,7 +108,14 @@ function hydrateRuntime(store) {
   if (runtimeHydrated) return;
   runtimeHydrated = true;
   const persisted = normalizeSession(store?.session);
-  runtimeSession = persisted ? { ...persisted, accessToken: "", accessExpiresAt: 0 } : null;
+  runtimeSession = persisted
+    ? {
+        ...persisted,
+        accessToken: "",
+        accessExpiresAt: 0,
+        user: persistentProfile(store?.profile),
+      }
+    : null;
   // Authorization requests are process-bound. PKCE verifier/state and the
   // loopback listener never survive a restart.
   runtimePending = null;
@@ -109,6 +154,7 @@ function parseStore(raw, { allowLegacy = false } = {}) {
       version: STORE_VERSION,
       installationId: String(parsed.installationId),
       session: persistentSession(parsed.session),
+      profile: persistentProfile(parsed.profile || parsed.session?.user),
     };
   }
 
@@ -116,7 +162,11 @@ function parseStore(raw, { allowLegacy = false } = {}) {
     throw new Error("Unsupported secure token store version");
   }
   const legacySession = normalizeSession(parsed);
-  return { ...emptyStore(), session: persistentSession(legacySession) };
+  return {
+    ...emptyStore(),
+    session: persistentSession(legacySession),
+    profile: persistentProfile(parsed?.profile || legacySession?.user),
+  };
 }
 
 function tightenCredentialFilePermissions(file) {
@@ -156,13 +206,14 @@ function containsRuntimeOnlyAuthState(raw) {
   try {
     const parsed = JSON.parse(raw);
     const session = parsed?.session;
+    const persistedSessionKeys = new Set(["refreshToken"]);
     return Boolean(
       parsed?.pending ||
       session?.accessToken ||
       session?.access ||
       session?.access_token ||
       session?.accessExpiresAt ||
-      (session && Object.keys(session).some((key) => key !== "refreshToken"))
+      (session && Object.keys(session).some((key) => !persistedSessionKeys.has(key)))
     );
   } catch {
     return false;
@@ -257,6 +308,7 @@ function writeStore(value) {
     version: STORE_VERSION,
     installationId: canonicalInstallationId(value?.installationId) || createInstallationId(),
     session: persistentSession(value?.session),
+    profile: persistentProfile(value?.profile),
   };
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   fs.chmodSync(directory, 0o700);
@@ -317,7 +369,11 @@ function saveSession(session) {
   const previousSession = runtimeSession;
   runtimeSession = normalized;
   try {
-    update((store) => ({ ...store, session: persistentSession(normalized) }));
+    update((store) => ({
+      ...store,
+      session: persistentSession(normalized),
+      profile: persistentProfile(normalized.user) || persistentProfile(store.profile),
+    }));
   } catch (error) {
     runtimeSession = previousSession;
     throw error;
@@ -326,7 +382,7 @@ function saveSession(session) {
 
 function clearSession() {
   runtimeSession = null;
-  update((store) => ({ ...store, session: null }), { allowMemoryOnly: true });
+  update((store) => ({ ...store, session: null, profile: null }), { allowMemoryOnly: true });
 }
 
 function getPending() {
@@ -353,36 +409,21 @@ function completeAuthorization(session) {
   runtimeSession = normalized;
   runtimePending = null;
   try {
-    update((store) => ({ ...store, session: persistentSession(normalized) }));
+    update((store) => ({
+      ...store,
+      session: persistentSession(normalized),
+      profile: persistentProfile(normalized.user) || persistentProfile(store.profile),
+    }));
   } catch (error) {
     runtimeSession = previousSession;
     throw error;
   }
 }
 
-function get() {
-  return getSession()?.accessToken || null;
-}
-
-function set(token) {
-  if (!token) return clearSession();
-  try {
-    const parsed = JSON.parse(token);
-    return saveSession(parsed);
-  } catch {
-    const existing = getSession();
-    return saveSession({
-      ...(existing || {}),
-      accessToken: token,
-      accessExpiresAt: Date.now() + 5 * 60 * 1000,
-    });
-  }
-}
-
 function clear() {
   runtimeSession = null;
   runtimePending = null;
-  update((store) => ({ ...store, session: null }), { allowMemoryOnly: true });
+  update((store) => ({ ...store, session: null, profile: null }), { allowMemoryOnly: true });
 }
 
 module.exports = {
@@ -390,11 +431,9 @@ module.exports = {
   clearPending,
   clearSession,
   completeAuthorization,
-  get,
   getInstallationId,
   getPending,
   getSession,
   savePending,
   saveSession,
-  set,
 };

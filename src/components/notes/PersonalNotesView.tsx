@@ -54,7 +54,12 @@ import {
 import { useFolderManagement } from "../../hooks/useFolderManagement";
 import { useNoteDragAndDrop } from "../../hooks/useNoteDragAndDrop";
 import { cn } from "../lib/utils";
-import { MEETINGS_FOLDER_NAME, findDefaultFolder } from "./shared";
+import {
+  MEETINGS_FOLDER_NAME,
+  displayFolderName,
+  displayNoteTitle,
+  findDefaultFolder,
+} from "./shared";
 import logger from "../../utils/logger";
 import { parseTranscriptSegments } from "../../utils/parseTranscriptSegments";
 import { serializeTranscriptSegments } from "../../utils/transcriptSpeakerState";
@@ -558,7 +563,7 @@ export default function PersonalNotesView({
   const editorNote = activeNote
     ? {
         ...activeNote,
-        title: isLocalSynced ? localTitle : activeNote.title,
+        title: displayNoteTitle(isLocalSynced ? localTitle : activeNote.title, t),
         content: isLocalSynced ? localContent : activeNote.content,
       }
     : null;
@@ -693,7 +698,7 @@ export default function PersonalNotesView({
                         : "text-foreground/50 group-hover:text-foreground/70"
                     )}
                   >
-                    {folder.name}
+                    {displayFolderName(folder.name, t)}
                   </span>
 
                   {isDropSuccess ? (

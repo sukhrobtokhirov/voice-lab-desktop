@@ -130,6 +130,7 @@
   "common": {
     "retry": "Erneut versuchen",
     "back": "Zurück",
+    "continue": "Weiter",
     "next": "Weiter",
     "complete": "Fertig",
     "reset": "Zurücksetzen",
@@ -742,7 +743,7 @@
     "desktopTitle": "Bei VoiceLab Desktop anmelden",
     "desktopBrowserHint": "Die sichere Anmeldung wird im Browser geöffnet und kehrt danach automatisch zur App zurück.",
     "desktopWaiting": "Schließen Sie die Anmeldung im Browser ab. VoiceLab Desktop fährt automatisch fort.",
-    "desktopSecurity": "Ihr Passwort gelangt nie in die Desktop-App. Das Sitzungstoken wird durch Ihr Betriebssystem geschützt.",
+    "desktopSecurity": "Ihr Passwort gelangt nie in die Desktop-App. Das Aktualisierungstoken wird in einem privaten lokalen Anmeldespeicher verschlüsselt.",
     "desktopOpenBrowser": "Im Browser fortfahren",
     "desktopOpening": "Sichere Anmeldung wird geöffnet…",
     "desktopReopen": "Browser erneut öffnen",
@@ -751,6 +752,7 @@
     "desktopExpired": "Diese Anmeldeanfrage ist abgelaufen. Starten Sie die Anmeldung erneut.",
     "desktopFailed": "Die Anmeldung konnte nicht abgeschlossen werden. Versuchen Sie es erneut.",
     "desktopNetworkTimeout": "Der Authentifizierungsserver hat nicht rechtzeitig geantwortet. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+    "desktopRetryAfter": "Versuchen Sie es in {{seconds}} Sekunden erneut.",
     "desktopInvalidResponse": "Der Authentifizierungsserver hat eine ungültige Antwort gesendet. Versuchen Sie es später erneut.",
     "desktopCallbackInvalid": "Der Rückkehrlink konnte nicht überprüft werden. Starten Sie die Anmeldung erneut.",
     "desktopSecurityError": "Der Anmeldelink hat die VoiceLab-Sicherheitsprüfung nicht bestanden. Starten Sie die Anmeldung erneut.",
@@ -2165,6 +2167,9 @@
     },
     "folders": {
       "title": "Ordner",
+      "personal": "Persönlich",
+      "meetings": "Besprechungen",
+      "videos": "Videos",
       "soon": "Demnächst",
       "folderName": "Ordnername",
       "couldNotCreate": "Ordner konnte nicht erstellt werden",
@@ -3084,6 +3089,8 @@
     "nav": {
       "history": "Geschichte",
       "vocabulary": "Vokabular",
+      "studio": "Studio",
+      "stt": "STT",
       "more": "Mehr"
     },
     "wallet": {

@@ -1300,13 +1300,13 @@ export default function SettingsPage({
                   </div>
                 </SettingsPanelRow>
               </SettingsPanel>
-            ) : isSignedIn && user ? (
+            ) : isSignedIn ? (
               <>
                 <SettingsPanel>
                   <SettingsPanelRow>
                     <div className="flex items-center gap-3">
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#e55347]/10">
-                        {user.image ? (
+                        {user?.image ? (
                           <img
                             src={user.image}
                             alt=""
@@ -1318,10 +1318,12 @@ export default function SettingsPage({
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-foreground">
-                          {user.name ||
+                          {user?.name ||
                             t("settingsPage.account.user", { defaultValue: "VoiceLab user" })}
                         </p>
-                        <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+                        {user?.email && (
+                          <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+                        )}
                       </div>
                       <Badge variant="success">
                         {t("desktop.session.active", { defaultValue: "Signed in" })}
@@ -1382,7 +1384,7 @@ export default function SettingsPage({
                     </div>
                     <Button onClick={startOnboarding} className="w-full">
                       <UserCircle className="mr-2 h-4 w-4" />
-                      {t("auth.signIn", { defaultValue: "Sign in to VoiceLab" })}
+                      {t("auth.desktopOpenBrowser")}
                     </Button>
                   </div>
                 </SettingsPanelRow>

@@ -130,6 +130,7 @@
   "common": {
     "retry": "重試",
     "back": "返回",
+    "continue": "繼續",
     "next": "下一步",
     "complete": "完成",
     "reset": "重設",
@@ -809,7 +810,7 @@
     "desktopTitle": "登入 VoiceLab 桌面版",
     "desktopBrowserHint": "安全登入將在您的瀏覽器中打開，並在完成後返回此處。",
     "desktopWaiting": "在瀏覽器中完成登入。 VoiceLab Desktop 將會自動繼續。",
-    "desktopSecurity": "您的密碼永遠不會進入桌面應用程式。會話令牌受您的作業系統保護。",
+    "desktopSecurity": "您的密碼永遠不會進入桌面應用程式。更新權杖會加密儲存在私有本機憑證儲存區。",
     "desktopOpenBrowser": "在瀏覽器中繼續",
     "desktopOpening": "正在開啟安全登入...",
     "desktopReopen": "再次打開瀏覽器",
@@ -818,6 +819,7 @@
     "desktopExpired": "此登入請求已過期。重新開始繼續。",
     "desktopFailed": "無法完成登入。請再試一次。",
     "desktopNetworkTimeout": "身份驗證伺服器回應時間過長。檢查您的連線並重試。",
+    "desktopRetryAfter": "請在 {{seconds}} 秒後重試。",
     "desktopInvalidResponse": "身份驗證伺服器傳回無效回應。請稍後重試。",
     "desktopCallbackInvalid": "無法驗證返回連結。重新開始登入。",
     "desktopSecurityError": "登入連結未通過 VoiceLab 的安全檢查。重新開始登入。",
@@ -2160,6 +2162,9 @@
     },
     "folders": {
       "title": "資料夾",
+      "personal": "個人",
+      "meetings": "會議",
+      "videos": "影片",
       "soon": "即將推出",
       "folderName": "資料夾名稱",
       "couldNotCreate": "無法建立資料夾",
@@ -3079,6 +3084,8 @@
     "nav": {
       "history": "歷史",
       "vocabulary": "詞彙",
+      "studio": "Studio",
+      "stt": "STT",
       "more": "更多的"
     },
     "wallet": {

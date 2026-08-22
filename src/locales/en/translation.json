@@ -130,6 +130,7 @@
   "common": {
     "retry": "Retry",
     "back": "Back",
+    "continue": "Continue",
     "next": "Next",
     "complete": "Complete",
     "reset": "Reset",
@@ -743,7 +744,7 @@
     "desktopTitle": "Sign in to VoiceLab Desktop",
     "desktopBrowserHint": "Secure sign-in opens in your browser and returns here when complete.",
     "desktopWaiting": "Complete sign-in in your browser. VoiceLab Desktop will continue automatically.",
-    "desktopSecurity": "Your password never enters the desktop app. The session token is protected by your operating system.",
+    "desktopSecurity": "Your password never enters the desktop app. The refresh token is encrypted in a private local credential store.",
     "desktopOpenBrowser": "Continue in browser",
     "desktopOpening": "Opening secure sign-in…",
     "desktopReopen": "Open browser again",
@@ -752,6 +753,7 @@
     "desktopExpired": "This sign-in request expired. Start again to continue.",
     "desktopFailed": "Sign-in could not be completed. Please try again.",
     "desktopNetworkTimeout": "The authentication server took too long to respond. Check your connection and try again.",
+    "desktopRetryAfter": "Try again in {{seconds}} seconds.",
     "desktopInvalidResponse": "The authentication server returned an invalid response. Please try again shortly.",
     "desktopCallbackInvalid": "The return link could not be verified. Start sign-in again.",
     "desktopSecurityError": "The sign-in link failed VoiceLab’s security checks. Start sign-in again.",
@@ -2366,6 +2368,9 @@
     },
     "folders": {
       "title": "Folders",
+      "personal": "Personal",
+      "meetings": "Meetings",
+      "videos": "Videos",
       "soon": "Soon",
       "folderName": "Folder name",
       "couldNotCreate": "Couldn't create folder",
@@ -3084,6 +3089,8 @@
     "nav": {
       "history": "History",
       "vocabulary": "Vocabulary",
+      "studio": "Studio",
+      "stt": "STT",
       "more": "More"
     },
     "wallet": {

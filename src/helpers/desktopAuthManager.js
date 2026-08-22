@@ -10,6 +10,9 @@ const tokenStore = require("./tokenStore");
 const CLIENT_ID = "voicelab-desktop";
 const PENDING_TTL_MS = 10 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 20_000;
+const MAX_AUTH_RESPONSE_BYTES = 1024 * 1024;
+const MAX_ACCESS_EXPIRES_IN_SECONDS = 24 * 60 * 60;
+const MAX_REFRESH_EXPIRES_IN_SECONDS = 30 * 24 * 60 * 60;
 const ACCESS_EXPIRY_SKEW_MS = 60_000;
 const CALLBACK_MAX_LENGTH = 4096;
 const CALLBACK_ALLOWED_PARAMS = new Set(["code", "state"]);
@@ -42,14 +45,50 @@ function base64url(buffer) {
   return buffer.toString("base64url");
 }
 
-function positiveIntegerSeconds(value, field) {
-  if (!Number.isSafeInteger(value) || value <= 0) {
+function positiveIntegerSeconds(value, field, maximum, requestId = null) {
+  if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) {
     throw new DesktopAuthError(
       "AUTH_TOKEN_RESPONSE_INVALID",
-      `Authentication token response has invalid ${field}`
+      `Authentication token response has invalid ${field}`,
+      null,
+      { requestId }
     );
   }
   return value;
+}
+
+async function boundedResponseText(response) {
+  const declaredLength = Number(response.headers.get("Content-Length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_AUTH_RESPONSE_BYTES) {
+    throw new DesktopAuthError(
+      "AUTH_BACKEND_RESPONSE_INVALID",
+      "Authentication server response is too large",
+      response.status
+    );
+  }
+  if (!response.body) return typeof response.text === "function" ? response.text() : "";
+  const reader = response.body.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_AUTH_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw new DesktopAuthError(
+          "AUTH_BACKEND_RESPONSE_INVALID",
+          "Authentication server response is too large",
+          response.status
+        );
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)), size).toString("utf8");
 }
 
 function boundedToken(value) {
@@ -152,8 +191,8 @@ function safeUserImage(value) {
 
 function canonicalUser(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const rawId = value.id ?? value.user_id ?? value.uuid;
-  const rawEmail = value.email ?? value.username;
+  const rawId = value.id ?? value.user_id ?? value.uuid ?? value.sub;
+  const rawEmail = value.email ?? value.username ?? value.preferred_username;
   const id = boundedIdentity(rawId, USER_ID_MAX_LENGTH);
   const email = boundedIdentity(rawEmail, USER_EMAIL_MAX_LENGTH);
   if (!id || !email) return null;
@@ -165,6 +204,26 @@ function canonicalUser(value) {
     name: boundedDisplayName(rawName, email),
     image: safeUserImage(rawImage),
   };
+}
+
+function userFromAccessToken(value) {
+  if (typeof value !== "string" || value.length > 8192) return null;
+  const segments = value.split(".");
+  if (
+    segments.length !== 3 ||
+    !segments[1] ||
+    segments[1].length > 22_000 ||
+    !/^[A-Za-z0-9_-]+$/.test(segments[1])
+  ) {
+    return null;
+  }
+  try {
+    const payload = Buffer.from(segments[1], "base64url");
+    if (!payload.length || payload.length > 16 * 1024) return null;
+    return canonicalUser(JSON.parse(payload.toString("utf8")));
+  } catch {
+    return null;
+  }
 }
 
 function normalizedUser(payload) {
@@ -219,15 +278,48 @@ class DesktopAuthManager extends EventEmitter {
     this.callbackRedirectUri = null;
     this.refreshPromise = null;
     this.refreshPromiseEpoch = null;
+    this.accessRefreshTimer = null;
     this.bootstrapPromise = null;
     this.authEpoch = 0;
   }
 
   _advanceAuthEpoch() {
     this.authEpoch += 1;
+    this._clearAccessRefreshTimer();
     this.refreshPromise = null;
     this.refreshPromiseEpoch = null;
     return this.authEpoch;
+  }
+
+  _clearAccessRefreshTimer() {
+    clearTimeout(this.accessRefreshTimer);
+    this.accessRefreshTimer = null;
+  }
+
+  _scheduleAccessTokenRefresh(session = tokenStore.getSession()) {
+    this._clearAccessRefreshTimer();
+    if (
+      !session?.refreshToken ||
+      !Number.isFinite(session.accessExpiresAt) ||
+      session.accessExpiresAt <= 0
+    ) {
+      return;
+    }
+    const delayMs = Math.max(
+      1_000,
+      session.accessExpiresAt - Date.now() - ACCESS_EXPIRY_SKEW_MS
+    );
+    this.accessRefreshTimer = setTimeout(() => {
+      this.accessRefreshTimer = null;
+      void this.refreshSession({ force: true }).catch((error) => {
+        authLogger.warn("proactive_refresh_failed", {
+          errorCode: error.code || "AUTH_REFRESH_FAILED",
+          httpStatus: error.httpStatus,
+          requestId: error.requestId,
+        });
+      });
+    }, delayMs);
+    this.accessRefreshTimer.unref?.();
   }
 
   _assertAuthEpoch(epoch) {
@@ -367,6 +459,8 @@ class DesktopAuthManager extends EventEmitter {
     this.retryAfterSeconds = Number.isFinite(extra.retryAfterSeconds)
       ? extra.retryAfterSeconds
       : null;
+    if (status === "authenticated") this._scheduleAccessTokenRefresh();
+    else this._clearAccessRefreshTimer();
     this.emit("status", this.getPublicStatus());
   }
 
@@ -555,7 +649,7 @@ class DesktopAuthManager extends EventEmitter {
     this.pendingExpiryTimer.unref?.();
   }
 
-  async _request(pathname, init = {}) {
+  async _request(pathname, init = {}, policy = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
@@ -568,7 +662,14 @@ class DesktopAuthManager extends EventEmitter {
         },
         signal: controller.signal,
       });
-      const text = await response.text();
+      const text = await boundedResponseText(response);
+      if (text && !/^application\/json(?:\s*;|$)/i.test(response.headers.get("Content-Type") || "")) {
+        throw new DesktopAuthError(
+          "AUTH_BACKEND_RESPONSE_INVALID",
+          "Authentication server returned an invalid response",
+          response.status
+        );
+      }
       let body = null;
       if (text) {
         try {
@@ -599,6 +700,27 @@ class DesktopAuthManager extends EventEmitter {
             fields: publicErrorFields(envelope?.fields),
             retryAfterSeconds: retryAfterSeconds(response.headers.get("Retry-After")),
           }
+        );
+      }
+      if (policy.expectedStatus != null && response.status !== policy.expectedStatus) {
+        throw new DesktopAuthError(
+          "AUTH_BACKEND_RESPONSE_INVALID",
+          "Authentication server returned an unexpected status",
+          response.status
+        );
+      }
+      if (policy.body === "json" && (!text || !body || typeof body !== "object")) {
+        throw new DesktopAuthError(
+          "AUTH_BACKEND_RESPONSE_INVALID",
+          "Authentication server returned an invalid response",
+          response.status
+        );
+      }
+      if (policy.body === "empty" && text) {
+        throw new DesktopAuthError(
+          "AUTH_BACKEND_RESPONSE_INVALID",
+          "Authentication server returned an unexpected response body",
+          response.status
         );
       }
       return body;
@@ -695,7 +817,7 @@ class DesktopAuthManager extends EventEmitter {
           app_version: this.appVersion,
           platform: desktopPlatform(),
         }),
-      });
+      }, { expectedStatus: 201, body: "json" });
       this._assertAuthEpoch(epoch);
       const requestId = response?.authorization_request_id;
       if (
@@ -709,7 +831,9 @@ class DesktopAuthManager extends EventEmitter {
       ) {
         throw new DesktopAuthError(
           "AUTHORIZATION_RESPONSE_INVALID",
-          "Authorization response invalid"
+          "Authorization response invalid",
+          null,
+          { requestId: publicRequestId(response?.request_id) }
         );
       }
       const authorizationUrl = this._validateAuthorizationUrl(
@@ -826,7 +950,7 @@ class DesktopAuthManager extends EventEmitter {
     if (!pending) {
       const storedSession = tokenStore.getSession();
       const user = canonicalUser(storedSession?.user);
-      if (storedSession?.kind === "desktop-go-v2" && user) {
+      if (storedSession?.kind === "desktop-go-v2" && storedSession.accessToken) {
         this._setStatus("authenticated", { user });
         return this.getPublicStatus();
       }
@@ -872,7 +996,7 @@ class DesktopAuthManager extends EventEmitter {
           code_verifier: pending.codeVerifier,
           installation_id: tokenStore.getInstallationId(),
         }),
-      });
+      }, { expectedStatus: 200, body: "json" });
       this._assertAuthEpoch(epoch);
       const user = normalizedUser(response);
       if (!user) {
@@ -888,6 +1012,20 @@ class DesktopAuthManager extends EventEmitter {
     } catch (error) {
       if (epoch !== this.authEpoch || error?.code === "AUTH_OPERATION_SUPERSEDED") {
         return this.getPublicStatus();
+      }
+      const retryableExchange =
+        [429, 503].includes(Number(error?.httpStatus)) && this._isValidPending(pending);
+      if (retryableExchange) {
+        tokenStore.savePending({ ...pending, callbackFingerprint: "" });
+        this._schedulePendingExpiry(pending.expiresAt, epoch);
+        this._setStatus("waiting-for-browser", {
+          errorCode: error.code || "AUTH_EXCHANGE_FAILED",
+          errorMessage: error.message,
+          errorRequestId: error.requestId,
+          errorFields: error.fields,
+          retryAfterSeconds: error.retryAfterSeconds,
+        });
+        throw error;
       }
       this._closeLoopbackCallbackServer();
       tokenStore.clearPending();
@@ -909,6 +1047,7 @@ class DesktopAuthManager extends EventEmitter {
   }
 
   _sessionFromTokenResponse(response, existingSession = null, suppliedUser = null) {
+    const responseRequestId = publicRequestId(response?.request_id);
     const accessToken = boundedToken(response?.access_token);
     const refreshToken = boundedToken(response?.refresh_token);
     if (
@@ -919,7 +1058,9 @@ class DesktopAuthManager extends EventEmitter {
     ) {
       throw new DesktopAuthError(
         "AUTH_TOKEN_RESPONSE_INVALID",
-        "Authentication token response invalid"
+        "Authentication token response invalid",
+        null,
+        { requestId: responseRequestId }
       );
     }
     if (
@@ -928,27 +1069,41 @@ class DesktopAuthManager extends EventEmitter {
     ) {
       throw new DesktopAuthError(
         "AUTH_REFRESH_ROTATION_REQUIRED",
-        "Authentication refresh token was not rotated"
+        "Authentication refresh token was not rotated",
+        null,
+        { requestId: responseRequestId }
       );
     }
     const user =
       canonicalUser(suppliedUser) ||
       normalizedUser(response) ||
-      canonicalUser(existingSession?.user);
+      canonicalUser(existingSession?.user) ||
+      userFromAccessToken(accessToken);
     if (!user && !existingSession) {
-      throw new DesktopAuthError("AUTH_USER_RESPONSE_INVALID", "Authenticated user is missing");
+      throw new DesktopAuthError("AUTH_USER_RESPONSE_INVALID", "Authenticated user is missing", null, {
+        requestId: responseRequestId,
+      });
     }
     const now = Date.now();
-    const accessExpiresIn = positiveIntegerSeconds(response.expires_in, "expires_in");
+    const accessExpiresIn = positiveIntegerSeconds(
+      response.expires_in,
+      "expires_in",
+      MAX_ACCESS_EXPIRES_IN_SECONDS,
+      responseRequestId
+    );
     const refreshExpiresIn = positiveIntegerSeconds(
       response.refresh_expires_in,
-      "refresh_expires_in"
+      "refresh_expires_in",
+      MAX_REFRESH_EXPIRES_IN_SECONDS,
+      responseRequestId
     );
-    const sessionId = response.session_id ?? existingSession?.sessionId;
+    const sessionId = response.session_id;
     if (typeof sessionId !== "string" || sessionId.length < 1 || sessionId.length > 512) {
       throw new DesktopAuthError(
         "AUTH_TOKEN_RESPONSE_INVALID",
-        "Authentication token response has invalid session_id"
+        "Authentication token response has invalid session_id",
+        null,
+        { requestId: responseRequestId }
       );
     }
     return {
@@ -980,7 +1135,12 @@ class DesktopAuthManager extends EventEmitter {
   async _refreshSession({ force, epoch }) {
     const storedSession = tokenStore.getSession();
     if (!storedSession?.refreshToken || storedSession.kind !== "desktop-go-v2") {
-      throw new DesktopAuthError("AUTH_EXPIRED", "Session expired");
+      const error = new DesktopAuthError("AUTH_EXPIRED", "Session expired");
+      this._setStatus("signed-out", {
+        errorCode: error.code,
+        errorMessage: error.message,
+      });
+      throw error;
     }
     if (
       !force &&
@@ -991,7 +1151,12 @@ class DesktopAuthManager extends EventEmitter {
     }
     if (storedSession.refreshExpiresAt && storedSession.refreshExpiresAt <= Date.now()) {
       tokenStore.clearSession();
-      throw new DesktopAuthError("AUTH_EXPIRED", "Session expired");
+      const error = new DesktopAuthError("AUTH_EXPIRED", "Session expired");
+      this._setStatus("signed-out", {
+        errorCode: error.code,
+        errorMessage: error.message,
+      });
+      throw error;
     }
     try {
       const response = await this._request("/api/v2/auth/desktop/token", {
@@ -1002,13 +1167,21 @@ class DesktopAuthManager extends EventEmitter {
           refresh_token: storedSession.refreshToken,
           installation_id: tokenStore.getInstallationId(),
         }),
-      });
+      }, { expectedStatus: 200, body: "json" });
       this._assertAuthEpoch(epoch);
-      const user = normalizedUser(response) || canonicalUser(storedSession.user);
+      const user = canonicalUser(storedSession.user);
       this._assertAuthEpoch(epoch);
       const updated = this._sessionFromTokenResponse(response, storedSession, user);
+      if (!canonicalUser(updated.user)) {
+        throw new DesktopAuthError(
+          "AUTH_PROFILE_REQUIRED",
+          "Account profile must be restored by signing in again",
+          null,
+          { requestId: publicRequestId(response?.request_id) }
+        );
+      }
       tokenStore.saveSession(updated);
-      this._setStatus("authenticated", { user });
+      this._setStatus("authenticated", { user: updated.user });
       return this.getPublicStatus();
     } catch (error) {
       if (epoch !== this.authEpoch || error?.code === "AUTH_OPERATION_SUPERSEDED") {
@@ -1051,7 +1224,14 @@ class DesktopAuthManager extends EventEmitter {
   async getValidAccessToken() {
     if (this.bootstrapPromise) await this.bootstrapPromise;
     let storedSession = tokenStore.getSession();
-    if (!storedSession) throw new DesktopAuthError("AUTH_REQUIRED", "Authentication required");
+    if (!storedSession) {
+      const error = new DesktopAuthError("AUTH_REQUIRED", "Authentication required");
+      this._setStatus("signed-out", {
+        errorCode: error.code,
+        errorMessage: error.message,
+      });
+      throw error;
+    }
     if (
       !storedSession.accessToken ||
       storedSession.accessExpiresAt <= Date.now() + ACCESS_EXPIRY_SKEW_MS
@@ -1059,7 +1239,7 @@ class DesktopAuthManager extends EventEmitter {
       await this.refreshSession({ force: true });
       storedSession = tokenStore.getSession();
     }
-    if (!storedSession?.accessToken || !canonicalUser(storedSession.user)) {
+    if (!storedSession?.accessToken) {
       throw new DesktopAuthError("AUTH_EXPIRED", "Session expired");
     }
     return storedSession.accessToken;
@@ -1106,7 +1286,7 @@ class DesktopAuthManager extends EventEmitter {
             refresh_token: storedSession.refreshToken,
             installation_id: tokenStore.getInstallationId(),
           }),
-        });
+        }, { expectedStatus: 204, body: "empty" });
         revoked = true;
       }
     } catch (error) {

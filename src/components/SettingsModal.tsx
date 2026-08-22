@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Mic, UserCircle, Wrench, Keyboard, Shield } from "lucide-react";
+import { Mic, UserCircle, Wrench, Keyboard, Shield, SlidersHorizontal } from "lucide-react";
 import SidebarModal, { type SidebarItem } from "./ui/SidebarModal";
 import SettingsPage, { SettingsSectionType } from "./SettingsPage";
 
@@ -23,13 +23,13 @@ const SECTION_ALIASES: Record<string, SettingsSectionType> = {
   permissions: "privacyData",
   developer: "system",
   plansBilling: "account",
-  general: "speechToText",
   llms: "system",
   workspace: "account",
 };
 
 const CANONICAL_SECTIONS = new Set<SettingsSectionType>([
   "account",
+  "general",
   "speechToText",
   "hotkeys",
   "privacyData",
@@ -65,6 +65,15 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
           defaultValue: "Profile, secure session and billing",
         }),
         group: t("settingsModal.groups.account", { defaultValue: "VoiceLab" }),
+      },
+      {
+        id: "general",
+        label: t("settingsModal.sections.general.label", { defaultValue: "Preferences" }),
+        icon: SlidersHorizontal,
+        description: t("settingsModal.sections.general.description", {
+          defaultValue: "Appearance, language and app behavior",
+        }),
+        group: t("settingsModal.groups.app", { defaultValue: "Dictate" }),
       },
       {
         id: "speechToText",

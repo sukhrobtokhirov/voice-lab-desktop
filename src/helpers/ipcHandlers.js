@@ -846,7 +846,7 @@ class IPCHandlers {
     });
 
     // Audio storage handlers
-    this._handle("save-transcription-audio", async (event, id, audioBuffer, metadata) => {
+    const saveWavRecording = async (event, id, audioBuffer, metadata) => {
       const transcription = this.databaseManager.getTranscriptionById(id);
       const timestamp = transcription?.timestamp || null;
       const boundedAudio = toBoundedAudioBuffer(
@@ -854,11 +854,15 @@ class IPCHandlers {
         MAX_STORED_AUDIO_BYTES,
         "Stored audio"
       );
-      const result = this.audioStorageManager.saveAudio(id, boundedAudio, timestamp);
+      const { validatePcm16Wav } = require("./wavValidator");
+      const validated = validatePcm16Wav(boundedAudio);
+      const result = this.audioStorageManager.saveAudio(id, validated.buffer, timestamp, {
+        format: "wav",
+      });
       if (result.success) {
         this.databaseManager.updateTranscriptionAudio(id, {
           hasAudio: 1,
-          audioDurationMs: metadata?.durationMs || null,
+          audioDurationMs: validated.durationMs || metadata?.durationMs || null,
           provider: metadata?.provider || null,
           model: metadata?.model || null,
         });
@@ -866,33 +870,10 @@ class IPCHandlers {
         if (updated) this.broadcastToWindows("transcription-updated", updated);
       }
       return result;
-    });
-
-    this._handle("merge-audio-segments", async (_event, segments) => {
-      try {
-        if (!Array.isArray(segments) || segments.length < 2 || segments.length > 100) {
-          throw new Error("Invalid audio segment count");
-        }
-        const normalized = segments.map((segment) => {
-          if (!segment?.buffer || typeof segment.mimeType !== "string") {
-            throw new Error("Invalid audio segment");
-          }
-          return { buffer: Buffer.from(segment.buffer), mimeType: segment.mimeType };
-        });
-        const { mergeAudioSegments } = require("./ffmpegUtils");
-        const buffer = await mergeAudioSegments(normalized);
-        // Slice to a real ArrayBuffer: Buffers sent over IPC arrive as Uint8Array,
-        // and pooled Buffers share a larger underlying allocation.
-        return {
-          success: true,
-          buffer: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
-          mimeType: "audio/webm",
-        };
-      } catch (error) {
-        debugLogger.error("Failed to merge recovered audio segments", { error: error.message });
-        return { success: false, error: error.message };
-      }
-    });
+    };
+    this._handle("save-wav-recording", saveWavRecording);
+    // Compatibility for older renderer bundles during a rolling app update.
+    this._handle("save-transcription-audio", saveWavRecording);
 
     this._handle("get-audio-path", async (event, id) => {
       return this.audioStorageManager.getAudioPath(id);
@@ -3023,16 +3004,17 @@ class IPCHandlers {
           "Dictation audio"
         );
         const prepared = await prepareCloudSttAudio(boundedAudio, {
-          hintExt: opts.mimeType?.includes("ogg")
-            ? "ogg"
-            : opts.mimeType?.includes("mp4")
-              ? "m4a"
-              : "webm",
+          hintExt: opts.mimeType?.includes("wav")
+            ? "wav"
+            : opts.mimeType?.includes("ogg")
+              ? "ogg"
+              : opts.mimeType?.includes("mp4")
+                ? "m4a"
+                : "webm",
         });
         const audioData = prepared.buffer;
-        const durationMs = Number.isFinite(opts.durationSeconds)
-          ? Math.round(opts.durationSeconds * 1000)
-          : null;
+        const { validatePcm16Wav } = require("./wavValidator");
+        const durationMs = validatePcm16Wav(audioData).durationMs;
         return await transcribeWithVoiceLab({
           buffer: audioData,
           source: "dictate",

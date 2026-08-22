@@ -44,7 +44,8 @@ const fullElectronAPI = {
   // Audio storage functions
   saveTranscriptionAudio: (id, audioBuffer, metadata) =>
     ipcRenderer.invoke("save-transcription-audio", id, audioBuffer, metadata),
-  mergeAudioSegments: (segments) => ipcRenderer.invoke("merge-audio-segments", segments),
+  saveWavRecording: (id, wavBuffer, metadata) =>
+    ipcRenderer.invoke("save-wav-recording", id, wavBuffer, metadata),
   getAudioPath: (id) => ipcRenderer.invoke("get-audio-path", id),
   showAudioInFolder: (id) => ipcRenderer.invoke("show-audio-in-folder", id),
   getAudioBuffer: (id) => ipcRenderer.invoke("get-audio-buffer", id),

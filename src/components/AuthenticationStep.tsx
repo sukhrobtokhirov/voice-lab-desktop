@@ -31,11 +31,22 @@ const AUTH_ERROR_KEYS: Record<string, string> = {
   AUTH_STATE_MISMATCH: "auth.desktopCallbackInvalid",
   AUTH_TRANSACTION_INVALID: "auth.desktopCallbackInvalid",
   AUTH_TRANSACTION_MISSING: "auth.desktopCallbackInvalid",
+  AUTH_CALLBACK_SERVER_FAILED: "auth.desktopUnavailable",
+  AUTH_STATUS_UNAVAILABLE: "auth.desktopUnavailable",
+  AUTH_PLATFORM_UNSUPPORTED: "auth.desktopSecurityError",
   AUTHORIZATION_ORIGIN_REJECTED: "auth.desktopSecurityError",
   AUTHORIZATION_URL_INVALID: "auth.desktopSecurityError",
   AUTH_CALLBACK_REPLAYED: "auth.desktopReplayDetected",
   AUTH_TRANSACTION_EXPIRED: "auth.desktopExpired",
-  AUTH_EXPIRED: "auth.desktopExpired",
+  AUTH_EXPIRED: "auth.desktopUnauthorized",
+  AUTH_PROFILE_REQUIRED: "auth.desktopUnauthorized",
+  invalid_refresh_token: "auth.desktopUnauthorized",
+  account_disabled: "auth.desktopUnauthorized",
+  rate_limited: "auth.desktopServerRejected",
+  auth_unavailable: "auth.desktopUnavailable",
+  invalid_json: "auth.desktopServerRejected",
+  payload_too_large: "auth.desktopServerRejected",
+  validation_error: "auth.desktopServerRejected",
   AUTH_ACCESS_DENIED: "auth.desktopCancelled",
   AUTH_CANCELLED_BY_USER: "auth.desktopCancelled",
   AUTH_UNAUTHORIZED: "auth.desktopUnauthorized",
@@ -55,7 +66,16 @@ function localizedAuthError(t: (key: string) => string, errorCode?: string | nul
 
 export default function AuthenticationStep({ onAuthComplete }: AuthenticationStepProps) {
   const { t } = useTranslation();
-  const { isSignedIn, isLoaded, user, authStatus, authErrorCode } = useAuth();
+  const {
+    isSignedIn,
+    isLoaded,
+    authStatus,
+    authErrorCode,
+    authErrorMessage,
+    authErrorRequestId,
+    authErrorFields,
+    authRetryAfterSeconds,
+  } = useAuth();
   const [opening, setOpening] = useState(false);
   const [protocolReady, setProtocolReady] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,8 +91,8 @@ export default function AuthenticationStep({ onAuthComplete }: AuthenticationSte
   }, []);
 
   useEffect(() => {
-    if (isLoaded && isSignedIn && user?.id && user?.email) onAuthComplete();
-  }, [isLoaded, isSignedIn, onAuthComplete, user]);
+    if (isLoaded && isSignedIn) onAuthComplete();
+  }, [isLoaded, isSignedIn, onAuthComplete]);
 
   useEffect(() => {
     if (waiting) {
@@ -98,7 +118,10 @@ export default function AuthenticationStep({ onAuthComplete }: AuthenticationSte
       setError(localizedAuthError(t, authErrorCode));
       return;
     }
-    if (authStatus === "signed-out") setError(null);
+    if (authStatus === "signed-out") {
+      setOpening(false);
+      setError(authErrorCode ? localizedAuthError(t, authErrorCode) : null);
+    }
   }, [authErrorCode, authStatus, t, waiting]);
 
   const start = useCallback(async () => {
@@ -126,6 +149,7 @@ export default function AuthenticationStep({ onAuthComplete }: AuthenticationSte
       autoStarted.current ||
       !isLoaded ||
       isSignedIn ||
+      Boolean(authErrorCode) ||
       protocolReady !== true ||
       authStatus !== "signed-out"
     ) {
@@ -133,7 +157,7 @@ export default function AuthenticationStep({ onAuthComplete }: AuthenticationSte
     }
     autoStarted.current = true;
     void start();
-  }, [authStatus, isLoaded, isSignedIn, protocolReady, start]);
+  }, [authErrorCode, authStatus, isLoaded, isSignedIn, protocolReady, start]);
 
   return (
     <div className="space-y-5">
@@ -164,9 +188,29 @@ export default function AuthenticationStep({ onAuthComplete }: AuthenticationSte
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <div className="min-w-0">
             <p>{error}</p>
+            {authErrorMessage && authErrorMessage !== error && (
+              <p className="mt-1 break-words text-xs opacity-85">{authErrorMessage}</p>
+            )}
+            {authRetryAfterSeconds && (
+              <p className="mt-1 text-xs opacity-85">
+                {t("auth.desktopRetryAfter", { seconds: authRetryAfterSeconds })}
+              </p>
+            )}
+            {authErrorFields && Object.keys(authErrorFields).length > 0 && (
+              <ul className="mt-1 list-inside list-disc text-xs opacity-85">
+                {Object.entries(authErrorFields).map(([field, message]) => (
+                  <li key={field}>{field}: {message}</li>
+                ))}
+              </ul>
+            )}
             {authErrorCode && (
               <code className="mt-1 block break-all font-mono text-[11px] opacity-70">
                 {authErrorCode}
+              </code>
+            )}
+            {authErrorRequestId && (
+              <code className="mt-1 block break-all font-mono text-[11px] opacity-70">
+                {authErrorRequestId}
               </code>
             )}
           </div>

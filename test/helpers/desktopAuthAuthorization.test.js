@@ -13,7 +13,7 @@ function loopbackCallback(pending, { code = CALLBACK_CODE, state = pending.state
   return url.toString();
 }
 
-function jsonResponse(status, body) {
+function jsonResponse(status, body, headers = {}) {
   let payload = body;
   if (body && typeof body === "object") {
     payload = { request_id: "req_test_auth", ...body };
@@ -25,7 +25,10 @@ function jsonResponse(status, body) {
       payload.session_id ??= "dss_test_auth";
     }
   }
-  return new Response(payload == null ? null : JSON.stringify(payload), { status });
+  return new Response(payload == null ? null : JSON.stringify(payload), {
+    status,
+    headers: payload == null ? headers : { "Content-Type": "application/json", ...headers },
+  });
 }
 
 function loadDesktopAuthManager(initialSession = null) {
@@ -236,7 +239,10 @@ test("preserves backend code, safe field errors, request id, and retry timing", 
         },
         request_id: "req_contract_422",
       }),
-      { status: 422, headers: { "Retry-After": "7" } }
+      {
+        status: 422,
+        headers: { "Content-Type": "application/json", "Retry-After": "7" },
+      }
     );
 
   await assert.rejects(manager.startAuthorization(), (error) => {
@@ -355,6 +361,58 @@ test("loopback callback exchanges code and PKCE verifier without browser cookies
   const duplicateStatus = await manager.handleCallback(loopbackCallback(pending));
   assert.equal(duplicateStatus.status, "authenticated");
   assert.equal(calls.length, requestCountAfterExchange);
+});
+
+test("transient exchange rejection preserves PKCE state for a bounded manual retry", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const { DesktopAuthManager, getPending, getStoredSession } = loadDesktopAuthManager();
+  const manager = managerFrom(DesktopAuthManager);
+  let exchanges = 0;
+  global.fetch = async (url) => {
+    if (url.endsWith("/authorizations")) {
+      return jsonResponse(201, {
+        authorization_request_id: REQUEST_ID,
+        authorization_url: `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`,
+      });
+    }
+    exchanges += 1;
+    if (exchanges === 1) {
+      return jsonResponse(
+        429,
+        {
+          error: { code: "rate_limited", message: "Wait before retrying." },
+          request_id: "req_exchange_rate_limited",
+        },
+        { "Retry-After": "4" }
+      );
+    }
+    return jsonResponse(200, {
+      access_token: "access-token-abcdefghijklmnopqrstuvwxyz",
+      refresh_token: "refresh-token-abcdefghijklmnopqrstuvwxyz",
+      session_id: "desktop-session-retried",
+      user: { id: "user-retried", email: "retried@example.com" },
+    });
+  };
+
+  await manager.startAuthorization();
+  const callback = loopbackCallback(getPending());
+  await assert.rejects(manager.handleCallback(callback), (error) => {
+    assert.equal(error.code, "rate_limited");
+    assert.equal(error.requestId, "req_exchange_rate_limited");
+    assert.equal(error.retryAfterSeconds, 4);
+    return true;
+  });
+  assert.equal(manager.getPublicStatus().status, "waiting-for-browser");
+  assert.equal(getPending().callbackFingerprint, "");
+  assert.notEqual(manager.callbackServer, null);
+
+  const status = await manager.handleCallback(callback);
+  assert.equal(status.status, "authenticated");
+  assert.equal(getStoredSession().sessionId, "desktop-session-retried");
+  assert.equal(exchanges, 2);
 });
 
 test("loopback listener receives the browser redirect in the creating process", async (t) => {

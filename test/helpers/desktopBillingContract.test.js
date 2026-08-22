@@ -72,12 +72,42 @@ test("sidebar and settings show server plan limits and manual refresh", () => {
   assert.match(display, /disabled=\{!usage\.billingAvailable \|\| usage\.checkoutLoading\}/);
 });
 
+test("sidebar hides Studio and STT until the product is available", () => {
+  const sidebar = read("src/components/ControlPanelSidebar.tsx");
+
+  assert.doesNotMatch(sidebar, /desktop\.nav\.studio/);
+  assert.doesNotMatch(sidebar, /desktop\.nav\.stt/);
+  assert.doesNotMatch(sidebar, /id: "upload" as const/);
+});
+
+test("dashboard fails closed until the server confirms an active entitlement", () => {
+  const router = read("src/AppRouter.jsx");
+  const gate = read("src/components/SubscriptionAccessGate.tsx");
+
+  const authGate = router.indexOf("isControlPanel && authLoaded && !isSignedIn");
+  const subscriptionGate = router.indexOf("<SubscriptionAccessGate>");
+  const dashboard = router.indexOf("<ControlPanel initialSettingsSection=");
+  assert.ok(authGate > -1 && authGate < subscriptionGate, "authentication must be checked first");
+  assert.ok(subscriptionGate > -1 && subscriptionGate < dashboard, "plan gate must wrap dashboard");
+
+  assert.match(gate, /usage\?\.entitlement\?\.active === true/);
+  assert.match(gate, /usage\?\.plans\[0\]/);
+  assert.match(gate, /offer\.dailyMinutes/);
+  assert.match(gate, /offer\.maxRecordingSeconds/);
+  assert.match(gate, /usage\?\.openCheckout\(\)/);
+  assert.match(gate, /usage\?\.refetch\(\)/);
+  assert.match(gate, /usage\.errorRequestId/);
+  assert.match(gate, /!usage\.hasSubscriptionData && !usage\.error/);
+});
+
 test("every locale contains the desktop subscription and plan labels", () => {
   const localeRoot = path.join(root, "src", "locales");
   for (const locale of fs.readdirSync(localeRoot)) {
     const file = path.join(localeRoot, locale, "translation.json");
     if (!fs.existsSync(file)) continue;
     const messages = JSON.parse(fs.readFileSync(file, "utf8"));
+    assert.equal(typeof messages.desktop?.nav?.studio, "string", `${locale}: Studio`);
+    assert.equal(typeof messages.desktop?.nav?.stt, "string", `${locale}: STT`);
     for (const key of [
       "active",
       "noActivePlan",

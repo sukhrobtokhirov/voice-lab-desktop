@@ -24,6 +24,16 @@ export type DesktopAuthUser = {
   image: string | null;
 };
 
+export type DesktopAuthStatus = {
+  status: string;
+  user: DesktopAuthUser | null;
+  errorCode: string | null;
+  errorMessage?: string | null;
+  errorRequestId?: string | null;
+  errorFields?: Record<string, string> | null;
+  retryAfterSeconds?: number | null;
+};
+
 export type TranscriptionErrorCode =
   | "TIMEOUT"
   | "NETWORK"
@@ -534,12 +544,11 @@ declare global {
         audioBuffer: ArrayBuffer,
         metadata?: { durationMs?: number; provider?: string; model?: string }
       ) => Promise<{ success: boolean; path?: string }>;
-      mergeAudioSegments: (
-        segments: Array<{ buffer: ArrayBuffer; mimeType: string }>
-      ) => Promise<
-        | { success: true; buffer: ArrayBuffer; mimeType: "audio/webm" }
-        | { success: false; error: string }
-      >;
+      saveWavRecording: (
+        id: number,
+        wavBuffer: ArrayBuffer,
+        metadata?: { durationMs?: number; provider?: string; model?: string }
+      ) => Promise<{ success: boolean; path?: string }>;
       getAudioPath: (id: number) => Promise<string | null>;
       showAudioInFolder: (id: number) => Promise<{ success: boolean }>;
       getAudioBuffer: (id: number) => Promise<ArrayBuffer | null>;
@@ -1040,45 +1049,15 @@ declare global {
       setAutoStartEnabled?: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
 
       // Auth
-      authStartBrowser?: (provider?: "google") => Promise<{
-        status: string;
-        user: DesktopAuthUser | null;
-        errorCode: string | null;
-        errorMessage?: string | null;
-      }>;
-      authReopenBrowser?: () => Promise<{
-        status: string;
-        user: DesktopAuthUser | null;
-        errorCode: string | null;
-        errorMessage?: string | null;
-      }>;
-      authCancelBrowser?: () => Promise<{
-        status: string;
-        user: DesktopAuthUser | null;
-        errorCode: string | null;
-        errorMessage?: string | null;
-      }>;
-      authGetStatus?: () => Promise<{
-        status: string;
-        user: DesktopAuthUser | null;
-        errorCode: string | null;
-        errorMessage?: string | null;
-      }>;
-      authRefreshSession?: () => Promise<{
-        status: string;
-        user: DesktopAuthUser | null;
-        errorCode: string | null;
-        errorMessage?: string | null;
-      }>;
+      authStartBrowser?: (provider?: "google") => Promise<DesktopAuthStatus>;
+      authReopenBrowser?: () => Promise<DesktopAuthStatus>;
+      authCancelBrowser?: () => Promise<DesktopAuthStatus>;
+      authGetStatus?: () => Promise<DesktopAuthStatus>;
+      authRefreshSession?: () => Promise<DesktopAuthStatus>;
       authLogout?: () => Promise<{ success: boolean; revoked: boolean }>;
       authDeleteAccount?: () => Promise<{ success: boolean }>;
       onAuthStateChanged?: (
-        callback: (status: {
-          status: string;
-          user: DesktopAuthUser | null;
-          errorCode: string | null;
-          errorMessage?: string | null;
-        }) => void
+        callback: (status: DesktopAuthStatus) => void
       ) => () => void;
       onDesktopProtocolError?: (
         callback: (event: unknown, payload: { errorCode?: string }) => void

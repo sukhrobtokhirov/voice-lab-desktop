@@ -130,6 +130,7 @@
   "common": {
     "retry": "再試行",
     "back": "戻る",
+    "continue": "続行",
     "next": "次へ",
     "complete": "完了",
     "reset": "リセット",
@@ -809,7 +810,7 @@
     "desktopTitle": "VoiceLab デスクトップにサインインする",
     "desktopBrowserHint": "安全なサインインはブラウザで開き、完了するとここに戻ります。",
     "desktopWaiting": "ブラウザでサインインを完了します。 VoiceLab Desktop は自動的に続行されます。",
-    "desktopSecurity": "パスワードがデスクトップ アプリに入力されることはありません。セッション トークンはオペレーティング システムによって保護されています。",
+    "desktopSecurity": "パスワードがデスクトップアプリに入力されることはありません。更新トークンは非公開のローカル認証情報ストアで暗号化されます。",
     "desktopOpenBrowser": "ブラウザで続行",
     "desktopOpening": "安全なサインインを開いています…",
     "desktopReopen": "ブラウザを再度開く",
@@ -818,6 +819,7 @@
     "desktopExpired": "このサインイン要求は期限切れになりました。続行するには、もう一度開始してください。",
     "desktopFailed": "サインインを完了できませんでした。もう一度試してください。",
     "desktopNetworkTimeout": "認証サーバーの応答に時間がかかりすぎました。接続を確認して、もう一度試してください。",
+    "desktopRetryAfter": "{{seconds}}秒後にもう一度お試しください。",
     "desktopInvalidResponse": "認証サーバーが無効な応答を返しました。しばらくしてからもう一度お試しください。",
     "desktopCallbackInvalid": "戻りリンクを確認できませんでした。再度サインインを開始します。",
     "desktopSecurityError": "サインイン リンクは VoiceLab のセキュリティ チェックに失敗しました。再度サインインを開始します。",
@@ -2183,6 +2185,9 @@
     },
     "folders": {
       "title": "フォルダ",
+      "personal": "個人",
+      "meetings": "ミーティング",
+      "videos": "動画",
       "soon": "近日公開",
       "folderName": "フォルダ名",
       "couldNotCreate": "フォルダを作成できませんでした",
@@ -3084,6 +3089,8 @@
     "nav": {
       "history": "歴史",
       "vocabulary": "語彙",
+      "studio": "Studio",
+      "stt": "STT",
       "more": "もっと"
     },
     "wallet": {

@@ -8,6 +8,9 @@ type DesktopAuthState = {
   user: VoiceLabUser | null;
   errorCode: string | null;
   errorMessage: string | null;
+  errorRequestId?: string | null;
+  errorFields?: Record<string, string> | null;
+  retryAfterSeconds?: number | null;
 };
 
 const initialState: DesktopAuthState = {
@@ -109,6 +112,9 @@ export function useAuth() {
     authStatus: authState.status,
     authErrorCode: authState.errorCode,
     authErrorMessage: authState.errorMessage,
+    authErrorRequestId: authState.errorRequestId || null,
+    authErrorFields: authState.errorFields || null,
+    authRetryAfterSeconds: authState.retryAfterSeconds || null,
     refetch,
   };
 }

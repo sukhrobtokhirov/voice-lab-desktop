@@ -1,10 +1,7 @@
-// A recorded WebM/Opus blob with no audio frames — produced when the dictation
-// hotkey toggles recording on and off within milliseconds (an accidental
-// double-tap, or the KDE double-trigger fixed in main.js) — is essentially just
-// the container header, well under 256 bytes. Real speech, even a single short
-// word, produces far more. We gate on size, not wall-clock duration: a genuinely
-// short utterance can last under any reasonable time threshold yet still carry
-// real audio, so a duration gate would silently drop it. See issue #864.
+// A PCM WAV created by an accidental double-tap may contain only its 44-byte
+// header and a few samples. Real speech, even a single short word, produces far
+// more. We gate on size, not wall-clock duration, so a genuinely short utterance
+// is not discarded merely because it was brief. See issue #864.
 export const MIN_AUDIO_BYTES = 256;
 
 export function isEmptyRecording(blobSize) {

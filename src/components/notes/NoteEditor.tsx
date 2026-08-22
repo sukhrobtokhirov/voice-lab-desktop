@@ -34,6 +34,7 @@ import {
 } from "../ui/dropdown-menu";
 import { cn } from "../lib/utils";
 import type { NoteItem, FolderItem } from "../../types/electron";
+import { displayFolderName } from "./shared";
 import type { ActionProcessingState } from "../../hooks/useActionProcessing";
 import ActionProcessingOverlay from "./ActionProcessingOverlay";
 import NoteBottomBar from "./NoteBottomBar";
@@ -672,7 +673,7 @@ export default function NoteEditor({
                 <DropdownMenuTrigger asChild>
                   <button className="inline-flex items-center gap-1.5 text-[11px] px-1.5 py-0.5 rounded-md border border-border/70 dark:border-white/25 text-foreground/50 dark:text-foreground/35 hover:text-foreground/60 hover:border-border/60 hover:bg-foreground/3 dark:hover:text-foreground/40 dark:hover:border-white/10 dark:hover:bg-white/3 transition-all duration-150 cursor-pointer outline-none">
                     <FolderOpen size={11} className="shrink-0" />
-                    {folderName || t("notes.editor.noFolder")}
+                    {folderName ? displayFolderName(folderName, t) : t("notes.editor.noFolder")}
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" sideOffset={6} className="min-w-44 p-1">
@@ -705,7 +706,9 @@ export default function NoteEditor({
                           className="text-xs gap-2 rounded-md px-2 py-1.5"
                         >
                           <FolderOpen size={11} className="text-foreground/30 shrink-0" />
-                          <span className="truncate flex-1">{folder.name}</span>
+                          <span className="truncate flex-1">
+                            {displayFolderName(folder.name, t)}
+                          </span>
                           {isCurrent && <Check size={9} className="text-primary shrink-0" />}
                         </DropdownMenuItem>
                       );

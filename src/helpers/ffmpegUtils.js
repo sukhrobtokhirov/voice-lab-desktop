@@ -478,10 +478,18 @@ function detectAudioContainer(buffer) {
   return null;
 }
 
+function requiresCloudSttConversion(container) {
+  // Chromium MediaRecorder WebM blobs have been rejected intermittently by the
+  // production decoder even though WebM/Opus is part of the public contract.
+  // Canonicalizing them also finalizes container metadata before multipart
+  // upload. Other documented containers can safely retain their native bytes.
+  return container === "webm" || !CLOUD_STT_FORMATS[container];
+}
+
 /**
  * Normalize audio for VoiceLab Cloud STT uploads.
- * Passthrough for every container supported by the desktop endpoint; otherwise
- * FFmpeg converts the captured recording to a canonical 16 kHz mono WAV.
+ * Chromium WebM recordings and unknown containers are converted to a canonical
+ * 16 kHz mono PCM WAV. Other documented containers are passed through.
  */
 async function prepareCloudSttAudio(input, options = {}) {
   const hintExt = (options.hintExt || "").replace(/^\./, "").toLowerCase();
@@ -500,7 +508,7 @@ async function prepareCloudSttAudio(input, options = {}) {
   // FFmpeg input hint and must never decide the MIME type sent to VoiceLab.
   const detected = detectAudioContainer(buffer);
   const passthrough = detected && CLOUD_STT_FORMATS[detected];
-  if (passthrough) {
+  if (passthrough && !requiresCloudSttConversion(detected)) {
     return {
       buffer,
       fileName: `audio.${passthrough.ext}`,
@@ -577,6 +585,7 @@ module.exports = {
   computeFloat32RMS,
   mergeAudioSegments,
   detectAudioContainer,
+  requiresCloudSttConversion,
   prepareCloudSttAudio,
   getAudioDurationSeconds,
   clearCache,

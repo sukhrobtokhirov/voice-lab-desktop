@@ -130,6 +130,7 @@
   "common": {
     "retry": "Riprova",
     "back": "Indietro",
+    "continue": "Continua",
     "next": "Avanti",
     "complete": "Completa",
     "reset": "Reimposta",
@@ -742,7 +743,7 @@
     "desktopTitle": "Accedi a VoiceLab Desktop",
     "desktopBrowserHint": "L’accesso sicuro si apre nel browser e torna automaticamente nell’app al termine.",
     "desktopWaiting": "Completa l’accesso nel browser. VoiceLab Desktop continuerà automaticamente.",
-    "desktopSecurity": "La password non entra mai nell’app desktop. Il token di sessione è protetto dal sistema operativo.",
+    "desktopSecurity": "La password non entra mai nell’app desktop. Il token di aggiornamento è cifrato in un archivio locale privato.",
     "desktopOpenBrowser": "Continua nel browser",
     "desktopOpening": "Apertura dell’accesso sicuro…",
     "desktopReopen": "Riapri il browser",
@@ -751,6 +752,7 @@
     "desktopExpired": "Questa richiesta di accesso è scaduta. Avvia di nuovo l’accesso.",
     "desktopFailed": "Impossibile completare l’accesso. Riprova.",
     "desktopNetworkTimeout": "Il server di autenticazione ha impiegato troppo tempo a rispondere. Controlla la connessione e riprova.",
+    "desktopRetryAfter": "Riprova tra {{seconds}} secondi.",
     "desktopInvalidResponse": "Il server di autenticazione ha restituito una risposta non valida. Riprova più tardi.",
     "desktopCallbackInvalid": "Impossibile verificare il link di ritorno. Avvia di nuovo l’accesso.",
     "desktopSecurityError": "Il link di accesso non ha superato i controlli di sicurezza di VoiceLab. Avvia di nuovo l’accesso.",
@@ -2165,6 +2167,9 @@
     },
     "folders": {
       "title": "Cartelle",
+      "personal": "Personale",
+      "meetings": "Riunioni",
+      "videos": "Video",
       "soon": "Presto",
       "folderName": "Nome cartella",
       "couldNotCreate": "Impossibile creare la cartella",
@@ -3084,6 +3089,8 @@
     "nav": {
       "history": "Storia",
       "vocabulary": "Vocabolario",
+      "studio": "Studio",
+      "stt": "STT",
       "more": "Di più"
     },
     "wallet": {

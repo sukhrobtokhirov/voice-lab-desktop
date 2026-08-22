@@ -1,8 +1,7 @@
 import { isEmptyRecording } from "./recordingGuard.js";
 
-// Decide whether a finished MediaRecorder session carries real audio before we
-// hand it to the transcription backend. A fast tap can flush only the container
-// header, or deliver no chunks at all, which crashes FFmpeg. See issue #871.
+// Decide whether a finished PCM capture carries real samples before it reaches
+// storage or the transcription backend. A fast tap can contain only a WAV header.
 export function evaluateFinishedRecording({ blobSize, receivedAudioData } = {}) {
   if (!receivedAudioData) {
     return { usable: false, reason: "no-audio-data" };

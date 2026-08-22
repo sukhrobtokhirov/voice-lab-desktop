@@ -516,6 +516,52 @@ test("invalid desktop token refreshes once and rebuilds multipart for one retry"
   }
 });
 
+test("refresh rate limits preserve Retry-After and request diagnostics without resending STT", async (t) => {
+  const VoiceLabApiClient = loadClient(t);
+  const authManager = createAuthManager();
+  authManager.refreshSession = async () => {
+    authManager.state.refreshCalls += 1;
+    const error = new Error("Refresh is rate limited");
+    error.code = "rate_limited";
+    error.httpStatus = 429;
+    error.requestId = "req_refresh_rate_limited";
+    error.retryAfterSeconds = 9;
+    error.fields = { refresh_token: "Try later" };
+    throw error;
+  };
+  const { client } = createClient(VoiceLabApiClient, authManager);
+  let fetchCalls = 0;
+  installFetch(t, async () => {
+    fetchCalls += 1;
+    return jsonResponse(
+      {
+        error: { code: "invalid_desktop_token", message: "Desktop token expired" },
+        request_id: "req_stt_needs_refresh",
+      },
+      401
+    );
+  });
+
+  await assert.rejects(
+    () =>
+      client.sendDictationChunk(operation(), Buffer.from("audio bytes"), {
+        contentType: "audio/mpeg",
+        fileName: "rate-limited-refresh.mp3",
+      }),
+    (error) => {
+      const publicError = error.toPublic();
+      assert.equal(error.code, "RATE_LIMITED");
+      assert.equal(error.status, 429);
+      assert.equal(publicError.requestId, "req_refresh_rate_limited");
+      assert.equal(publicError.retryAfterSeconds, 9);
+      assert.equal(publicError.serverCode, "rate_limited");
+      return true;
+    }
+  );
+  assert.equal(fetchCalls, 1);
+  assert.equal(authManager.state.refreshCalls, 1);
+});
+
 test("a second invalid-token response stops after the single authorized retry", async (t) => {
   const VoiceLabApiClient = loadClient(t);
   const { client, authManager } = createClient(VoiceLabApiClient);

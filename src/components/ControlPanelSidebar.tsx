@@ -1,15 +1,11 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   BookOpen,
-  Blocks,
-  ChevronDown,
   History,
   MessageSquare,
-  MoreHorizontal,
   NotebookPen,
   Search,
   Settings,
-  Upload,
   UserCircle,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -54,10 +50,6 @@ export default function ControlPanelSidebar({
   updateAction,
 }: ControlPanelSidebarProps) {
   const { t } = useTranslation();
-  const [moreOpen, setMoreOpen] = useState(
-    () => activeView === "upload" || activeView === "integrations"
-  );
-
   const primaryItems = [
     {
       id: "home" as const,
@@ -85,24 +77,11 @@ export default function ControlPanelSidebar({
     },
   ];
 
-  const secondaryItems = [
-    {
-      id: "upload" as const,
-      label: t("sidebar.upload", { defaultValue: "Upload" }),
-      icon: Upload,
-    },
-    {
-      id: "integrations" as const,
-      label: t("sidebar.integrations", { defaultValue: "Integrations" }),
-      icon: Blocks,
-    },
-  ];
-
   const renderItem = ({
     id,
     label,
     icon: Icon,
-  }: (typeof primaryItems)[number] | (typeof secondaryItems)[number]) => {
+  }: (typeof primaryItems)[number]) => {
     const active = activeView === id;
     return (
       <button
@@ -158,31 +137,6 @@ export default function ControlPanelSidebar({
           {t("desktop.nav.desktop", { defaultValue: "Desktop" })}
         </p>
         <div className="space-y-0.5">{primaryItems.map(renderItem)}</div>
-        <div className="mt-5">
-          <p className="mb-2 px-2.5 text-xs font-medium text-foreground/40 dark:text-foreground/45">
-            {t("desktop.nav.tools", { defaultValue: "Tools" })}
-          </p>
-          <button
-            type="button"
-            aria-expanded={moreOpen}
-            onClick={() => setMoreOpen((value) => !value)}
-            className={cn(
-              navButton,
-              activeView === "upload" || activeView === "integrations"
-                ? "bg-black/[0.055] font-medium text-foreground dark:bg-white/[0.08]"
-                : "text-foreground/60 hover:bg-black/[0.035] hover:text-foreground dark:text-foreground/65 dark:hover:bg-white/[0.06]"
-            )}
-          >
-            <MoreHorizontal className="h-[18px] w-[18px] text-foreground/55" />
-            <span className="flex-1">{t("desktop.nav.more", { defaultValue: "More" })}</span>
-            <ChevronDown className={cn("h-4 w-4 transition-transform", moreOpen && "rotate-180")} />
-          </button>
-          {moreOpen && (
-            <div className="ml-[18px] mt-0.5 space-y-0.5 border-l border-black/10 pl-2 dark:border-white/12">
-              {secondaryItems.map(renderItem)}
-            </div>
-          )}
-        </div>
       </nav>
 
       <div className="flex-1" />

@@ -109,6 +109,7 @@
   "common": {
     "retry": "Tentar novamente",
     "back": "Voltar",
+    "continue": "Continuar",
     "next": "Avançar",
     "complete": "Concluir",
     "reset": "Redefinir",
@@ -788,7 +789,7 @@
     "desktopTitle": "Faça login no VoiceLab Desktop",
     "desktopBrowserHint": "O login seguro é aberto no seu navegador e retorna aqui quando concluído.",
     "desktopWaiting": "Conclua o login no seu navegador. VoiceLab Desktop continuará automaticamente.",
-    "desktopSecurity": "Sua senha nunca entra no aplicativo de desktop. O token de sessão é protegido pelo seu sistema operacional.",
+    "desktopSecurity": "Sua senha nunca entra no aplicativo. O token de atualização é criptografado em um armazenamento local privado.",
     "desktopOpenBrowser": "Continuar no navegador",
     "desktopOpening": "Abrindo login seguro…",
     "desktopReopen": "Abra o navegador novamente",
@@ -797,6 +798,7 @@
     "desktopExpired": "Esta solicitação de login expirou. Comece novamente para continuar.",
     "desktopFailed": "Não foi possível concluir o login. Por favor, tente novamente.",
     "desktopNetworkTimeout": "O servidor de autenticação demorou muito para responder. Verifique sua conexão e tente novamente.",
+    "desktopRetryAfter": "Tente novamente em {{seconds}} segundos.",
     "desktopInvalidResponse": "O servidor de autenticação retornou uma resposta inválida. Por favor, tente novamente em breve.",
     "desktopCallbackInvalid": "O link de retorno não pôde ser verificado. Comece o login novamente.",
     "desktopSecurityError": "O link de login falhou nas verificações de segurança do VoiceLab. Comece o login novamente.",
@@ -2165,6 +2167,9 @@
     },
     "folders": {
       "title": "Pastas",
+      "personal": "Pessoal",
+      "meetings": "Reuniões",
+      "videos": "Vídeos",
       "soon": "Em breve",
       "folderName": "Nome da pasta",
       "couldNotCreate": "Não foi possível criar a pasta",
@@ -3084,6 +3089,8 @@
     "nav": {
       "history": "História",
       "vocabulary": "Vocabulário",
+      "studio": "Studio",
+      "stt": "STT",
       "more": "Mais"
     },
     "wallet": {

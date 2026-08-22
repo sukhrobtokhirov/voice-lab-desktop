@@ -9,7 +9,8 @@ const {
   LocalDataCrypto,
 } = require("./localDataCrypto");
 
-const ENCRYPTED_SUFFIX = ".webm.enc";
+const WAV_ENCRYPTED_SUFFIX = ".wav.enc";
+const LEGACY_WEBM_ENCRYPTED_SUFFIX = ".webm.enc";
 const MANIFEST_NAME = "audio-index.v1.enc";
 const JOURNAL_NAME = "audio-journal.v1.enc";
 const MANIFEST_CONTEXT = {
@@ -206,13 +207,18 @@ class AudioStorageManager {
     return finalPath;
   }
 
-  _opaqueFilename() {
-    return `${crypto.randomUUID()}${ENCRYPTED_SUFFIX}`;
+  _opaqueFilename(format = "wav") {
+    const suffix = format === "wav" ? WAV_ENCRYPTED_SUFFIX : LEGACY_WEBM_ENCRYPTED_SUFFIX;
+    return `${crypto.randomUUID()}${suffix}`;
   }
 
   _legacyTranscriptionId(filename) {
-    const suffix = filename.endsWith(ENCRYPTED_SUFFIX)
-      ? ENCRYPTED_SUFFIX
+    const suffix = filename.endsWith(WAV_ENCRYPTED_SUFFIX)
+      ? WAV_ENCRYPTED_SUFFIX
+      : filename.endsWith(LEGACY_WEBM_ENCRYPTED_SUFFIX)
+        ? LEGACY_WEBM_ENCRYPTED_SUFFIX
+        : filename.endsWith(".wav")
+          ? ".wav"
       : filename.endsWith(".webm")
         ? ".webm"
         : null;
@@ -241,10 +247,15 @@ class AudioStorageManager {
       if (!transcriptionId) continue;
       const sourcePath = path.join(this.audioDir, filename);
       const stat = fs.statSync(sourcePath);
-      const destinationName = this._opaqueFilename();
+      const isWav = filename.endsWith(".wav") || filename.endsWith(WAV_ENCRYPTED_SUFFIX);
+      const format = isWav ? "wav" : "webm";
+      const destinationName = this._opaqueFilename(format);
       const contents = fs.readFileSync(sourcePath);
       let plaintext;
-      if (filename.endsWith(ENCRYPTED_SUFFIX)) {
+      if (
+        filename.endsWith(WAV_ENCRYPTED_SUFFIX) ||
+        filename.endsWith(LEGACY_WEBM_ENCRYPTED_SUFFIX)
+      ) {
         plaintext = secretCrypto.decryptBuffer(contents);
       } else {
         plaintext = contents;
@@ -261,6 +272,7 @@ class AudioStorageManager {
         updated_at: new Date().toISOString(),
         key_version: this.crypto.currentVersion,
         size: plaintext.length,
+        format,
       };
       this._commitReplacement(transcriptionId, plaintext, record, {
         legacySource: filename,
@@ -275,11 +287,12 @@ class AudioStorageManager {
     return this.manifest.records[String(transcriptionId)] || null;
   }
 
-  saveAudio(transcriptionId, audioBuffer, timestamp) {
+  saveAudio(transcriptionId, audioBuffer, timestamp, { format = "wav" } = {}) {
     try {
+      if (format !== "wav") throw new Error("New recordings must use WAV format");
       const id = String(transcriptionId);
       const existing = this._record(id);
-      const filename = this._opaqueFilename();
+      const filename = this._opaqueFilename(format);
       const input = Buffer.from(audioBuffer);
       const parsedTimestamp = timestamp ? new Date(timestamp) : new Date();
       const record = {
@@ -290,6 +303,7 @@ class AudioStorageManager {
         updated_at: new Date().toISOString(),
         key_version: this.crypto.currentVersion,
         size: input.length,
+        format,
       };
       const filePath = this._commitReplacement(id, input, record, {
         oldFile: existing?.file || null,
@@ -322,11 +336,12 @@ class AudioStorageManager {
     if (!audioBuffer) return null;
     try {
       const id = String(transcriptionId);
+      const record = this._record(id);
       const previous = this.playbackPaths.get(id);
       if (previous) fs.rmSync(previous, { force: true });
       const playbackPath = path.join(
         this.playbackDir,
-        `${crypto.randomUUID()}.webm`
+        `${crypto.randomUUID()}.${record?.format === "wav" ? "wav" : "webm"}`
       );
       fs.writeFileSync(playbackPath, audioBuffer, { mode: 0o600 });
       fs.chmodSync(playbackPath, 0o600);

@@ -352,7 +352,7 @@ test("audio content and metadata stay encrypted, account identifiers stay out of
 
     const filenames = fs.readdirSync(path.join(userDataPath, "audio"));
     assert.equal(filenames.some((name) => name.includes("account-a-record-42")), false);
-    const audioFile = filenames.find((name) => name.endsWith(".webm.enc"));
+    const audioFile = filenames.find((name) => name.endsWith(".wav.enc"));
     assert.ok(audioFile);
     assert.equal(
       fs.readFileSync(path.join(userDataPath, "audio", audioFile)).includes(secret),
@@ -389,7 +389,7 @@ test("audio tampering fails closed instead of returning corrupted plaintext", ()
     storage.saveAudio("record-1", Buffer.from("audio"), new Date());
     const audioFile = fs
       .readdirSync(path.join(userDataPath, "audio"))
-      .find((name) => name.endsWith(".webm.enc"));
+      .find((name) => name.endsWith(".wav.enc"));
     const target = path.join(userDataPath, "audio", audioFile);
     const contents = fs.readFileSync(target);
     contents[contents.length - 1] ^= 0xff;

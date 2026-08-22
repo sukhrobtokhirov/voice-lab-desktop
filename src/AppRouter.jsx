@@ -10,6 +10,7 @@ import { Card, CardContent } from "./components/ui/card.tsx";
 import { useAuth } from "./hooks/useAuth";
 import { useTheme } from "./hooks/useTheme";
 import ConnectionStatus from "./components/ConnectionStatus";
+import SubscriptionAccessGate from "./components/SubscriptionAccessGate";
 import { hasOnboardingProgress } from "./constants/onboarding";
 
 const ControlPanel = React.lazy(() => import("./components/ControlPanel.tsx"));
@@ -157,9 +158,11 @@ function MainApp() {
   }
 
   return isControlPanel ? (
-    <Suspense fallback={<LoadingFallback />}>
-      <ControlPanel initialSettingsSection={postOnboardingSettingsSection} />
-    </Suspense>
+    <SubscriptionAccessGate>
+      <Suspense fallback={<LoadingFallback />}>
+        <ControlPanel initialSettingsSection={postOnboardingSettingsSection} />
+      </Suspense>
+    </SubscriptionAccessGate>
   ) : (
     <App />
   );

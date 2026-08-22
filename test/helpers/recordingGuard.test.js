@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 
 const load = () => import("../../src/helpers/recordingGuard.js");
 
-test("flags an empty WebM container (issue #864 double-trigger, ~110 bytes)", async () => {
+test("flags an empty WAV capture (issue #864 double-trigger, ~110 bytes)", async () => {
   const { isEmptyRecording } = await load();
   assert.equal(isEmptyRecording(110), true);
 });

@@ -1,6 +1,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { execFileSync } = require("node:child_process");
+const fs = require("node:fs");
 const Module = require("node:module");
+const os = require("node:os");
+const path = require("node:path");
 
 function loadFfmpegUtils() {
   const modulePath = require.resolve("../../src/helpers/ffmpegUtils");
@@ -25,7 +29,8 @@ function signatureBuffer(hex, asciiWrites = []) {
 }
 
 test("desktop STT recognizes every documented container and canonical MIME", async () => {
-  const { detectAudioContainer, prepareCloudSttAudio } = loadFfmpegUtils();
+  const { detectAudioContainer, prepareCloudSttAudio, requiresCloudSttConversion } =
+    loadFfmpegUtils();
   const cases = [
     [
       "wav",
@@ -75,10 +80,69 @@ test("desktop STT recognizes every documented container and canonical MIME", asy
 
   for (const [container, contentType, fileName, buffer] of cases) {
     assert.equal(detectAudioContainer(buffer), container);
+    if (container === "webm") {
+      assert.equal(requiresCloudSttConversion(container), true);
+      continue;
+    }
     const prepared = await prepareCloudSttAudio(buffer);
     assert.equal(prepared.converted, false);
     assert.equal(prepared.contentType, contentType);
     assert.equal(prepared.fileName, fileName);
     assert.equal(prepared.buffer, buffer);
   }
+
+  assert.equal(requiresCloudSttConversion("wav"), false);
+  assert.equal(requiresCloudSttConversion("m4a"), false);
+  assert.equal(requiresCloudSttConversion(null), true);
+});
+
+test("desktop STT canonicalizes Chromium WebM recordings to 16 kHz mono PCM WAV", async () => {
+  const { getFFmpegPath, parseWavFormat, prepareCloudSttAudio } = loadFfmpegUtils();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-webm-contract-"));
+  const webmPath = path.join(tempDir, "recording.webm");
+
+  try {
+    execFileSync(
+      getFFmpegPath(),
+      [
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:duration=0.75",
+        "-c:a",
+        "libopus",
+        "-y",
+        webmPath,
+      ],
+      { stdio: "ignore" }
+    );
+
+    const prepared = await prepareCloudSttAudio(fs.readFileSync(webmPath));
+    assert.equal(prepared.converted, true);
+    assert.equal(prepared.contentType, "audio/wav");
+    assert.equal(prepared.fileName, "audio.wav");
+    assert.deepEqual(parseWavFormat(prepared.buffer), {
+      channels: 1,
+      sampleRate: 16000,
+      bitsPerSample: 16,
+    });
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("desktop dictation derives duration from validated WAV and never calls website cleanup", () => {
+  const root = path.resolve(__dirname, "../..");
+  const ipc = fs.readFileSync(path.join(root, "src/helpers/ipcHandlers.js"), "utf8");
+  const audioManager = fs.readFileSync(path.join(root, "src/helpers/audioManager.js"), "utf8");
+  const cloudMethodStart = audioManager.indexOf("async processWithVoiceLabCloud(");
+  const cloudMethodEnd = audioManager.indexOf("\n  getCustomDictionaryArray()", cloudMethodStart);
+
+  assert.notEqual(cloudMethodStart, -1);
+  assert.notEqual(cloudMethodEnd, -1);
+  assert.match(ipc, /const durationMs = validatePcm16Wav\(audioData\)\.durationMs/);
+  assert.doesNotMatch(
+    audioManager.slice(cloudMethodStart, cloudMethodEnd),
+    /electronAPI\.cloudReason\s*\(/
+  );
 });

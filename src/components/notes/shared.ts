@@ -5,6 +5,21 @@ export const DEFAULT_FOLDER_NAME = "Personal";
 export const MEETINGS_FOLDER_NAME = "Meetings";
 export const VIDEOS_FOLDER_NAME = "Videos";
 
+type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+export function displayFolderName(name: string, t: Translate): string {
+  if (name === DEFAULT_FOLDER_NAME) return t("notes.folders.personal");
+  if (name === MEETINGS_FOLDER_NAME) return t("notes.folders.meetings");
+  if (name === VIDEOS_FOLDER_NAME) return t("notes.folders.videos");
+  return name;
+}
+
+export function displayNoteTitle(title: string | null | undefined, t: Translate): string {
+  if (!title || title === "Untitled") return t("notes.list.untitled");
+  if (title === "Untitled Note" || title === "New note") return t("notes.list.untitledNote");
+  return title;
+}
+
 export function findDefaultFolder(folders: FolderItem[]): FolderItem | undefined {
   return folders.find((f) => f.name === DEFAULT_FOLDER_NAME && f.is_default);
 }

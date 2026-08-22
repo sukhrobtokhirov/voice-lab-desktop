@@ -19,6 +19,21 @@ test("control panel derives its reauthentication gate from live auth state", () 
   assert.ok(authGate > -1 && authGate < dashboard, "auth gate must render before dashboard");
 });
 
+test("expired sessions show the reauthentication reason without reopening the browser", () => {
+  const authentication = read("src/components/AuthenticationStep.tsx");
+
+  assert.match(authentication, /AUTH_EXPIRED: "auth\.desktopUnauthorized"/);
+  assert.match(
+    authentication,
+    /authStatus === "signed-out"[\s\S]*authErrorCode \? localizedAuthError\(t, authErrorCode\) : null/
+  );
+  assert.match(authentication, /Boolean\(authErrorCode\)/);
+
+  const errorGuard = authentication.indexOf("Boolean(authErrorCode)");
+  const automaticStart = authentication.indexOf("void start()", errorGuard);
+  assert.ok(errorGuard > -1 && automaticStart > errorGuard);
+});
+
 test("onboarding returns to account authorization when its session is lost", () => {
   const onboarding = read("src/components/OnboardingFlow.tsx");
 
@@ -90,4 +105,17 @@ test("onboarding replaces an unsupported automatic language and keeps actions vi
   assert.match(onboarding, /setLanguage\(fallback\.value\)/);
   assert.match(onboarding, /<footer className="[^"]*shrink-0/);
   assert.match(onboarding, /<main className="[^"]*min-h-0/);
+});
+
+test("settings keeps both interface and transcription language selectors reachable", () => {
+  const modal = read("src/components/SettingsModal.tsx");
+  const settings = read("src/components/SettingsPage.tsx");
+
+  assert.match(modal, /CANONICAL_SECTIONS[\s\S]*"general"/);
+  assert.match(modal, /id: "general"/);
+  assert.doesNotMatch(modal, /general: "speechToText"/);
+  assert.match(settings, /value=\{uiLanguage\}/);
+  assert.match(settings, /onChange=\{setUiLanguage\}/);
+  assert.match(settings, /value=\{preferredLanguage\}/);
+  assert.match(settings, /updateTranscriptionSettings\(\{ preferredLanguage: value \}\)/);
 });

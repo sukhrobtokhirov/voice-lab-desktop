@@ -42,7 +42,7 @@ function readEncryptedStore(userData) {
   return JSON.parse(encryptedFixture.slice(4));
 }
 
-test("keeps access credentials in memory and persists only the rotating refresh session", () => {
+test("persists only the rotating credential plus a sanitized encrypted display profile", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-token-"));
   try {
     const store = loadTokenStore(dir);
@@ -51,7 +51,12 @@ test("keeps access credentials in memory and persists only the rotating refresh 
       accessToken: "access",
       refreshToken: "rotating-refresh-token",
       refreshExpiresAt: Date.now() + 60_000,
-      user: { id: "user-1", email: "desktop@example.com" },
+      user: {
+        id: "user-1",
+        email: "desktop@example.com",
+        name: "Desktop Person",
+        image: "https://cdn.voicelab.uz/avatar/user-1.png",
+      },
     });
     const encoded = fs.readFileSync(path.join(dir, "auth-token.bin"));
     assert.equal(fs.statSync(path.join(dir, "auth-token.bin")).mode & 0o777, 0o600);
@@ -62,7 +67,20 @@ test("keeps access credentials in memory and persists only the rotating refresh 
     assert.equal(decrypted.session.accessToken, undefined);
     assert.equal(decrypted.session.accessExpiresAt, undefined);
     assert.equal(decrypted.session.refreshToken, "rotating-refresh-token");
-    assert.deepEqual(Object.keys(decrypted.session), ["refreshToken"]);
+    assert.deepEqual(decrypted.session, { refreshToken: "rotating-refresh-token" });
+    assert.deepEqual(decrypted.profile, {
+      id: "user-1",
+      email: "desktop@example.com",
+      name: "Desktop Person",
+      image: "https://cdn.voicelab.uz/avatar/user-1.png",
+    });
+
+    const restarted = loadTokenStore(dir).getSession();
+    assert.equal(restarted.accessToken, "");
+    assert.equal(restarted.refreshToken, "rotating-refresh-token");
+    assert.equal(restarted.refreshExpiresAt, 0);
+    assert.equal(restarted.sessionId, "");
+    assert.deepEqual(restarted.user, decrypted.profile);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -214,7 +232,7 @@ test("drops legacy access-only credentials during encrypted store migration", ()
   }
 });
 
-test("migrates persisted access and PKCE state to refresh-only restart state", () => {
+test("migrates persisted access and PKCE state to a refresh-session-only restart state", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-token-"));
   try {
     const existing = {
@@ -251,6 +269,12 @@ test("migrates persisted access and PKCE state to refresh-only restart state", (
     assert.equal(store.getPending(), null);
     const cleaned = readEncryptedStore(dir);
     assert.deepEqual(cleaned.session, { refreshToken: "legacy-refresh-secret" });
+    assert.deepEqual(cleaned.profile, {
+      id: "user-1",
+      email: "desktop@example.com",
+      name: "desktop@example.com",
+      image: null,
+    });
     assert.equal(cleaned.pending, undefined);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

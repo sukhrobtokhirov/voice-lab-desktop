@@ -64,6 +64,7 @@ function normalizeErrorCode(status, body) {
     STT_OVERLOADED: "RATE_LIMITED",
     DESKTOP_STT_UNAVAILABLE: "SERVICE_UNAVAILABLE",
     DESKTOP_STT_TIMEOUT: "SERVICE_UNAVAILABLE",
+    ORIGIN_FORBIDDEN: "SERVICE_UNAVAILABLE",
     STT_NOT_AVAILABLE: "ENTITLEMENT_REQUIRED",
     STT_UNAVAILABLE: "SERVICE_UNAVAILABLE",
     LONG_STT_UNAVAILABLE: "SERVICE_UNAVAILABLE",
@@ -584,17 +585,30 @@ class VoiceLabApiClient {
         try {
           await this.authManager.refreshSession({ force: true });
         } catch (refreshError) {
+          const refreshStatus = Number(refreshError?.httpStatus) || null;
           const terminal =
-            [400, 401, 403].includes(Number(refreshError?.httpStatus)) ||
+            [400, 401, 403].includes(refreshStatus) ||
             refreshError?.httpStatus == null ||
             refreshError?.code === "AUTH_EXPIRED" ||
             refreshError?.code === "AUTH_REQUIRED";
           throw new VoiceLabApiError({
-            code: terminal ? "AUTH_EXPIRED" : "SERVICE_UNAVAILABLE",
+            code: terminal
+              ? "AUTH_EXPIRED"
+              : refreshStatus === 429
+                ? "RATE_LIMITED"
+                : "SERVICE_UNAVAILABLE",
             message: terminal
               ? "VoiceLab session expired. Sign in again."
               : "VoiceLab authentication is temporarily unavailable. Try again.",
-            status: terminal ? 401 : Number(refreshError?.httpStatus) || null,
+            status: terminal ? 401 : refreshStatus,
+            retryAfterSeconds: refreshError?.retryAfterSeconds ?? null,
+            details: {
+              request_id: refreshError?.requestId || null,
+              error: {
+                code: refreshError?.code || null,
+                fields: refreshError?.fields || null,
+              },
+            },
           });
         }
         retryAuthContext = authSessionContext(this.authManager);
