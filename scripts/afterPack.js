@@ -221,11 +221,24 @@ function stripOnnxruntimeBinaries(context) {
 }
 
 // ---------------------------------------------------------------------------
-// Linux XWayland wrapper
+// Linux XWayland wrapper and Electron fuses
 // ---------------------------------------------------------------------------
 
-function wrapLinuxBinary(context) {
+async function applyLinuxFusesBeforeWrapping(context) {
   if (context.electronPlatformName !== "linux") return;
+
+  // electron-builder invokes afterPack *before* its automatic fuse pass. The
+  // wrapper below replaces the executable name with a shell script, so letting
+  // that later pass run would make it scan the script instead of the Electron
+  // ELF binary. Flip the configured fuses while the real binary is still at
+  // the expected path, then disable only the duplicate automatic pass.
+  const configuredFuses = context.packager.config.electronFuses;
+  if (configuredFuses != null) {
+    const fuseConfig = await context.packager.generateFuseConfig(configuredFuses);
+    await context.packager.addElectronFuses(context, fuseConfig);
+    context.packager.config.electronFuses = null;
+    console.log("  afterPack: applied Linux Electron fuses before installing launcher wrapper");
+  }
 
   const appDir = context.appOutDir;
   const binaryName = context.packager.executableName;
@@ -542,7 +555,7 @@ exports.default = async function (context) {
   assertCompiledRendererIsSecretFree(context);
   assertPackagedPreloads(context);
   stripOnnxruntimeBinaries(context);
-  wrapLinuxBinary(context);
+  await applyLinuxFusesBeforeWrapping(context);
   verifyMeetingAecHelper(context);
   verifyUnpackedBinaries(context);
   verifyBetterSqliteElectronAbi(context);
@@ -556,3 +569,4 @@ exports.configuredPreloadPaths = configuredPreloadPaths;
 exports.assertPackagedPreloads = assertPackagedPreloads;
 exports.writePackageVerification = writePackageVerification;
 exports.enforceMacTransportSecurity = enforceMacTransportSecurity;
+exports.applyLinuxFusesBeforeWrapping = applyLinuxFusesBeforeWrapping;
