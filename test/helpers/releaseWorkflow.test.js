@@ -104,11 +104,11 @@ test("promotion stays private until every uploaded asset is counted", () => {
   assert.match(release, /trap cleanup_draft EXIT/);
 });
 
-test("package verification covers signing, notarization, sidecars, preloads, and secrets", () => {
+test("package verification covers signing, notarization, preloads, and secrets", () => {
   const afterPack = fs.readFileSync(path.join(root, "scripts", "afterPack.js"), "utf8");
   assert.match(afterPack, /writePackageVerification/);
   assert.match(afterPack, /preloads: configuredPreloadPaths/);
-  assert.match(afterPack, /sidecars: sidecarCount/);
+  assert.doesNotMatch(afterPack, /verifyOwnedSidecars|sidecars: sidecarCount/);
   assert.match(afterPack, /packagedResourcesSecretFree: true/);
   assert.match(release, /VOICELAB_SIGNATURE_VERIFIED/);
   assert.match(release, /VOICELAB_NOTARIZATION_VERIFIED/);
@@ -131,4 +131,12 @@ test("macOS release and local signed builds reject ad-hoc identities", () => {
   assert.match(verifier, /TeamIdentifier/);
   assert.match(verifier, /--compare/);
   assert.match(verifier, /codesign[\s\S]*-R/);
+});
+
+test("macOS verification maps the Node x64 name to the Mach-O x86_64 architecture", () => {
+  assert.match(
+    release,
+    /if \[\[ "\$expected_macho_arch" == "x64" \]\]; then expected_macho_arch="x86_64"; fi/
+  );
+  assert.match(release, /grep -Fx "\$expected_macho_arch"/);
 });

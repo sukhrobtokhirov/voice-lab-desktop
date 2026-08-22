@@ -263,22 +263,12 @@ class IPCHandlers {
     };
   }
 
-  _asyncVectorUpsert(note) {
-    setImmediate(() => {
-      const vectorIndex = require("./vectorIndex");
-      if (!vectorIndex.isReady()) return;
-      const { LocalEmbeddings } = require("./localEmbeddings");
-      const text = LocalEmbeddings.noteEmbedText(note.title, note.content, note.enhanced_content);
-      vectorIndex.upsertNote(note.id, text).catch(() => {});
-    });
+  _asyncVectorUpsert(_note) {
+    return undefined;
   }
 
-  _asyncVectorDelete(noteId) {
-    setImmediate(() => {
-      const vectorIndex = require("./vectorIndex");
-      if (!vectorIndex.isReady()) return;
-      vectorIndex.deleteNote(noteId).catch(() => {});
-    });
+  _asyncVectorDelete(_noteId) {
+    return undefined;
   }
 
   _asyncMirrorWrite(note) {
@@ -1089,61 +1079,11 @@ class IPCHandlers {
     });
 
     this._handle("db-semantic-search-notes", async (event, query, limit = 5) => {
-      const vectorIndex = require("./vectorIndex");
-      if (!vectorIndex.isReady()) {
-        return this.databaseManager.searchNotes(query, limit);
-      }
-
-      try {
-        const [ftsResults, vectorResults] = await Promise.all([
-          this.databaseManager.searchNotes(query, limit * 2),
-          vectorIndex.search(query, limit * 2),
-        ]);
-
-        // Filter low-confidence semantic matches before RRF
-        const filteredVectorResults = vectorResults.filter(({ score }) => score > 0.3);
-
-        // Reciprocal Rank Fusion (K=60, matching cloud implementation)
-        const scores = new Map();
-        ftsResults.forEach((note, i) => {
-          scores.set(note.id, (scores.get(note.id) || 0) + 1 / (60 + i));
-        });
-        filteredVectorResults.forEach(({ noteId }, i) => {
-          scores.set(noteId, (scores.get(noteId) || 0) + 1 / (60 + i));
-        });
-
-        const rankedIds = [...scores.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, limit)
-          .map(([id]) => id);
-
-        const noteMap = new Map();
-        ftsResults.forEach((n) => noteMap.set(n.id, n));
-        for (const id of rankedIds) {
-          if (!noteMap.has(id)) {
-            const note = this.databaseManager.getNote(id);
-            if (note) noteMap.set(id, note);
-          }
-        }
-
-        return rankedIds.map((id) => noteMap.get(id)).filter(Boolean);
-      } catch (error) {
-        debugLogger.error("Semantic search failed, falling back to FTS5", { error: error.message });
-        return this.databaseManager.searchNotes(query, limit);
-      }
+      return this.databaseManager.searchNotes(query, limit);
     });
 
     this._handle("db-semantic-reindex-all", async () => {
-      const vectorIndex = require("./vectorIndex");
-      if (!vectorIndex.isReady()) return { success: false, error: "Vector index not ready" };
-
-      const notes = this.databaseManager.getNotes(null, 100000);
-      let done = 0;
-      await vectorIndex.reindexAll(notes, (completed, total) => {
-        done = completed;
-        this.broadcastToWindows("semantic-reindex-progress", { done: completed, total });
-      });
-      return { success: true, indexed: done };
+      return { success: false, error: "Semantic index is unavailable in VoiceLab Flow" };
     });
 
     this._handle("db-update-note-cloud-id", async (event, id, cloudId) => {
@@ -1723,6 +1663,9 @@ class IPCHandlers {
 
     // Diarization model management
     this._handle("download-diarization-models", async (event) => {
+      if (!this.diarizationManager) {
+        return { success: false, error: "Diarization is unavailable in VoiceLab Flow" };
+      }
       try {
         const result = await this.diarizationManager.downloadModels((progressData) => {
           if (!event.sender.isDestroyed()) {
@@ -1756,6 +1699,7 @@ class IPCHandlers {
     });
 
     this._handle("delete-diarization-models", async () => {
+      if (!this.diarizationManager) return { success: true };
       try {
         await this.diarizationManager.deleteModels();
         return { success: true };
@@ -1835,7 +1779,7 @@ class IPCHandlers {
     });
 
     this._handle("cancel-diarization-download", async () => {
-      return this.diarizationManager.cancelDownload();
+      return this.diarizationManager?.cancelDownload?.() ?? { success: false };
     });
 
     this._handle("cleanup-app", async (event) => {

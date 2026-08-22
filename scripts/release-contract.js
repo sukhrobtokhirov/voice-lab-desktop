@@ -205,8 +205,6 @@ function findPackageMarker(dist, platform, arch) {
     if (
       !Array.isArray(marker.checks?.preloads) ||
       marker.checks.preloads.length !== 5 ||
-      !Number.isInteger(marker.checks?.sidecars) ||
-      marker.checks.sidecars < 1 ||
       !marker.checks.unpackedBinaries ||
       !marker.checks.packagedResourcesSecretFree
     ) {

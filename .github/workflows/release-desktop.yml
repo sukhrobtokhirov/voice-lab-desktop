@@ -161,14 +161,11 @@ jobs:
           npm run compile:mic-listener
           npm run compile:text-monitor
 
-      - name: Download pinned bundled binaries
+      - name: Download bundled helpers and models
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          node scripts/download-llama-server.js --current --platform darwin --arch ${{ matrix.arch }}
-          node scripts/download-sherpa-onnx.js --current --platform darwin --arch ${{ matrix.arch }}
           node scripts/download-yt-dlp.js --current --platform darwin --arch ${{ matrix.arch }}
-          node scripts/download-qdrant.js --current --platform darwin --arch ${{ matrix.arch }}
           node scripts/download-meeting-aec-helper.js --current --platform darwin --arch ${{ matrix.arch }}
           node scripts/download-whisper-vad-model.js
 
@@ -208,7 +205,9 @@ jobs:
           app_path="$(find dist -type d -name 'VoiceLab.app' -print -quit)"
           test -n "$app_path"
           executable="$app_path/Contents/MacOS/VoiceLab"
-          lipo -archs "$executable" | tr ' ' '\n' | grep -Fx "${{ matrix.arch }}"
+          expected_macho_arch="${{ matrix.arch }}"
+          if [[ "$expected_macho_arch" == "x64" ]]; then expected_macho_arch="x86_64"; fi
+          lipo -archs "$executable" | tr ' ' '\n' | grep -Fx "$expected_macho_arch"
           codesign --verify --deep --strict --verbose=2 "$app_path"
           codesign --display --verbose=4 "$app_path" 2>&1 | grep -E 'Authority=Developer ID Application|TeamIdentifier='
           xcrun stapler validate "$app_path"
@@ -259,18 +258,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y rpm libx11-dev libxtst-dev libatspi2.0-dev libglib2.0-dev libpipewire-0.3-dev pkg-config
 
-      - name: Compile and download pinned bundled binaries
+      - name: Compile and download bundled helpers and models
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           npm run compile:native
-          node scripts/download-llama-server.js --current --platform linux --arch x64
-          node scripts/download-sherpa-onnx.js --current --platform linux --arch x64
           node scripts/download-yt-dlp.js --current --platform linux --arch x64
-          node scripts/download-qdrant.js --current --platform linux --arch x64
           node scripts/download-meeting-aec-helper.js --current --platform linux --arch x64
           node scripts/download-whisper-vad-model.js
-          node scripts/download-diarization-models.js --output-dir resources/bin/diarization-models
           resources/bin/linux-system-audio-helper probe | grep '"supportsNativeCapture":true'
 
       - name: Create secret-free release environment
@@ -289,7 +284,7 @@ jobs:
           npm run generate:preloads
           npm run build:linux -- --publish never
 
-      - name: Verify package, sidecars, preloads, secret scan, and updater metadata
+      - name: Verify package, preloads, secret scan, and updater metadata
         run: |
           node scripts/release-contract.js package \
             --platform linux \
@@ -341,14 +336,11 @@ jobs:
       - name: Install Windows native dependencies
         run: npm install @rollup/rollup-win32-x64-msvc lightningcss-win32-x64-msvc @tailwindcss/oxide-win32-x64-msvc --no-save
 
-      - name: Download pinned bundled binaries
+      - name: Download bundled helpers and models
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          node scripts/download-llama-server.js --current --platform win32 --arch x64
-          node scripts/download-sherpa-onnx.js --current --platform win32 --arch x64
           node scripts/download-yt-dlp.js --current --platform win32 --arch x64
-          node scripts/download-qdrant.js --current --platform win32 --arch x64
           node scripts/download-meeting-aec-helper.js --current --platform win32 --arch x64
           node scripts/download-nircmd.js
           node scripts/download-windows-fast-paste.js
@@ -356,7 +348,6 @@ jobs:
           node scripts/download-windows-mic-listener.js
           node scripts/download-windows-system-audio-helper.js
           node scripts/download-whisper-vad-model.js
-          node scripts/download-diarization-models.js --output-dir resources/bin/diarization-models
 
       - name: Create secret-free release environment
         shell: pwsh

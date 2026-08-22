@@ -9,11 +9,6 @@ const {
   sha256File,
   verifySha256,
 } = require("../../scripts/lib/download-utils");
-const {
-  loadManifest,
-  manifestEntryFor,
-  verifyOwnedSidecar,
-} = require("../../scripts/lib/sidecar-manifest");
 
 test("archive paths cannot escape the extraction directory", () => {
   const root = path.join(os.tmpdir(), "voicelab-safe-extract");
@@ -57,44 +52,5 @@ test("sha256 verification fails closed", () => {
     assert.throws(() => verifySha256(file, ""), /Missing or invalid owned sha256/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("owned sidecar manifest declares and verifies the macOS ARM64 baseline", () => {
-  const manifest = loadManifest();
-  const file = path.join(__dirname, "..", "..", "resources", "bin", "llama-server-darwin-arm64");
-  const entry = manifestEntryFor(file, "darwin", "arm64", manifest);
-  assert.ok(entry);
-  assert.match(entry.sha256, /^[a-f0-9]{64}$/);
-  if (fs.existsSync(file)) {
-    assert.equal(verifyOwnedSidecar(file, "darwin", "arm64", manifest), entry.sha256);
-  }
-  assert.throws(() => verifyOwnedSidecar(file, "linux", "x64", manifest), /No owned sidecar hash/);
-});
-
-test("owned sidecar manifest covers every core release target without duplicates", () => {
-  const manifest = loadManifest();
-  const expectedTargets = [
-    { platform: "darwin", arch: "arm64", main: "llama-server-darwin-arm64", count: 36 },
-    { platform: "darwin", arch: "x64", main: "llama-server-darwin-x64", count: 33 },
-    { platform: "linux", arch: "x64", main: "llama-server-linux-x64-cpu", count: 39 },
-  ];
-
-  const seen = new Set();
-  for (const entry of manifest.entries) {
-    const key = `${entry.platform}:${entry.arch}:${entry.path}`;
-    assert.equal(seen.has(key), false, `duplicate sidecar manifest entry: ${key}`);
-    seen.add(key);
-    assert.match(entry.sha256, /^[a-f0-9]{64}$/);
-  }
-
-  for (const target of expectedTargets) {
-    const entries = manifest.entries.filter(
-      (entry) => entry.platform === target.platform && entry.arch === target.arch
-    );
-    assert.equal(entries.length, target.count);
-
-    const mainPath = path.join(__dirname, "..", "..", "resources", "bin", target.main);
-    assert.ok(manifestEntryFor(mainPath, target.platform, target.arch, manifest));
   }
 });

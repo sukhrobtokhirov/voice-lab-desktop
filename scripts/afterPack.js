@@ -20,7 +20,6 @@ const { execFileSync } = require("child_process");
 const { Arch } = require("app-builder-lib");
 const { getAbi } = require("node-abi");
 const { buildLinuxWrapperScript } = require("./lib/linux-launcher");
-const { loadManifest, verifyOwnedSidecar } = require("./lib/sidecar-manifest");
 const WINDOW_CONFIG_KEYS = [
   "MAIN_WINDOW_CONFIG",
   "CONTROL_PANEL_CONFIG",
@@ -512,29 +511,7 @@ function assertCompiledRendererIsSecretFree(context) {
   }
 }
 
-function verifyOwnedSidecars(context) {
-  const platform = context.electronPlatformName;
-  const arch = Arch[context.arch];
-  const manifest = loadManifest();
-  const entries = manifest.entries.filter(
-    (entry) => entry.platform === platform && entry.arch === arch
-  );
-  if (entries.length === 0) {
-    throw new Error(`afterPack: no owned sidecar hashes are registered for ${platform}-${arch}`);
-  }
-  const binDir = path.join(resolveResourcesDir(context), "bin");
-  for (const entry of entries) {
-    const filePath = path.join(binDir, path.basename(entry.path));
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`afterPack: required pinned sidecar is missing: ${entry.path}`);
-    }
-    verifyOwnedSidecar(filePath, platform, arch, manifest);
-  }
-  console.log(`  afterPack: verified ${entries.length} owned sidecar hashes`);
-  return entries.length;
-}
-
-function writePackageVerification(context, sidecarCount) {
+function writePackageVerification(context) {
   const projectDir = context.packager.projectDir;
   const packageJson = JSON.parse(fs.readFileSync(path.join(projectDir, "package.json"), "utf8"));
   const markerPath = path.join(resolveResourcesDir(context), ".voicelab-package-verification.json");
@@ -546,7 +523,6 @@ function writePackageVerification(context, sidecarCount) {
     arch: Arch[context.arch],
     checks: {
       preloads: configuredPreloadPaths(projectDir),
-      sidecars: sidecarCount,
       unpackedBinaries: true,
       sourceEnvironmentSecretFree: true,
       rendererSecretFree: true,
@@ -570,11 +546,10 @@ exports.default = async function (context) {
   verifyMeetingAecHelper(context);
   verifyUnpackedBinaries(context);
   verifyBetterSqliteElectronAbi(context);
-  const sidecarCount = verifyOwnedSidecars(context);
   enforceMacTransportSecurity(context);
   registerMacResourceBinariesForSigning(context);
   assertPackagedResourcesAreSecretFree(context);
-  writePackageVerification(context, sidecarCount);
+  writePackageVerification(context);
 };
 
 exports.configuredPreloadPaths = configuredPreloadPaths;

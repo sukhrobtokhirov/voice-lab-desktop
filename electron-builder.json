@@ -115,10 +115,7 @@
       "from": "resources/bin/",
       "to": "bin/",
       "filter": [
-        "llama-server-*",
-        "sherpa-onnx-*",
         "yt-dlp-*",
-        "qdrant-*",
         "macos-audio-tap",
         "macos-globe-listener",
         "macos-fast-paste",
@@ -137,12 +134,7 @@
         "windows-system-audio-helper*",
         "windows-text-monitor*",
         "windows-fast-paste*",
-        "all-MiniLM-L6-v2/**/*",
-        "diarization-models/**/*",
-        "whisper-vad/**/*",
-        "*.dylib",
-        "*.dll",
-        "*.so*"
+        "whisper-vad/**/*"
       ]
     },
     {

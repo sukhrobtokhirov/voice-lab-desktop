@@ -49,23 +49,8 @@ jobs:
           path: resources/bin
           key: linux-x64-bin-${{ hashFiles('scripts/download-*.js') }}
 
-      - name: Download llama-server binaries
-        run: node scripts/download-llama-server.js --current
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-
-      - name: Download sherpa-onnx binaries
-        run: node scripts/download-sherpa-onnx.js --current
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-
       - name: Download yt-dlp binary
         run: node scripts/download-yt-dlp.js --current
-
-      - name: Download Qdrant binary
-        run: node scripts/download-qdrant.js --current
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
 
       - name: Download meeting AEC helper
         run: node scripts/download-meeting-aec-helper.js --current
@@ -134,23 +119,8 @@ jobs:
           path: resources/bin
           key: windows-x64-bin-${{ hashFiles('scripts/download-*.js') }}
 
-      - name: Download llama-server binaries
-        run: node scripts/download-llama-server.js --current
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-
-      - name: Download sherpa-onnx binaries
-        run: node scripts/download-sherpa-onnx.js --current
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-
       - name: Download yt-dlp binary
         run: node scripts/download-yt-dlp.js --current
-
-      - name: Download Qdrant binary
-        run: node scripts/download-qdrant.js --current
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
 
       - name: Download meeting AEC helper
         run: node scripts/download-meeting-aec-helper.js --current
@@ -257,23 +227,8 @@ jobs:
       - name: Compile macos-audio-tap binary
         run: npm run compile:audio-tap -- --arch ${{ matrix.arch }}
 
-      - name: Download llama-server binaries
-        run: node scripts/download-llama-server.js --current --platform darwin --arch ${{ matrix.arch }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-
-      - name: Download sherpa-onnx binaries
-        run: node scripts/download-sherpa-onnx.js --current --platform darwin --arch ${{ matrix.arch }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-
       - name: Download yt-dlp binary
         run: node scripts/download-yt-dlp.js --current --platform darwin --arch ${{ matrix.arch }}
-
-      - name: Download Qdrant binary
-        run: node scripts/download-qdrant.js --current --platform darwin --arch ${{ matrix.arch }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
 
       - name: Download meeting AEC helper
         run: node scripts/download-meeting-aec-helper.js --current --platform darwin --arch ${{ matrix.arch }}

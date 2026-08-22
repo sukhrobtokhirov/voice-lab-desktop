@@ -1,6 +1,6 @@
 const GpuBinaryManager = require("./gpuBinaryManager");
 
-// Pinned to the same build as the bundled CPU binary (download-llama-server.js).
+// Legacy optional local-runtime build identifier. VoiceLab Flow does not bundle this runtime.
 // Overridable via LLAMA_CPP_VERSION so GPU and CPU stay on one tested llama.cpp.
 const LLAMA_CPP_TAG = process.env.LLAMA_CPP_VERSION || "b9763";
 

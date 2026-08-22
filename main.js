@@ -321,7 +321,6 @@ const EnvironmentManager = require("./src/helpers/environment");
 const WindowManager = require("./src/helpers/windowManager");
 const DatabaseManager = require("./src/helpers/database");
 const ClipboardManager = require("./src/helpers/clipboard");
-const DiarizationManager = require("./src/helpers/diarization");
 const TrayManager = require("./src/helpers/tray");
 const DesktopAuthManager = require("./src/helpers/desktopAuthManager");
 const { DisplayMediaGrantManager } = require("./src/helpers/displayMediaGrant");
@@ -424,7 +423,6 @@ let audioTapManager = null;
 let linuxPortalAudioManager = null;
 let windowsLoopbackAudioManager = null;
 let meetingAecManager = null;
-let qdrantManager = null;
 let ipcHandlers = null;
 let cliBridge = null;
 let globeKeyAlertShown = false;
@@ -617,7 +615,6 @@ async function initializeCoreManagers() {
   hotkeyManager = windowManager.hotkeyManager;
   databaseManager = new DatabaseManager();
   clipboardManager = new ClipboardManager();
-  diarizationManager = new DiarizationManager();
   googleCalendarManager = new GoogleCalendarManager(databaseManager, windowManager);
   meetingDetectionEngine = new MeetingDetectionEngine(
     googleCalendarManager,
@@ -673,11 +670,6 @@ async function initializeCoreManagers() {
 }
 
 function registerSidecars() {
-  if (diarizationManager) {
-    sidecarRegistry.register("diarization", () => diarizationManager.shutdown());
-  }
-  const modelManager = require("./src/helpers/modelManagerBridge").default;
-  sidecarRegistry.register("llama", () => modelManager.stopServer());
   const onnxWorkerClient = require("./src/helpers/onnxWorkerClient");
   sidecarRegistry.register("onnx", () => onnxWorkerClient.stop());
 }
@@ -1021,68 +1013,6 @@ async function startApp() {
       googleCalendarManager.onWakeFromSleep();
     }
   });
-
-  // TODO: drop legacy REASONING_PROVIDER / LOCAL_REASONING_MODEL fallbacks after 2 releases.
-  const cleanupProvider = process.env.CLEANUP_PROVIDER || process.env.REASONING_PROVIDER;
-  const cleanupLocalModel = process.env.LOCAL_CLEANUP_MODEL || process.env.LOCAL_REASONING_MODEL;
-  if (cleanupProvider === "local" && cleanupLocalModel) {
-    const modelManager = require("./src/helpers/modelManagerBridge").default;
-    modelManager.prewarmServer(cleanupLocalModel).catch((err) => {
-      debugLogger.debug("llama-server pre-warm error (non-fatal)", { error: err.message });
-    });
-  }
-
-  if (
-    process.env.DICTATION_AGENT_PROVIDER === "local" &&
-    process.env.LOCAL_DICTATION_AGENT_MODEL &&
-    process.env.LOCAL_DICTATION_AGENT_MODEL !== cleanupLocalModel
-  ) {
-    const modelManager = require("./src/helpers/modelManagerBridge").default;
-    modelManager.prewarmServer(process.env.LOCAL_DICTATION_AGENT_MODEL).catch((err) => {
-      debugLogger.debug("dictation-agent llama-server pre-warm error (non-fatal)", {
-        error: err.message,
-      });
-    });
-  }
-
-  // Auto-download diarization models if binary is available
-  if (
-    diarizationManager.getBinaryPath() &&
-    (!diarizationManager.isModelDownloaded() || !diarizationManager.isVadModelDownloaded())
-  ) {
-    diarizationManager.downloadModels().catch((err) => {
-      debugLogger.debug("Diarization model auto-download error (non-fatal)", {
-        error: err.message,
-      });
-    });
-  }
-
-  const QdrantManager = require("./src/helpers/qdrantManager");
-  qdrantManager = new QdrantManager();
-  sidecarRegistry.register("qdrant", () => qdrantManager.stop());
-  if (qdrantManager.isAvailable()) {
-    qdrantManager
-      .start()
-      .then(() => {
-        if (qdrantManager.isReady()) {
-          const vectorIndex = require("./src/helpers/vectorIndex");
-          vectorIndex.init(qdrantManager.getPort());
-          vectorIndex.ensureCollection().catch((err) => {
-            debugLogger.debug("Qdrant collection setup error (non-fatal)", { error: err.message });
-          });
-        }
-      })
-      .catch((err) => {
-        debugLogger.debug("Qdrant startup error (non-fatal)", { error: err.message });
-      });
-  }
-
-  const localEmbeddings = require("./src/helpers/localEmbeddings");
-  if (!localEmbeddings.isAvailable()) {
-    localEmbeddings.downloadModel().catch((err) => {
-      debugLogger.debug("Embedding model download error (non-fatal)", { error: err.message });
-    });
-  }
 
   if (process.platform === "win32") {
     const nircmdStatus = clipboardManager.getNircmdStatus();

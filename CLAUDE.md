@@ -29,10 +29,10 @@ OpenWhispr is the Electron desktop client for VoiceLab. Speech transcription is 
    - Main Process: Electron main, IPC handlers, database operations
    - Renderer Process: React app with context isolation
    - Preload Script: Secure bridge between processes
-   - ONNX Utility Process: hosts all `onnxruntime-node` inference (text embeddings, speaker embeddings, fbank). Lazy-spawned on first use via `src/helpers/onnxWorkerClient.js` → `src/workers/onnxWorker.js`. Native crashes (e.g., ORT `bad_alloc`) confine to the worker; main process rejects in-flight requests and respawns with backoff. Stopped in `will-quit`.
+   - ONNX Utility Process: hosts optional meeting speaker-profile inference. Lazy-spawned on first use via `src/helpers/onnxWorkerClient.js` → `src/workers/onnxWorker.js`. Native crashes are confined to the worker; it is stopped during app shutdown.
 
 3. **Audio Pipeline**:
-   - MediaRecorder API → Blob → restricted IPC → FFmpeg normalization → VoiceLab Flow operation
+   - Web Audio PCM capture → 16-bit WAV → restricted IPC → VoiceLab Desktop STT
    - Desktop bearer authentication and server-authoritative AI Credits billing
    - Automatic cleanup of temporary files after processing
 
@@ -123,9 +123,6 @@ OpenWhispr is the Electron desktop client for VoiceLab. Speech transcription is 
 - **tray.js**: System tray icon and menu
 - **voiceLabApiClient.js**: authenticated wallet, Dictate operation, polling, retry, and idempotency boundary
 - **desktopAuthManager.js**: browser authorization-code flow, refresh rotation, and desktop bearer sessions
-- **qdrantManager.js**: Qdrant vector DB sidecar process lifecycle (spawn, health check, shutdown)
-- **localEmbeddings.js**: Local text embedding via ONNX Runtime + all-MiniLM-L6-v2 (384-dim vectors)
-- **vectorIndex.js**: Qdrant collection management — upsert, delete, search, batch reindex
 - **windowConfig.js**: Centralized window configuration
 - **windowManager.js**: Window creation and lifecycle management
 - **cliBridge.js**: Loopback HTTP server on ports 8200–8219, bearer-token auth (token at `~/.openwhispr/cli-bridge.json`), 127.0.0.1-only. Used by the unified CLI to talk to a running desktop app.
@@ -166,46 +163,17 @@ OpenWhispr is the Electron desktop client for VoiceLab. Speech transcription is 
 
 - Desktop speech transcription is cloud-only through the authenticated VoiceLab Desktop API.
 - No local STT server, speech model download, or transcription API key is supported.
-- sherpa-onnx remains available only for optional speaker diarization; its ASR websocket servers are not downloaded or packaged.
+- Local speech, llama.cpp, sherpa-onnx, and Qdrant sidecars are not downloaded or packaged.
 
-### Local Semantic Search (Qdrant + MiniLM)
+### Local Search
 
-Always-on offline semantic search that finds notes by meaning, not just keywords. Used by the AI agent's `search_notes` tool. Qdrant starts automatically on app launch; embedding model auto-downloads on first run if missing.
-
-**Architecture**:
-
-- **Qdrant sidecar**: Rust binary spawned as child process (`qdrantManager.js`), port 6333–6350
-- **Embedding model**: `all-MiniLM-L6-v2` via ONNX Runtime (`localEmbeddings.js`), 384-dim vectors
-- **Vector index**: Qdrant collection management (`vectorIndex.js`), cosine distance
-- **Hybrid search**: FTS5 + Qdrant in parallel → Reciprocal Rank Fusion (K=60) with 0.3 cosine score threshold
-
-**Pipeline**:
-
-1. App launches → Qdrant binary starts → collection created. Embedding model auto-downloads if missing (~22MB)
-2. Note create/update/delete → SQLite write → background vector upsert/delete via `_asyncVectorUpsert()`/`_asyncVectorDelete()`
-3. Agent searches → `db-semantic-search-notes` IPC → parallel FTS5 + vector search → RRF merge → ranked results
-
-**Search fallback chain** (in `searchNotesTool.ts`): cloud search → local semantic → FTS5 keyword
-
-**Storage**:
-
-- Qdrant data: `~/.cache/openwhispr/qdrant-data/` (`qdrant-data-dev/` in development)
-- Qdrant binary: `resources/bin/qdrant-{platform}-{arch}` (bundled — downloaded during `prebuild` / `predev:main`)
-- Embedding model: `~/.cache/openwhispr/embedding-models/all-MiniLM-L6-v2/` (auto-downloaded on first launch)
-
-**Dependencies**: `@qdrant/js-client-rest`, `onnxruntime-node`
-
-**Dev setup**: The Qdrant binary downloads automatically via `predev`/`prestart`. The embedding model auto-downloads on first app launch. To manually download: `npm run download:qdrant` and `npm run download:embedding-model`.
+Notes and conversations use the existing SQLite FTS keyword indexes. The desktop does not start a vector database or auto-download embedding models.
 
 ### Build Scripts (scripts/)
 
-- **download-llama-server.js**: Downloads llama.cpp server for local LLM inference
 - **download-nircmd.js**: Downloads nircmd.exe for Windows clipboard operations
 - **download-windows-key-listener.js**: Downloads prebuilt Windows key listener binary
 - **download-windows-mic-listener.js**: Downloads prebuilt Windows mic listener binary
-- **download-sherpa-onnx.js**: Downloads sherpa-onnx binaries for speaker diarization
-- **download-qdrant.js**: Downloads Qdrant vector DB binary for local semantic search
-- **download-minilm.js**: Downloads all-MiniLM-L6-v2 ONNX model + tokenizer for local embeddings
 - **build-globe-listener.js**: Compiles macOS Globe key listener from Swift source
 - **build-macos-mic-listener.js**: Compiles macOS mic listener from Swift source
 - **build-windows-key-listener.js**: Compiles Windows key listener (for local development)

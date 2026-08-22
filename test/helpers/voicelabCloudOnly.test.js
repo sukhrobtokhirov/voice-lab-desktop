@@ -66,7 +66,6 @@ test("desktop release has no local speech runtime or whisper.cpp packaging", () 
     read("preload.js"),
     read("package.json"),
     read("electron-builder.json"),
-    read("resources/sidecar-manifest.json"),
     read(".github/workflows/build-and-notarize.yml"),
     read(".github/workflows/release-desktop.yml"),
   ].join("\n");
@@ -83,9 +82,55 @@ test("desktop release has no local speech runtime or whisper.cpp packaging", () 
     /whisper\.cpp|ggml-(?:tiny|base|small|medium|large)/
   );
 
-  const diarizationDownloader = read("scripts/download-sherpa-onnx.js");
-  assert.doesNotMatch(diarizationDownloader, /offline-websocket-server|online-websocket-server/);
-  assert.match(diarizationDownloader, /offline-speaker-diarization/);
+  for (const legacyDownloader of [
+    "download-llama-server.js",
+    "download-sherpa-onnx.js",
+    "download-qdrant.js",
+    "download-minilm.js",
+    "download-diarization-models.js",
+  ]) {
+    assert.equal(fs.existsSync(path.join(root, "scripts", legacyDownloader)), false);
+  }
+  assert.equal(fs.existsSync(path.join(root, "resources", "sidecar-manifest.json")), false);
+});
+
+test("desktop builds do not download or bundle legacy local AI sidecars", () => {
+  const buildSurface = [
+    read("package.json"),
+    read("electron-builder.json"),
+    read(".github/workflows/build-and-notarize.yml"),
+    read(".github/workflows/release-desktop.yml"),
+  ].join("\n");
+
+  assert.doesNotMatch(buildSurface, /download-(?:llama-server|sherpa-onnx|qdrant)/);
+  assert.doesNotMatch(buildSurface, /(?:llama-server|sherpa-onnx|qdrant)-\*/);
+  assert.doesNotMatch(buildSurface, /all-MiniLM-L6-v2|diarization-models/);
+  assert.doesNotMatch(buildSurface, /@qdrant\/js-client-rest/);
+  assert.match(buildSurface, /download-meeting-aec-helper/);
+  assert.match(buildSurface, /download-whisper-vad-model/);
+
+  for (const legacyHelper of ["qdrantManager.js", "vectorIndex.js", "localEmbeddings.js"]) {
+    assert.equal(fs.existsSync(path.join(root, "src", "helpers", legacyHelper)), false);
+  }
+});
+
+test("desktop startup cannot initialize legacy local AI runtimes", () => {
+  const main = read("main.js");
+
+  assert.doesNotMatch(
+    main,
+    /require\(["']\.\/src\/helpers\/(?:diarization|qdrantManager|modelManagerBridge|localEmbeddings|vectorIndex)["']\)/
+  );
+  assert.doesNotMatch(main, /new DiarizationManager\(|new QdrantManager\(|\.prewarmServer\(/);
+  assert.doesNotMatch(
+    main,
+    /sidecarRegistry\.register\(["'](?:diarization|llama|qdrant)["']/
+  );
+
+  assert.match(main, /let diarizationManager = null;/);
+  assert.match(main, /new IPCHandlers\([\s\S]*?\bdiarizationManager,/);
+  assert.match(main, /sidecarRegistry\.register\(["']onnx["']/);
+  assert.match(main, /async function startApp\(\) \{\s*reapStaleSidecars\(\);/);
 });
 
 test("legacy transcription choices are migrated to VoiceLab Cloud", () => {
