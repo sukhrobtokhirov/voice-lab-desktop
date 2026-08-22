@@ -1,164 +1,110 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { app, safeStorage } = require("electron");
+
 const debugLogger = require("./debugLogger");
 
-const SERVICE = "VoiceLab";
-const LEGACY_SERVICE = "OpenWhispr";
-const ACCOUNT = "secrets-master-key";
-const ALGO = "aes-256-gcm";
-const IV_LEN = 12;
-const TAG_LEN = 16;
-const KEY_LEN = 32;
-const BACKUP_FILE = "master-key-backup.enc";
+const ALGORITHM = "aes-256-gcm";
+const IV_BYTES = 12;
+const TAG_BYTES = 16;
+const KEY_BYTES = 32;
+const ENVELOPE_MAGIC = Buffer.from("VLAB-SECRET\0V2\0", "utf8");
+const KEY_FILE = "device-master-key.v1";
 
-let mode = null;
-let masterKey = null;
+let configuredUserDataPath = null;
+let cachedKey = null;
 
-function _hasStrongSafeStorageBackend() {
-  if (!safeStorage || typeof safeStorage.isEncryptionAvailable !== "function") return false;
-  if (!safeStorage.isEncryptionAvailable()) return false;
-  if (process.platform !== "linux") return true;
-  if (typeof safeStorage.getSelectedStorageBackend !== "function") return false;
-  const backend = safeStorage.getSelectedStorageBackend();
-  return Boolean(backend && backend !== "basic_text" && backend !== "unknown");
-}
+// Deliberate security tradeoff: VoiceLab does not use Electron safeStorage or
+// a native credential vault because those can prompt/block ad-hoc signed macOS
+// builds during launch. The random wrapping key is therefore protected by OS
+// account and filesystem permissions (0700 directory, 0600 file), not by a
+// hardware- or login-bound vault. Encryption remains authenticated at rest,
+// but an attacker who can read both this key and the ciphertext can decrypt it.
 
-function _backupPath() {
-  return path.join(app.getPath("userData"), "secure-keys", BACKUP_FILE);
-}
-
-function _saveMasterKeyBackup() {
-  if (!masterKey || !_hasStrongSafeStorageBackend()) return;
-  const target = _backupPath();
-  try {
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    const encrypted = safeStorage.encryptString(masterKey.toString("base64"));
-    const tmp = target + ".tmp";
-    fs.writeFileSync(tmp, encrypted, { mode: 0o600 });
-    fs.renameSync(tmp, target);
-  } catch (error) {
-    debugLogger.warn("failed to save master key backup", { error: error?.message }, "secretCrypto");
+function configure(userDataPath) {
+  const normalized = path.resolve(String(userDataPath || ""));
+  if (!userDataPath || normalized === path.parse(normalized).root) {
+    throw new TypeError("A concrete userDataPath is required for encrypted storage");
   }
+  if (configuredUserDataPath && configuredUserDataPath !== normalized) {
+    cachedKey = null;
+  }
+  configuredUserDataPath = normalized;
+  return module.exports;
 }
 
-function _loadMasterKeyBackup() {
-  if (!_hasStrongSafeStorageBackend()) return false;
-  try {
-    const buf = fs.readFileSync(_backupPath());
-    const b64 = safeStorage.decryptString(buf);
-    const key = Buffer.from(b64, "base64");
-    if (key.length !== KEY_LEN) return false;
-    masterKey = key;
-    return true;
-  } catch {
-    return false;
+function _keyPath() {
+  if (!configuredUserDataPath) {
+    throw new Error("Encrypted storage has not been configured with a userDataPath");
   }
+  return path.join(configuredUserDataPath, "secure-keys", KEY_FILE);
 }
 
-function _initKeychain() {
-  let Entry;
+function _atomicCreateKey(target, key) {
+  const directory = path.dirname(target);
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  fs.chmodSync(directory, 0o700);
+  const temporary = `${target}.tmp-${process.pid}-${crypto.randomBytes(6).toString("hex")}`;
   try {
-    ({ Entry } = require("@napi-rs/keyring"));
-  } catch (error) {
-    debugLogger.warn("@napi-rs/keyring failed to load", { error: error?.message }, "secretCrypto");
-    return false;
-  }
-
-  try {
-    const entry = new Entry(SERVICE, ACCOUNT);
-    let stored = null;
+    fs.writeFileSync(temporary, key, { mode: 0o600, flag: "wx" });
+    fs.chmodSync(temporary, 0o600);
     try {
-      stored = entry.getPassword();
+      // Linking is exclusive: a second process cannot replace a key that won
+      // the race and already protects persisted data.
+      fs.linkSync(temporary, target);
+    } catch (error) {
+      if (error.code !== "EEXIST" || !fs.existsSync(target)) throw error;
+    }
+    fs.chmodSync(target, 0o600);
+  } finally {
+    try {
+      fs.rmSync(temporary, { force: true });
     } catch {}
+  }
+}
 
-    let migratedLegacyKey = false;
-    if (!stored) {
-      try {
-        const legacyEntry = new Entry(LEGACY_SERVICE, ACCOUNT);
-        stored = legacyEntry.getPassword();
-        migratedLegacyKey = Boolean(stored);
-      } catch {}
-    }
+function _loadOrCreateKey() {
+  if (cachedKey) return cachedKey;
+  const target = _keyPath();
+  if (!fs.existsSync(target)) _atomicCreateKey(target, crypto.randomBytes(KEY_BYTES));
+  const stat = fs.lstatSync(target);
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error("Encrypted storage key path is not a regular file");
+  }
+  fs.chmodSync(path.dirname(target), 0o700);
+  fs.chmodSync(target, 0o600);
+  const key = fs.readFileSync(target);
+  if (key.length !== KEY_BYTES) {
+    throw new Error("Encrypted storage key has an invalid length");
+  }
+  cachedKey = key;
+  return cachedKey;
+}
 
-    if (!stored) {
-      masterKey = crypto.randomBytes(KEY_LEN);
-      stored = masterKey.toString("base64");
-      entry.setPassword(stored);
-      // Write the safeStorage backup only when the key is first generated.
-      // Re-writing on every launch invokes a second Keychain backend on macOS.
-      _saveMasterKeyBackup();
-      return true;
-    }
-
-    const key = Buffer.from(stored, "base64");
-    if (key.length !== KEY_LEN) throw new Error("stored key length invalid");
-    masterKey = key;
-
-    if (migratedLegacyKey) {
-      try {
-        entry.setPassword(stored);
-        _saveMasterKeyBackup();
-        debugLogger.info("migrated legacy keychain key to VoiceLab", {}, "secretCrypto");
-      } catch (error) {
-        // The legacy entry remains intact and usable on this launch. Do not
-        // delete it until the canonical write has succeeded on a later launch.
-        debugLogger.warn(
-          "could not persist migrated VoiceLab keychain key",
-          { error: error?.message },
-          "secretCrypto"
-        );
-      }
-    }
+function isAvailable() {
+  try {
+    _loadOrCreateKey();
     return true;
   } catch (error) {
     debugLogger.warn(
-      "OS keychain unavailable — falling back to safeStorage",
-      { error: error?.message, platform: process.platform },
+      "local encrypted storage is unavailable",
+      { error: error?.message },
       "secretCrypto"
     );
     return false;
   }
 }
 
-function _ensureInit() {
-  if (mode) return;
-  if (process.env.NODE_ENV === "test") {
-    masterKey = crypto
-      .createHash("sha256")
-      .update(process.env.VOICELAB_TEST_MASTER_KEY || "voicelab-local-data-test-key")
-      .digest();
-    mode = "keychain";
-    return;
-  }
-  if (_initKeychain()) {
-    mode = "keychain";
-    return;
-  }
-  if (_loadMasterKeyBackup()) {
-    mode = "keychain";
-    debugLogger.info("recovered master key from safeStorage backup", {}, "secretCrypto");
-    return;
-  }
-  mode = _hasStrongSafeStorageBackend() ? "safeStorage" : "unavailable";
-}
-
-function isAvailable() {
-  _ensureInit();
-  return mode !== "unavailable";
-}
-
 function encrypt(plaintext) {
-  _ensureInit();
-  if (mode === "keychain") {
-    const iv = crypto.randomBytes(IV_LEN);
-    const cipher = crypto.createCipheriv(ALGO, masterKey, iv);
-    const ct = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-    return Buffer.concat([iv, cipher.getAuthTag(), ct]);
-  }
-  if (mode === "safeStorage") return safeStorage.encryptString(plaintext);
-  throw new Error("no encryption backend available");
+  const key = _loadOrCreateKey();
+  const iv = crypto.randomBytes(IV_BYTES);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  cipher.setAAD(ENVELOPE_MAGIC);
+  const ciphertext = Buffer.concat([
+    cipher.update(String(plaintext), "utf8"),
+    cipher.final(),
+  ]);
+  return Buffer.concat([ENVELOPE_MAGIC, iv, cipher.getAuthTag(), ciphertext]);
 }
 
 function encryptBuffer(value) {
@@ -166,32 +112,67 @@ function encryptBuffer(value) {
   return encrypt(value.toString("base64"));
 }
 
+function isCurrentCiphertext(blob) {
+  const encoded = Buffer.from(blob || []);
+  return (
+    encoded.length >= ENVELOPE_MAGIC.length + IV_BYTES + TAG_BYTES &&
+    encoded.subarray(0, ENVELOPE_MAGIC.length).equals(ENVELOPE_MAGIC)
+  );
+}
+
 function decrypt(blob) {
-  _ensureInit();
-  if (mode === "keychain" && blob.length > IV_LEN + TAG_LEN) {
-    try {
-      const iv = blob.subarray(0, IV_LEN);
-      const tag = blob.subarray(IV_LEN, IV_LEN + TAG_LEN);
-      const ct = blob.subarray(IV_LEN + TAG_LEN);
-      const decipher = crypto.createDecipheriv(ALGO, masterKey, iv);
-      decipher.setAuthTag(tag);
-      const value = Buffer.concat([decipher.update(ct), decipher.final()]).toString("utf8");
-      return { value, needsReencrypt: false };
-    } catch {
-      // Legacy safeStorage blob — handled by the fallback below.
-    }
+  const encoded = Buffer.from(blob);
+  if (!isCurrentCiphertext(encoded)) {
+    // Old vault-wrapped and unversioned ciphertext is intentionally not read:
+    // doing so would reintroduce a credential-vault call or silently accept an
+    // unauthenticated migration. The caller must discard/recreate that state.
+    const error = new Error("decryption failed: unsupported or legacy encrypted format");
+    error.code = "LEGACY_ENCRYPTED_FORMAT";
+    throw error;
   }
-  if (_hasStrongSafeStorageBackend()) {
-    return {
-      value: safeStorage.decryptString(blob),
-      needsReencrypt: mode === "keychain",
-    };
+  try {
+    const key = _loadOrCreateKey();
+    const ivStart = ENVELOPE_MAGIC.length;
+    const tagStart = ivStart + IV_BYTES;
+    const ciphertextStart = tagStart + TAG_BYTES;
+    const decipher = crypto.createDecipheriv(
+      ALGORITHM,
+      key,
+      encoded.subarray(ivStart, tagStart)
+    );
+    decipher.setAAD(ENVELOPE_MAGIC);
+    decipher.setAuthTag(encoded.subarray(tagStart, ciphertextStart));
+    const value = Buffer.concat([
+      decipher.update(encoded.subarray(ciphertextStart)),
+      decipher.final(),
+    ]).toString("utf8");
+    return { value, needsReencrypt: false };
+  } catch {
+    const error = new Error("decryption failed: encrypted data could not be authenticated");
+    error.code = "ENCRYPTED_DATA_AUTH_FAILED";
+    throw error;
   }
-  throw new Error("decryption failed: no backend available");
+}
+
+function decryptBufferWithMetadata(blob) {
+  const result = decrypt(blob);
+  return {
+    value: Buffer.from(result.value, "base64"),
+    needsReencrypt: result.needsReencrypt,
+  };
 }
 
 function decryptBuffer(blob) {
-  return Buffer.from(decrypt(blob).value, "base64");
+  return decryptBufferWithMetadata(blob).value;
 }
 
-module.exports = { encrypt, encryptBuffer, decrypt, decryptBuffer, isAvailable };
+module.exports = {
+  configure,
+  decrypt,
+  decryptBuffer,
+  decryptBufferWithMetadata,
+  encrypt,
+  encryptBuffer,
+  isAvailable,
+  isCurrentCiphertext,
+};

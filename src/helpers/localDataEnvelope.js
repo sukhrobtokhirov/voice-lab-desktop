@@ -9,6 +9,9 @@ class LocalDataEnvelope {
     this.databasePath = databasePath;
     this.envelopePath = `${databasePath}.enc`;
     this.cryptoProvider = cryptoProvider;
+    if (this.cryptoProvider === secretCrypto) {
+      this.cryptoProvider.configure(path.dirname(databasePath));
+    }
   }
 
   restore() {
@@ -41,7 +44,7 @@ class LocalDataEnvelope {
     }
     if (!fs.existsSync(this.databasePath)) return { sealed: false };
     if (!this.cryptoProvider.isAvailable()) {
-      throw new Error("OS-backed encryption is unavailable; plaintext database retained");
+      throw new Error("Authenticated local encryption is unavailable; plaintext database retained");
     }
 
     const encrypted = this.cryptoProvider.encryptBuffer(fs.readFileSync(this.databasePath));

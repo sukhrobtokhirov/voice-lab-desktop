@@ -14,44 +14,41 @@ interface UpgradePromptProps {
   shortage?: CreditShortage | null;
 }
 
-export default function UpgradePrompt({ open, onOpenChange, shortage }: UpgradePromptProps) {
+export default function UpgradePrompt({ open, onOpenChange }: UpgradePromptProps) {
   const { t } = useTranslation();
   const usage = useUsage();
-  const available = shortage?.availableCredits ?? usage?.availableCredits ?? "—";
-  const required = shortage?.requiredCredits;
+  const active = usage?.entitlement?.active === true;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <div className="space-y-2">
           <h2 className="text-xl font-semibold text-foreground">
-            {t("desktop.creditShortage.title", { defaultValue: "More AI Credits needed" })}
+            {active
+              ? t("desktop.subscriptionPrompt.limitTitle")
+              : t("desktop.subscriptionPrompt.title")}
           </h2>
           <p className="text-sm text-muted-foreground">
-            {t("desktop.creditShortage.description", {
-              defaultValue:
-                "There are not enough available credits for this recording. Add credits or choose a plan.",
-            })}
+            {active
+              ? t("desktop.subscriptionPrompt.limitDescription")
+              : t("desktop.subscriptionPrompt.description")}
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-3 rounded-xl bg-muted/50 p-3 text-sm">
-          <div>
-            <span className="block text-xs text-muted-foreground">
-              {t("desktop.wallet.available", { defaultValue: "Available" })}
-            </span>
-            <strong>{available} credits</strong>
-          </div>
-          {required != null && (
-            <div>
-              <span className="block text-xs text-muted-foreground">
-                {t("desktop.creditShortage.required", { defaultValue: "Needed" })}
-              </span>
-              <strong>{required} credits</strong>
-            </div>
-          )}
-        </div>
-        <div className="flex flex-col gap-2">
-          <Button onClick={() => void usage?.openBillingPortal()}>
-            {t("desktop.wallet.manage", { defaultValue: "Manage billing" })}
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => void usage?.refetch()}
+            disabled={usage?.isLoading || usage?.checkoutLoading}
+          >
+            {usage?.isLoading || usage?.checkoutLoading
+              ? t("desktop.wallet.refreshing")
+              : t("desktop.wallet.refresh")}
+          </Button>
+          <Button
+            className="flex-1"
+            onClick={() => void usage?.openBillingPortal()}
+            disabled={!usage?.billingAvailable || usage?.checkoutLoading}
+          >
+            {active ? t("desktop.wallet.manage") : t("desktop.wallet.choosePlan")}
           </Button>
         </div>
       </DialogContent>

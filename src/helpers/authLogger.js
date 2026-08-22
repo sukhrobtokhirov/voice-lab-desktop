@@ -11,6 +11,7 @@ const SAFE_ERROR_KEYS = new Set([
   "path",
   "provider",
   "retryAfterSeconds",
+  "serverCode",
   "status",
 ]);
 

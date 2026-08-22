@@ -40,6 +40,7 @@ export type TranscriptionErrorCode =
   | "RATE_LIMITED"
   | "AUDIO_LIMIT_EXCEEDED"
   | "AUDIO_INVALID"
+  | "AUDIO_LANGUAGE_UNSUPPORTED"
   | "NO_SPEECH_DETECTED"
   | "INVALID_REQUEST"
   | "CANCELLED"
@@ -1176,35 +1177,39 @@ declare global {
         code?: string;
         messageKey?: string;
       }>;
-      cloudUsage?: () => Promise<{
-        success: boolean;
-        balanceCredits?: string;
-        isUnlimited?: boolean;
-        reservedCredits?: string;
-        availableCredits?: string;
-        plan?: string;
-        estimatedCredits?: string | null;
-        chargedCredits?: string | null;
-        limits?: Record<string, unknown>;
-        topUpUrl?: string | null;
-        updatedAt?: string | null;
-        error?: string;
-        code?: string;
-      }>;
       desktopPricing?: () => Promise<{
         success: boolean;
         enabled?: boolean;
         currency?: string;
         provider?: string | null;
-        plan?: {
+        plans?: Array<{
           code: string | null;
           name: string | null;
+          priceCents: number | null;
           priceUsd: string | null;
           currency: string;
           billingInterval: string | null;
           billingIntervalCount: number | null;
           dailyMinutes: number | null;
           maxRecordingSeconds: number | null;
+        }>;
+        error?: string;
+        code?: string;
+        status?: number | null;
+        requestId?: string | null;
+      }>;
+      desktopSubscription?: () => Promise<{
+        success: boolean;
+        entitlement?: {
+          active: boolean;
+          packageCode: string | null;
+          packageName: string | null;
+          status: string | null;
+          dailySeconds: number;
+          maxRequestSeconds: number;
+          periodStartsAt: string | null;
+          periodEndsAt: string | null;
+          cancelAtPeriodEnd: boolean;
         };
         error?: string;
         code?: string;

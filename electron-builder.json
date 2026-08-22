@@ -91,6 +91,8 @@
     "!**/node_modules/concurrently/**",
     "!**/node_modules/cross-env/**",
     "!**/node_modules/@electron/notarize/**",
+    "!**/node_modules/@napi-rs/keyring/**",
+    "!**/node_modules/@napi-rs/keyring-*/**",
 
     "!**/node_modules/**/test/**",
     "!**/node_modules/**/tests/**",
@@ -104,7 +106,6 @@
     "**/node_modules/ps-list/**/*",
     "**/node_modules/better-sqlite3/**/*",
     "**/node_modules/onnxruntime-node/**/*",
-    "**/node_modules/@napi-rs/keyring/**/*",
     "src/workers/**/*"
   ],
   "extraResources": [

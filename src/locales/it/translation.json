@@ -3095,13 +3095,41 @@
       "unavailable": "I dati di utilizzo non sono ancora disponibili.",
       "updated": "{{time}} aggiornato",
       "live": "L’utilizzo apparirà dopo la prossima dettatura.",
-      "manage": "Gestisci la fatturazione"
+      "manage": "Gestisci la fatturazione",
+      "activeDescription": "Il tuo piano Desktop è attivo e pronto all’uso.",
+      "inactiveDescription": "Scegli un piano Desktop sul sito VoiceLab.",
+      "active": "Attivo",
+      "inactive": "Inattivo",
+      "activePlan": "Piano attivo",
+      "noActivePlan": "Nessun piano attivo",
+      "checking": "Verifica dell’abbonamento…",
+      "remainingCompact": "{{duration}} rimanenti oggi",
+      "dailyCompact": "{{duration}} al giorno",
+      "billingDisabled": "I piani Desktop non sono temporaneamente disponibili.",
+      "priceCompact": "{{price}} / {{interval}}",
+      "choosePlan": "Scegli piano",
+      "dailyLimit": "Limite giornaliero",
+      "maxRecording": "Registrazione massima",
+      "endsOn": "L’accesso termina il {{date}}",
+      "renewsOn": "Rinnovo il {{date}}",
+      "dailyMinutes": "{{count}} minuti al giorno",
+      "maxRecordingSeconds": "Fino a {{count}} secondi per registrazione",
+      "refreshHint": "Aggiorna dopo essere tornato dal pagamento.",
+      "refreshing": "Aggiornamento…",
+      "refresh": "Aggiorna",
+      "intervals": { "month": "mese" }
     },
     "creditShortage": {
       "title": "Sono necessari più crediti AI",
       "description": "Non ci sono abbastanza crediti disponibili per questa registrazione. Aggiungi crediti o scegli un piano.",
       "required": "Necessario",
       "useLocal": "Gestisci la fatturazione di VoiceLab"
+    },
+    "subscriptionPrompt": {
+      "title": "È richiesto un piano Desktop",
+      "description": "Scegli un piano VoiceLab Desktop sul sito, poi torna qui per aggiornare l’accesso.",
+      "limitTitle": "Limite giornaliero raggiunto",
+      "limitDescription": "Il piano Desktop è attivo, ma il limite di dettatura odierno è esaurito. Gestisci il piano su VoiceLab o riprova dopo il ripristino."
     },
     "dictation": {
       "ready": "Pronto"

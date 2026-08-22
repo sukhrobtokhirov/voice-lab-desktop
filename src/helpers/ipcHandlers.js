@@ -2895,6 +2895,22 @@ class IPCHandlers {
       }
     });
 
+    this._handle("desktop-subscription", async () => {
+      try {
+        if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
+        const subscription = await this.voiceLabApiClient.getDesktopSubscription({ force: true });
+        return { success: true, ...subscription };
+      } catch (error) {
+        return typeof error?.toPublic === "function"
+          ? error.toPublic()
+          : {
+              success: false,
+              error: error.message || "Subscription unavailable",
+              code: "SUBSCRIPTION_UNAVAILABLE",
+            };
+      }
+    });
+
     const clearAuthenticatedRuntime = async () => {
       const services = [
         this.assemblyAiStreaming,
@@ -2938,11 +2954,10 @@ class IPCHandlers {
       runtimeEnv.VITE_AUTH_URL ||
       "https://voicelab.uz";
 
-    const getAuthHeaderFromWindow = async () => {
-      const token = await this.desktopAuthManager?.getValidAccessToken?.();
-      if (token) return { Authorization: `Bearer ${token}` };
-      return {};
-    };
+    // Desktop access tokens are scoped exclusively to the canonical desktop
+    // billing/subscription and STT boundaries implemented by VoiceLabApiClient.
+    // Legacy website/workspace/agent routes must never receive this token.
+    const getAuthHeaderFromWindow = async () => ({});
 
     const getAuthHeader = async (event) => {
       const win = BrowserWindow.fromWebContents(event.sender);
@@ -5397,22 +5412,6 @@ class IPCHandlers {
       error:
         "VoiceLab-funded streaming is disabled until server-authoritative stream metering is available.",
     }));
-
-    this._handle("cloud-usage", async () => {
-      try {
-        if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
-        const wallet = await this.voiceLabApiClient.getWallet({ force: true });
-        return { success: true, ...wallet };
-      } catch (error) {
-        return typeof error?.toPublic === "function"
-          ? error.toPublic()
-          : {
-              success: false,
-              error: error.message || "Wallet unavailable",
-              code: "WALLET_UNAVAILABLE",
-            };
-      }
-    });
 
     const openVoiceLabBilling = async () => {
       if (!this.voiceLabApiClient) return { success: false, error: "Billing unavailable" };

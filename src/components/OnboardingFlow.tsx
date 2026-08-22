@@ -15,6 +15,7 @@ import { useSystemAudioPermission } from "../hooks/useSystemAudioPermission";
 import { useHotkeyRegistration } from "../hooks/useHotkeyRegistration";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useUsage } from "../hooks/useUsage";
+import { useAuth } from "../hooks/useAuth";
 import type { DesktopLanguageCode, DesktopLanguageProvider } from "../config/desktopLanguages";
 import logoIcon from "../assets/icon.png";
 import {
@@ -39,6 +40,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const systemAudio = useSystemAudioPermission();
   const { registerHotkey, isRegistering } = useHotkeyRegistration();
   const usage = useUsage();
+  const { isLoaded: authLoaded, isSignedIn } = useAuth();
 
   useEffect(() => {
     if (step !== "hotkey") return undefined;
@@ -78,10 +80,30 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     setStep(next);
   }, []);
 
-  const setLanguage = (language: string) => {
+  useEffect(() => {
+    const authStepIndex = ONBOARDING_STEPS.indexOf("mode");
+    if (authLoaded && !isSignedIn && stepIndex > authStepIndex) {
+      go("mode");
+    }
+  }, [authLoaded, go, isSignedIn, stepIndex]);
+
+  const setLanguage = useCallback((language: string) => {
     localStorage.setItem("preferredLanguage", language);
     useSettingsStore.setState({ preferredLanguage: language });
-  };
+  }, []);
+
+  useEffect(() => {
+    if (step !== "language-permissions" || selectedSupported || usage?.isLoading) return;
+    const fallback = languageOptions.find((item) => item.value !== "auto" && !item.disabled);
+    if (fallback && fallback.value !== preferredLanguage) setLanguage(fallback.value);
+  }, [
+    languageOptions,
+    preferredLanguage,
+    selectedSupported,
+    setLanguage,
+    step,
+    usage?.isLoading,
+  ]);
 
   const finish = () => {
     const state = useSettingsStore.getState();
@@ -108,7 +130,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         <div className="[app-region:no-drag]"><WindowControls /></div>
       </div>
       <div className="border-b border-border px-5 py-3"><StepProgress steps={progress} currentStep={stepIndex} /></div>
-      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center overflow-y-auto px-6 py-7">
+      <main className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col justify-center overflow-y-auto px-6 py-7">
         {step === "welcome" && (
           <div className="space-y-5 text-center">
             <img src={logoIcon} alt="VoiceLab" className="mx-auto h-16 w-16 rounded-2xl" />
@@ -158,9 +180,9 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
           <div className="space-y-5 text-center"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10"><CheckCircle2 className="h-7 w-7 text-emerald-500" /></div><div><h2 className="text-2xl font-semibold">{t("desktop.onboarding.ready.title")}</h2><p className="mt-2 text-sm text-muted-foreground">{t("desktop.onboarding.ready.account")}</p></div></div>
         )}
       </main>
-      <footer className="flex items-center justify-between border-t border-border px-6 py-4">
+      <footer className="flex shrink-0 items-center justify-between border-t border-border bg-background px-6 py-4">
         <Button variant="ghost" disabled={stepIndex === 0} onClick={() => go(ONBOARDING_STEPS[Math.max(0, stepIndex - 1)])}>{t("common.back")}</Button>
-        {step === "ready" ? <Button onClick={finish}>{t("desktop.onboarding.ready.start")}</Button> : step === "mode" ? <span /> : <Button disabled={!canContinue} onClick={() => go(ONBOARDING_STEPS[Math.min(ONBOARDING_STEPS.length - 1, stepIndex + 1)])}>{t("common.continue")}</Button>}
+        {step === "ready" ? <Button onClick={finish}>{t("desktop.onboarding.ready.start")}</Button> : step === "mode" ? <span /> : <Button disabled={!canContinue} onClick={() => go(ONBOARDING_STEPS[Math.min(ONBOARDING_STEPS.length - 1, stepIndex + 1)])}>{t("common.next")}</Button>}
       </footer>
     </div>
   );

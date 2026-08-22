@@ -1,4 +1,5 @@
 const path = require("path");
+const crypto = require("crypto");
 const fs = require("fs");
 const fsPromises = require("fs/promises");
 const { app } = require("electron");
@@ -67,6 +68,7 @@ let envWriteQueue = Promise.resolve();
 
 class EnvironmentManager {
   constructor() {
+    secretCrypto.configure(app.getPath("userData"));
     this.loadEnvironmentVariables();
   }
 
@@ -96,10 +98,8 @@ class EnvironmentManager {
     }
   }
 
-  // Encryption initializes lazily. Probing it eagerly would touch the macOS
-  // Keychain before any window is visible. Migration and _loadAllSecrets are
-  // both no-ops on fresh installs, so neither path triggers Keychain until
-  // the user actually saves their first secret.
+  // Encryption initializes lazily and uses only a permission-restricted local
+  // key file. It never probes an OS credential vault during startup.
   async init() {
     if (!fs.existsSync(this._getMigrationSentinelPath())) {
       await this._migrateToSecureStorage();
@@ -157,14 +157,21 @@ class EnvironmentManager {
     process.env[envVarName] = value;
 
     const dir = this._getSecureKeysDir();
-    await fsPromises.mkdir(dir, { recursive: true });
+    await fsPromises.mkdir(dir, { recursive: true, mode: 0o700 });
+    await fsPromises.chmod(dir, 0o700);
 
     const filePath = this._getSecretFilePath(envVarName);
-    const tmpPath = `${filePath}.tmp`;
+    const tmpPath = `${filePath}.tmp-${process.pid}-${crypto.randomBytes(6).toString("hex")}`;
     const encrypted = secretCrypto.encrypt(value);
 
-    await fsPromises.writeFile(tmpPath, encrypted);
-    await fsPromises.rename(tmpPath, filePath);
+    try {
+      await fsPromises.writeFile(tmpPath, encrypted, { mode: 0o600, flag: "wx" });
+      await fsPromises.chmod(tmpPath, 0o600);
+      await fsPromises.rename(tmpPath, filePath);
+      await fsPromises.chmod(filePath, 0o600);
+    } finally {
+      await fsPromises.rm(tmpPath, { force: true }).catch(() => {});
+    }
   }
 
   async _deleteSecretKey(envVarName) {
@@ -178,7 +185,8 @@ class EnvironmentManager {
 
   async _migrateToSecureStorage() {
     const dir = this._getSecureKeysDir();
-    await fsPromises.mkdir(dir, { recursive: true });
+    await fsPromises.mkdir(dir, { recursive: true, mode: 0o700 });
+    await fsPromises.chmod(dir, 0o700);
 
     // Adopt renamed key so the value survives migration. Old releases stored
     // it under CUSTOM_REASONING_API_KEY; new code only encrypts CUSTOM_CLEANUP_API_KEY.
@@ -210,7 +218,8 @@ class EnvironmentManager {
     }
 
     // Write sentinel before stripping plaintext from .env so a crash mid-rewrite is recoverable.
-    await fsPromises.writeFile(this._getMigrationSentinelPath(), "");
+    await fsPromises.writeFile(this._getMigrationSentinelPath(), "", { mode: 0o600 });
+    await fsPromises.chmod(this._getMigrationSentinelPath(), 0o600);
     const envPath = path.join(app.getPath("userData"), ".env");
     if (fs.existsSync(envPath)) await this._writeEnvFileAtomic(envPath);
     debugLogger.info(

@@ -3099,13 +3099,41 @@
       "unavailable": "Данные об использовании пока недоступны.",
       "updated": "Обновлено в {{time}}",
       "live": "Данные появятся после следующей диктовки.",
-      "manage": "Управление биллингом"
+      "manage": "Управление оплатой",
+      "activeDescription": "Тариф Desktop активен и готов к использованию.",
+      "inactiveDescription": "Выберите тариф Desktop на сайте VoiceLab.",
+      "active": "Активен",
+      "inactive": "Неактивен",
+      "activePlan": "Активный тариф",
+      "noActivePlan": "Нет активного тарифа",
+      "checking": "Проверка подписки…",
+      "remainingCompact": "Сегодня осталось {{duration}}",
+      "dailyCompact": "{{duration}} в день",
+      "billingDisabled": "Тарифы Desktop временно недоступны.",
+      "priceCompact": "{{price}} / {{interval}}",
+      "choosePlan": "Выбрать тариф",
+      "dailyLimit": "Дневной лимит",
+      "maxRecording": "Максимальная запись",
+      "endsOn": "Доступ завершится {{date}}",
+      "renewsOn": "Продление {{date}}",
+      "dailyMinutes": "{{count}} минут в день",
+      "maxRecordingSeconds": "До {{count}} секунд на запись",
+      "refreshHint": "Обновите после возвращения со страницы оплаты.",
+      "refreshing": "Обновление…",
+      "refresh": "Обновить",
+      "intervals": { "month": "месяц" }
     },
     "creditShortage": {
       "title": "Нужно больше AI Credits",
       "description": "Для этой записи недостаточно кредитов. Пополните баланс или выберите тариф.",
       "required": "Нужно",
       "useLocal": "Управлять биллингом VoiceLab"
+    },
+    "subscriptionPrompt": {
+      "title": "Нужен тариф Desktop",
+      "description": "Выберите тариф VoiceLab Desktop на сайте, затем вернитесь сюда и обновите доступ.",
+      "limitTitle": "Дневной лимит исчерпан",
+      "limitDescription": "Тариф Desktop активен, но дневной лимит диктовки использован. Управляйте тарифом на VoiceLab или повторите попытку после сброса лимита."
     },
     "dictation": {
       "ready": "Готово"

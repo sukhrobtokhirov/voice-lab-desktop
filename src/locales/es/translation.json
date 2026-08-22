@@ -3095,13 +3095,41 @@
       "unavailable": "Los datos de uso aún no están disponibles.",
       "updated": "Actualizado {{time}}",
       "live": "El uso aparecerá después del próximo dictado.",
-      "manage": "Administrar facturación"
+      "manage": "Administrar facturación",
+      "activeDescription": "Tu plan de escritorio está activo y listo para usar.",
+      "inactiveDescription": "Elige un plan de escritorio en el sitio web de VoiceLab.",
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "activePlan": "Plan activo",
+      "noActivePlan": "Sin plan activo",
+      "checking": "Comprobando suscripción…",
+      "remainingCompact": "Quedan {{duration}} hoy",
+      "dailyCompact": "{{duration}} al día",
+      "billingDisabled": "Los planes de escritorio no están disponibles temporalmente.",
+      "priceCompact": "{{price}} / {{interval}}",
+      "choosePlan": "Elegir plan",
+      "dailyLimit": "Límite diario",
+      "maxRecording": "Grabación máxima",
+      "endsOn": "El acceso termina el {{date}}",
+      "renewsOn": "Se renueva el {{date}}",
+      "dailyMinutes": "{{count}} minutos al día",
+      "maxRecordingSeconds": "Hasta {{count}} segundos por grabación",
+      "refreshHint": "Actualiza al volver del pago.",
+      "refreshing": "Actualizando…",
+      "refresh": "Actualizar",
+      "intervals": { "month": "mes" }
     },
     "creditShortage": {
       "title": "Se necesitan más créditos de IA",
       "description": "No hay suficientes créditos disponibles para esta grabación. Agrega créditos o elige un plan.",
       "required": "Necesario",
       "useLocal": "Administrar la facturación de VoiceLab"
+    },
+    "subscriptionPrompt": {
+      "title": "Se necesita un plan de escritorio",
+      "description": "Elige un plan VoiceLab Desktop en el sitio web y vuelve aquí para actualizar el acceso.",
+      "limitTitle": "Límite diario alcanzado",
+      "limitDescription": "Tu plan de escritorio está activo, pero ya usaste el límite de dictado de hoy. Administra el plan en VoiceLab o inténtalo tras el reinicio del límite."
     },
     "dictation": {
       "ready": "Listo"

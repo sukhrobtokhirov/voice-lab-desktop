@@ -8,10 +8,12 @@ type RecordingError = {
   messageKey?: string;
   retryAfterSeconds?: number;
   max_duration_seconds?: number;
+  requestId?: string | null;
+  serverCode?: string | null;
 };
 
 type RecoveryCopy = { title: string; description: string };
-export type RecordingRecoveryAction = "auth" | "billing" | "local" | "retry" | null;
+export type RecordingRecoveryAction = "auth" | "billing" | "retry" | null;
 
 const COPY: Record<string, Record<string, RecoveryCopy>> = {
   en: {
@@ -55,6 +57,10 @@ const COPY: Record<string, Record<string, RecoveryCopy>> = {
       title: "Audio could not be processed",
       description: "Check the recording and try again.",
     },
+    AUDIO_LANGUAGE_UNSUPPORTED: {
+      title: "Language is not supported",
+      description: "Choose Uzbek, English, or Russian and make a new recording.",
+    },
     NO_SPEECH_DETECTED: {
       title: "No speech detected",
       description: "Speak clearly and make a new recording.",
@@ -69,17 +75,14 @@ const COPY: Record<string, Record<string, RecoveryCopy>> = {
     },
     SERVICE_UNAVAILABLE: {
       title: "VoiceLab is temporarily unavailable",
-      description: "Your recording was not charged. Try again shortly.",
-    },
-    VOICELAB_STREAMING_DISABLED: {
-      title: "Cloud live mode is unavailable",
-      description: "Use regular VoiceLab Dictate.",
+      description:
+        "Your recording is kept on this device. Retry only when you want to send it again.",
     },
   },
   uz: {
     INSUFFICIENT_CREDITS: {
       title: "Ko‘proq AI Credit kerak",
-      description: "Credit qo‘shing yoki bu yozuvni lokal rejimda ishlating.",
+      description: "Credit qo‘shing yoki mos VoiceLab tarifini tanlang.",
     },
     ENTITLEMENT_REQUIRED: {
       title: "Dictate tarifga kirmagan",
@@ -117,6 +120,10 @@ const COPY: Record<string, Record<string, RecoveryCopy>> = {
       title: "Audioni qayta ishlab bo‘lmadi",
       description: "Yozuvni tekshirib, qayta urinib ko‘ring.",
     },
+    AUDIO_LANGUAGE_UNSUPPORTED: {
+      title: "Til qo‘llab-quvvatlanmaydi",
+      description: "O‘zbek, ingliz yoki rus tilini tanlab, yangi yozuv yarating.",
+    },
     NO_SPEECH_DETECTED: {
       title: "Nutq aniqlanmadi",
       description: "Aniqroq gapirib, yangi yozuv yarating.",
@@ -131,17 +138,13 @@ const COPY: Record<string, Record<string, RecoveryCopy>> = {
     },
     SERVICE_UNAVAILABLE: {
       title: "VoiceLab vaqtincha ishlamayapti",
-      description: "Credit yechilmadi. Birozdan so‘ng qayta urinib ko‘ring.",
-    },
-    VOICELAB_STREAMING_DISABLED: {
-      title: "Cloud jonli rejimi hozir ishlamaydi",
-      description: "Oddiy Dictate, lokal rejim yoki o‘z provideringizdan foydalaning.",
+      description: "Yozuv qurilmada saqlandi. Qayta yubormoqchi bo‘lsangizgina urinib ko‘ring.",
     },
   },
   ru: {
     INSUFFICIENT_CREDITS: {
       title: "Нужно больше AI Credits",
-      description: "Пополните баланс или используйте локальную расшифровку.",
+      description: "Пополните баланс или выберите подходящий тариф VoiceLab.",
     },
     ENTITLEMENT_REQUIRED: {
       title: "Dictate не входит в тариф",
@@ -179,6 +182,10 @@ const COPY: Record<string, Record<string, RecoveryCopy>> = {
       title: "Не удалось обработать аудио",
       description: "Проверьте запись и повторите попытку.",
     },
+    AUDIO_LANGUAGE_UNSUPPORTED: {
+      title: "Язык не поддерживается",
+      description: "Выберите узбекский, английский или русский язык и создайте новую запись.",
+    },
     NO_SPEECH_DETECTED: {
       title: "Речь не обнаружена",
       description: "Говорите чётче и создайте новую запись.",
@@ -193,11 +200,7 @@ const COPY: Record<string, Record<string, RecoveryCopy>> = {
     },
     SERVICE_UNAVAILABLE: {
       title: "VoiceLab временно недоступен",
-      description: "Кредиты не списаны. Повторите попытку позже.",
-    },
-    VOICELAB_STREAMING_DISABLED: {
-      title: "Облачный live-режим недоступен",
-      description: "Используйте обычный Dictate, локальный режим или своего провайдера.",
+      description: "Запись сохранена на устройстве. Повторяйте отправку только по своему решению.",
     },
   },
 };
@@ -218,9 +221,6 @@ export function getRecordingRecoveryAction(code?: string): RecordingRecoveryActi
   ) {
     return "billing";
   }
-  if (code === "VOICELAB_STREAMING_DISABLED") {
-    return "local";
-  }
   if (code === "DAILY_CAP_REACHED") return "billing";
   if (
     code === "CONCURRENCY_LIMIT" ||
@@ -236,17 +236,15 @@ export function getRecordingRecoveryAction(code?: string): RecordingRecoveryActi
 export function getRecordingRecoveryActionLabel(action: RecordingRecoveryAction): string {
   const language = i18next.resolvedLanguage?.split("-")[0] || "en";
   const labels = {
-    en: { auth: "Sign in", billing: "Manage account", local: "Use local", retry: "Try again" },
+    en: { auth: "Sign in", billing: "Manage account", retry: "Try again" },
     uz: {
       auth: "Kirish",
       billing: "Hisobni boshqarish",
-      local: "Lokal rejim",
       retry: "Qayta urinish",
     },
     ru: {
       auth: "Войти",
       billing: "Управление аккаунтом",
-      local: "Локальный режим",
       retry: "Повторить",
     },
   };
@@ -269,27 +267,36 @@ export function getRecordingErrorTitle(error: RecordingError, t: TFunction): str
 }
 
 export function getRecordingErrorDescription(error: RecordingError, t: TFunction): string {
+  const withDiagnostics = (description: string) => {
+    const diagnostic = [error.serverCode, error.requestId].filter(Boolean).join(" · ");
+    return diagnostic ? `${description} (${diagnostic})` : description;
+  };
   const copy = getCopy(error.code);
   if (copy) {
     if (error.code === "RATE_LIMITED" && error.retryAfterSeconds) {
       const language = i18next.resolvedLanguage?.split("-")[0] || "en";
       if (language === "uz")
-        return `${error.retryAfterSeconds} soniyadan keyin qayta urinib ko‘ring.`;
-      if (language === "ru") return `Повторите попытку через ${error.retryAfterSeconds} сек.`;
-      return `Try again in ${error.retryAfterSeconds} seconds.`;
+        return withDiagnostics(
+          `${error.retryAfterSeconds} soniyadan keyin qayta urinib ko‘ring.`
+        );
+      if (language === "ru")
+        return withDiagnostics(`Повторите попытку через ${error.retryAfterSeconds} сек.`);
+      return withDiagnostics(`Try again in ${error.retryAfterSeconds} seconds.`);
     }
     if (error.code === "AUDIO_LIMIT_EXCEEDED" && error.max_duration_seconds) {
       const minutes = Math.max(1, Math.floor(error.max_duration_seconds / 60));
       const language = i18next.resolvedLanguage?.split("-")[0] || "en";
-      if (language === "uz") return `Yozuvni ${minutes} daqiqadan qisqa qiling.`;
-      if (language === "ru") return `Сократите запись до ${minutes} мин.`;
-      return `Keep the recording under ${minutes} minutes.`;
+      if (language === "uz")
+        return withDiagnostics(`Yozuvni ${minutes} daqiqadan qisqa qiling.`);
+      if (language === "ru")
+        return withDiagnostics(`Сократите запись до ${minutes} мин.`);
+      return withDiagnostics(`Keep the recording under ${minutes} minutes.`);
     }
-    return copy.description;
+    return withDiagnostics(copy.description);
   }
   switch (error.code) {
     default:
-      if (error.messageKey) return t(error.messageKey);
-      return error.description ?? "";
+      if (error.messageKey) return withDiagnostics(t(error.messageKey));
+      return withDiagnostics(error.description ?? "");
   }
 }

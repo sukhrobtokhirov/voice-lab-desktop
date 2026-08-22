@@ -47,10 +47,11 @@ test("post-login usage exposes static STT capabilities without wallet requests",
 
   assert.doesNotMatch(usage, /cloudUsage|cloud-usage|getWallet/);
   assert.match(usage, /desktopPricing/);
+  assert.match(usage, /desktopSubscription/);
   assert.match(usage, /pricingRequest\.current/);
   assert.match(usage, /SUPPORTED_LANGUAGES = \["uz", "en", "ru"\]/);
-  assert.match(usage, /MAX_DURATION_SECONDS = 300/);
   assert.match(usage, /autoDetectionSupported: false/);
+  assert.doesNotMatch(usage, /subscriptionFromUser|subscription_status|subscriptionStatus/);
   assert.match(config, /supportedLanguages: \["uz", "en", "ru"\]/);
   assert.match(config, /autoDetectionSupported: false/);
   assert.match(config, /maxDurationSeconds: 300/);
@@ -66,7 +67,9 @@ test("cloud health is a local auth check and billing remains an explicit link", 
   assert.doesNotMatch(health, /getWallet|proxyFetch|net\.fetch/);
   assert.match(source, /this\._handle\("open-voicelab-billing"/);
   assert.match(source, /this\._handle\("desktop-pricing"/);
+  assert.match(source, /this\._handle\("desktop-subscription"/);
   assert.match(source, /getDesktopPricing/);
+  assert.match(source, /getDesktopSubscription/);
   assert.match(source, /shell\.openExternal\(this\.voiceLabApiClient\.getBillingUrl\(source\)\)/);
 });
 
@@ -103,17 +106,18 @@ test("VoiceLab AI remains hidden behind its disabled product flag", () => {
   assert.match(controlPanel, /VOICELAB_AI_ENABLED && activeView === "chat"/);
 });
 
-test("usage UI never invents a free plan or zero wallet and keeps billing reachable", () => {
+test("usage UI uses the desktop entitlement and keeps website billing reachable", () => {
   const hook = read("src/hooks/useUsage.ts");
   const display = read("src/components/UsageDisplay.tsx");
 
   assert.match(hook, /balanceCredits: null/);
   assert.match(hook, /availableCredits: null/);
-  assert.match(hook, /plan: null/);
   assert.doesNotMatch(hook, /plan: "free"|balanceCredits: "0"|availableCredits: "0"/);
-  assert.match(hook, /\[isSignedIn, user\?\.id\]/);
+  assert.match(hook, /result\.entitlement\.active/);
+  assert.match(hook, /entitlement\?\.active \? entitlement\.status \|\| "active" : "inactive"/);
+  assert.match(hook, /\[isSignedIn, user\?\.id, loadPricing, loadSubscription\]/);
   assert.match(display, /if \(!usage\) return null/);
-  assert.doesNotMatch(display, /!usage\.hasUsageData && !usage\.hasSubscriptionData/);
+  assert.match(display, /usage\.plans\.map/);
   assert.match(display, /usage\.openBillingPortal\(\)/);
   assert.doesNotMatch(display, /Live balance|AI Credit wallet/);
 });

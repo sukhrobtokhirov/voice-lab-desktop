@@ -3095,13 +3095,41 @@
       "unavailable": "Nutzungsdaten sind noch nicht verfügbar.",
       "updated": "Aktualisiert {{time}}",
       "live": "Die Nutzung erscheint nach dem nächsten Diktat.",
-      "manage": "Abrechnung verwalten"
+      "manage": "Abrechnung verwalten",
+      "activeDescription": "Ihr Desktop-Tarif ist aktiv und einsatzbereit.",
+      "inactiveDescription": "Wählen Sie einen Desktop-Tarif auf der VoiceLab-Website.",
+      "active": "Aktiv",
+      "inactive": "Inaktiv",
+      "activePlan": "Aktiver Tarif",
+      "noActivePlan": "Kein aktiver Tarif",
+      "checking": "Abonnement wird geprüft…",
+      "remainingCompact": "Heute noch {{duration}}",
+      "dailyCompact": "{{duration}} pro Tag",
+      "billingDisabled": "Desktop-Tarife sind vorübergehend nicht verfügbar.",
+      "priceCompact": "{{price}} / {{interval}}",
+      "choosePlan": "Tarif wählen",
+      "dailyLimit": "Tageskontingent",
+      "maxRecording": "Maximale Aufnahme",
+      "endsOn": "Zugriff endet am {{date}}",
+      "renewsOn": "Verlängerung am {{date}}",
+      "dailyMinutes": "{{count}} Minuten pro Tag",
+      "maxRecordingSeconds": "Bis zu {{count}} Sekunden pro Aufnahme",
+      "refreshHint": "Nach der Rückkehr von der Zahlung aktualisieren.",
+      "refreshing": "Wird aktualisiert…",
+      "refresh": "Aktualisieren",
+      "intervals": { "month": "Monat" }
     },
     "creditShortage": {
       "title": "Weitere KI-Credits erforderlich",
       "description": "Für diese Aufnahme sind nicht genügend Credits verfügbar. Fügen Sie Credits hinzu oder wählen Sie einen Plan.",
       "required": "Benötigt",
       "useLocal": "Verwalten Sie die VoiceLab-Abrechnung"
+    },
+    "subscriptionPrompt": {
+      "title": "Desktop-Tarif erforderlich",
+      "description": "Wählen Sie auf der Website einen VoiceLab-Desktop-Tarif und kehren Sie dann hierher zurück, um den Zugriff zu aktualisieren.",
+      "limitTitle": "Tageskontingent erreicht",
+      "limitDescription": "Ihr Desktop-Tarif ist aktiv, aber das heutige Diktatkontingent ist verbraucht. Verwalten Sie den Tarif bei VoiceLab oder versuchen Sie es nach der Zurücksetzung erneut."
     },
     "dictation": {
       "ready": "Bereit"

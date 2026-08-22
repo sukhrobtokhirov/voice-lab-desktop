@@ -8,6 +8,7 @@ const Module = require("node:module");
 const API_BASE_URL = "https://api.voicelab.test";
 const DESKTOP_STT_URL = `${API_BASE_URL}/v1/desktop/stt`;
 const DESKTOP_PRICING_URL = `${API_BASE_URL}/api/v1/billing/desktop/pricing`;
+const DESKTOP_SUBSCRIPTION_URL = `${API_BASE_URL}/api/v1/billing/desktop/subscription`;
 const MAX_AUDIO_BYTES = 64 * 1024 * 1024;
 
 function jsonResponse(body, status = 200, headers = {}) {
@@ -88,6 +89,28 @@ function createClient(VoiceLabApiClient, authManager = createAuthManager()) {
   return { client, authManager };
 }
 
+function primeActiveSubscription(client, authManager, maxRequestSeconds = 300) {
+  client.subscriptionCache = {
+    entitlement: {
+      active: true,
+      packageCode: "desktop-pro",
+      packageName: "VoiceLab Flow Pro",
+      status: "active",
+      dailySeconds: 27_000,
+      maxRequestSeconds,
+      periodStartsAt: null,
+      periodEndsAt: null,
+      cancelAtPeriodEnd: false,
+    },
+    requestId: "req_subscription_cached",
+  };
+  client.subscriptionFetchedAt = Date.now();
+  client.subscriptionAuthContext = {
+    accountId: authManager.state.accountId,
+    sessionId: authManager.state.sessionId,
+  };
+}
+
 function installFetch(t, implementation) {
   const originalFetch = global.fetch;
   global.fetch = implementation;
@@ -103,22 +126,6 @@ function operation(overrides = {}) {
     language: "uz",
     durationMs: 1_250,
     ...overrides,
-  };
-}
-
-function wallet(maxDurationSeconds = 300) {
-  return {
-    isUnlimited: false,
-    balanceCredits: null,
-    reservedCredits: "0",
-    availableCredits: null,
-    limits: {
-      dictation_enabled: true,
-      dictation_max_concurrent_operations: 1,
-      dictation_max_duration_seconds: maxDurationSeconds,
-      supported_languages: ["uz", "en", "ru"],
-      auto_detection_supported: true,
-    },
   };
 }
 
@@ -163,16 +170,19 @@ test("desktop pricing uses the public desktop catalog without a desktop token", 
     enabled: true,
     currency: "USD",
     provider: "polar",
-    plan: {
-      code: "desktop-pro",
-      name: "VoiceLab Flow Pro",
-      priceUsd: "12.00",
-      currency: "USD",
-      billingInterval: "month",
-      billingIntervalCount: 1,
-      dailyMinutes: 450,
-      maxRecordingSeconds: 300,
-    },
+    plans: [
+      {
+        code: "desktop-pro",
+        name: "VoiceLab Flow Pro",
+        priceCents: 1200,
+        priceUsd: "12.00",
+        currency: "USD",
+        billingInterval: "month",
+        billingIntervalCount: 1,
+        dailyMinutes: 450,
+        maxRecordingSeconds: 300,
+      },
+    ],
     requestId: "req_pricing_1",
   });
   assert.equal(calls.length, 1);
@@ -183,25 +193,129 @@ test("desktop pricing uses the public desktop catalog without a desktop token", 
   assert.doesNotMatch(calls[0].url, /account\/usage/);
 });
 
-test("desktop pricing safely handles an enabled catalog without a valid plan", async (t) => {
+test("desktop pricing rejects a non-canonical catalog instead of inventing defaults", async (t) => {
   const VoiceLabApiClient = loadClient(t);
   const { client } = createClient(VoiceLabApiClient);
   installFetch(t, async () => jsonResponse({ enabled: true, plans: [{ code: "missing-name" }] }));
 
-  assert.deepEqual(await client.getDesktopPricing(), {
-    enabled: true,
-    currency: "USD",
-    provider: null,
-    plan: null,
-    requestId: null,
+  await assert.rejects(
+    client.getDesktopPricing(),
+    (error) => error.code === "BACKEND_RESPONSE_INVALID"
+  );
+});
+
+test("desktop subscription uses the desktop token and preserves server entitlement", async (t) => {
+  const VoiceLabApiClient = loadClient(t);
+  const { client, authManager } = createClient(VoiceLabApiClient);
+  const calls = [];
+  installFetch(t, async (url, init) => {
+    calls.push({ url, init });
+    return jsonResponse({
+      entitlement: {
+        active: true,
+        package_code: "desktop-pro",
+        package_name: "VoiceLab Flow Pro",
+        status: "trialing",
+        daily_seconds: 27_000,
+        max_request_seconds: 300,
+        period_starts_at: "2026-08-21T00:00:00Z",
+        period_ends_at: "2026-09-21T00:00:00Z",
+        cancel_at_period_end: true,
+      },
+      request_id: "req_subscription_1",
+    });
   });
+
+  assert.deepEqual(await client.getDesktopSubscription(), {
+    entitlement: {
+      active: true,
+      packageCode: "desktop-pro",
+      packageName: "VoiceLab Flow Pro",
+      status: "trialing",
+      dailySeconds: 27_000,
+      maxRequestSeconds: 300,
+      periodStartsAt: "2026-08-21T00:00:00Z",
+      periodEndsAt: "2026-09-21T00:00:00Z",
+      cancelAtPeriodEnd: true,
+    },
+    requestId: "req_subscription_1",
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, DESKTOP_SUBSCRIPTION_URL);
+  assert.equal(calls[0].init.method, "GET");
+  assert.equal(
+    new Headers(calls[0].init.headers).get("authorization"),
+    "Bearer desktop-access-token-1"
+  );
+  assert.equal(new Headers(calls[0].init.headers).get("x-voicelab-installation-id"), null);
+  assert.equal(authManager.state.getValidAccessTokenCalls, 1);
+});
+
+test("desktop subscription refreshes session_expired once and retries once", async (t) => {
+  const VoiceLabApiClient = loadClient(t);
+  const { client, authManager } = createClient(VoiceLabApiClient);
+  const calls = [];
+  installFetch(t, async (url, init) => {
+    calls.push({ url, init });
+    if (calls.length === 1) {
+      return jsonResponse(
+        {
+          message: "Desktop session expired.",
+          error: { code: "session_expired" },
+          request_id: "req_subscription_expired",
+        },
+        401
+      );
+    }
+    return jsonResponse({
+      entitlement: {
+        active: false,
+        daily_seconds: 0,
+        max_request_seconds: 0,
+        cancel_at_period_end: false,
+      },
+      request_id: "req_subscription_refreshed",
+    });
+  });
+
+  const result = await client.getDesktopSubscription();
+
+  assert.equal(result.entitlement.active, false);
+  assert.equal(calls.length, 2);
+  assert.equal(authManager.state.refreshCalls, 1);
+  assert.deepEqual(authManager.state.refreshOptions, [{ force: true }]);
+  assert.equal(
+    new Headers(calls[1].init.headers).get("authorization"),
+    "Bearer desktop-access-token-2"
+  );
+});
+
+test("desktop subscription keeps active false authoritative even when status says active", async (t) => {
+  const VoiceLabApiClient = loadClient(t);
+  const { client } = createClient(VoiceLabApiClient);
+  installFetch(t, async () =>
+    jsonResponse({
+      entitlement: {
+        active: false,
+        status: "active",
+        daily_seconds: 0,
+        max_request_seconds: 0,
+        cancel_at_period_end: false,
+      },
+      request_id: "req_subscription_inactive",
+    })
+  );
+
+  const result = await client.getDesktopSubscription();
+  assert.equal(result.entitlement.active, false);
+  assert.equal(result.entitlement.status, "active");
+  assert.equal(result.entitlement.dailySeconds, 0);
+  assert.equal(result.entitlement.maxRequestSeconds, 0);
 });
 
 test("desktop STT sends one exact multipart request and exposes synchronous usage", async (t) => {
   const VoiceLabApiClient = loadClient(t);
   const { client } = createClient(VoiceLabApiClient);
-  client.getWallet = async () => wallet();
-
   const serverPayload = {
     text: "Assalomu alaykum",
     language: "uz",
@@ -213,6 +327,13 @@ test("desktop STT sends one exact multipart request and exposes synchronous usag
     },
     request_id: "req_desktop_stt_1",
     stt_provider: "openwhispr",
+  };
+  const expectedResponse = {
+    text: serverPayload.text,
+    language: serverPayload.language,
+    duration_ms: serverPayload.duration_ms,
+    usage: serverPayload.usage,
+    request_id: serverPayload.request_id,
   };
   const calls = [];
   installFetch(t, async (url, init) => {
@@ -235,7 +356,7 @@ test("desktop STT sends one exact multipart request and exposes synchronous usag
     1
   );
 
-  assert.deepEqual(response, serverPayload);
+  assert.deepEqual(response, expectedResponse);
   assert.equal(calls.length, 1, "a synchronous response must not start a polling request");
   assert.equal(
     calls.some(({ init }) => init.method === "GET"),
@@ -245,8 +366,8 @@ test("desktop STT sends one exact multipart request and exposes synchronous usag
   const request = calls[0];
   const headers = new Headers(request.init.headers);
   assert.equal(headers.get("authorization"), "Bearer desktop-access-token-1");
-  assert.equal(headers.get("x-voicelab-client"), "voicelab-desktop");
-  assert.equal(headers.get("x-voicelab-installation-id"), "install-9");
+  assert.equal(headers.get("x-voicelab-client"), null);
+  assert.equal(headers.get("x-voicelab-installation-id"), null);
   assertNoForbiddenMultipartHeaders(request.init);
   assert.ok(request.init.body instanceof FormData);
   assert.deepEqual([...request.init.body.keys()], ["audio", "language"]);
@@ -258,7 +379,7 @@ test("desktop STT sends one exact multipart request and exposes synchronous usag
   const audio = request.init.body.get("audio");
   assert.ok(audio instanceof Blob);
   assert.equal(audio.type, "audio/webm");
-  assert.equal(audio.name, "dictation.webm");
+  assert.equal(audio.name, "audio.webm");
 
   const publicResult = await client.publicResult(response, "local-operation-1");
   assert.equal(publicResult.success, true);
@@ -268,6 +389,77 @@ test("desktop STT sends one exact multipart request and exposes synchronous usag
   assert.deepEqual(publicResult.usage, serverPayload.usage);
   assert.equal(publicResult.source, "voicelab");
   assert.equal(publicResult.sttProvider, "voicelab");
+});
+
+test("desktop STT rejects the ordinary website STT response shape", async (t) => {
+  const VoiceLabApiClient = loadClient(t);
+  const { client } = createClient(VoiceLabApiClient);
+  installFetch(t, async () =>
+    jsonResponse({
+      id: 77,
+      transcript: "Fallback ishladi",
+      language: "uz",
+      duration: 1.25,
+      request_id: "req_legacy_fallback",
+    })
+  );
+
+  await assert.rejects(
+    client.sendDictationChunk(operation(), Buffer.from("audio bytes"), {
+      contentType: "audio/mpeg",
+      fileName: "audio.mp3",
+    }),
+    (error) =>
+      error.code === "BACKEND_RESPONSE_INVALID" &&
+      error.toPublic().requestId === "req_legacy_fallback"
+  );
+});
+
+test("desktop STT rejects every non-JSON success response", async (t) => {
+  const VoiceLabApiClient = loadClient(t);
+  const { client } = createClient(VoiceLabApiClient);
+  let responseKind = "plain";
+  installFetch(t, async () => {
+    if (responseKind === "plain") {
+      return new Response("Oddiy matn natijasi", {
+        status: 200,
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+          "x-request-id": "req_plain_fallback",
+        },
+      });
+    }
+    return new Response("<html><body>Bad gateway</body></html>", {
+      status: 200,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "x-request-id": "req_html_rejected",
+      },
+    });
+  });
+
+  await assert.rejects(
+    client.sendDictationChunk(operation(), Buffer.from("audio bytes"), {
+      contentType: "audio/mpeg",
+      fileName: "audio.mp3",
+    }),
+    (error) =>
+      error.code === "BACKEND_RESPONSE_INVALID" &&
+      error.toPublic().requestId === "req_plain_fallback"
+  );
+
+  responseKind = "html";
+  await assert.rejects(
+    () =>
+      client.sendDictationChunk(operation(), Buffer.from("audio bytes"), {
+        contentType: "audio/mpeg",
+        fileName: "audio.mp3",
+      }),
+    (error) =>
+      error.code === "BACKEND_RESPONSE_INVALID" &&
+      error.status === 200 &&
+      error.toPublic().requestId === "req_html_rejected"
+  );
 });
 
 test("invalid desktop token refreshes once and rebuilds multipart for one retry", async (t) => {
@@ -354,47 +546,28 @@ test("a second invalid-token response stops after the single authorized retry", 
   assert.equal(authManager.state.invalidations[0]?.code, "invalid_desktop_token");
 });
 
-test("non-STT 401 responses never refresh or invalidate the desktop session", async (t) => {
-  for (const requestCase of [
-    {
-      name: "desktop sync bootstrap",
-      path: "/api/v1/desktop/sync/bootstrap/",
-      run: (client) => client.getSyncBootstrap(),
-    },
-    {
-      name: "account usage wallet",
-      path: "/api/v1/account/usage",
-      run: (client) => client.getWallet({ force: true }),
-    },
-  ]) {
-    await t.test(requestCase.name, async (t) => {
-      const VoiceLabApiClient = loadClient(t);
-      const { client, authManager } = createClient(VoiceLabApiClient);
-      const calls = [];
-      installFetch(t, async (url, init) => {
-        calls.push({ url, init });
-        return jsonResponse(
-          {
-            error: { code: "invalid_desktop_token", message: "Not valid for this endpoint" },
-            request_id: "req_non_stt_401",
-          },
-          401
-        );
-      });
+test("undocumented desktop sync routes are disabled before network access", async (t) => {
+  const VoiceLabApiClient = loadClient(t);
+  const { client, authManager } = createClient(VoiceLabApiClient);
+  const calls = [];
+  installFetch(t, async (url, init) => {
+    calls.push({ url, init });
+    return jsonResponse(
+      {
+        error: { code: "invalid_desktop_token", message: "Not valid for this endpoint" },
+        request_id: "req_non_stt_401",
+      },
+      401
+    );
+  });
 
-      await assert.rejects(
-        () => requestCase.run(client),
-        (error) =>
-          error.code === "AUTH_EXPIRED" &&
-          error.status === 401 &&
-          error.toPublic().requestId === "req_non_stt_401"
-      );
-      assert.equal(calls.length, 1);
-      assert.equal(new URL(calls[0].url).pathname, requestCase.path);
-      assert.equal(authManager.state.refreshCalls, 0);
-      assert.equal(authManager.state.invalidateCalls, 0);
-    });
-  }
+  await assert.rejects(client.getSyncBootstrap(), {
+    code: "DESKTOP_ENDPOINT_UNAVAILABLE",
+    status: 501,
+  });
+  assert.equal(calls.length, 0);
+  assert.equal(authManager.state.refreshCalls, 0);
+  assert.equal(authManager.state.invalidateCalls, 0);
 });
 
 test("STT only refreshes for the exact invalid_desktop_token code", async (t) => {
@@ -501,6 +674,12 @@ test("desktop STT errors preserve server semantics, Retry-After, and nested fiel
       publicCode: "AUDIO_INVALID",
     },
     {
+      name: "language is unsupported",
+      status: 422,
+      serverCode: "unsupported_language",
+      publicCode: "AUDIO_LANGUAGE_UNSUPPORTED",
+    },
+    {
       name: "no speech was detected",
       status: 422,
       serverCode: "no_speech_detected",
@@ -587,9 +766,100 @@ test("network ambiguity is surfaced without an automatic resend", async (t) => {
   assert.equal(authManager.state.refreshCalls, 0);
 });
 
+test("desktop STT rejects non-canonical MIME types before upload", async (t) => {
+  const VoiceLabApiClient = loadClient(t);
+  const { client } = createClient(VoiceLabApiClient);
+  let fetchCalls = 0;
+  installFetch(t, async () => {
+    fetchCalls += 1;
+    return jsonResponse({});
+  });
+
+  await assert.rejects(
+    () =>
+      client.sendDictationChunk(operation(), Buffer.from("audio bytes"), {
+        contentType: "application/octet-stream",
+        fileName: "renamed.webm",
+      }),
+    (error) => error.code === "AUDIO_INVALID" && error.status === 415
+  );
+  assert.equal(fetchCalls, 0);
+});
+
+test("desktop STT uses canonical filenames for every supported MIME type", async (t) => {
+  const VoiceLabApiClient = loadClient(t);
+  const { client } = createClient(VoiceLabApiClient);
+  const requests = [];
+  installFetch(t, async (_url, init) => {
+    requests.push(init);
+    return jsonResponse({
+      text: "Test",
+      language: "uz",
+      duration_ms: 1_000,
+      usage: { used_seconds: 1, daily_limit_seconds: 60, remaining_seconds: 59 },
+      request_id: `req_mime_${requests.length}`,
+    });
+  });
+  const supported = [
+    ["audio/mpeg", "mp3"],
+    ["audio/wav", "wav"],
+    ["audio/mp4", "m4a"],
+    ["audio/aac", "aac"],
+    ["audio/ogg", "ogg"],
+    ["audio/webm", "webm"],
+    ["audio/flac", "flac"],
+    ["audio/aiff", "aiff"],
+    ["audio/amr", "amr"],
+    ["audio/3gpp", "3gp"],
+    ["audio/caf", "caf"],
+    ["audio/x-ms-wma", "wma"],
+  ];
+
+  for (const [contentType, extension] of supported) {
+    await client.sendDictationChunk(operation(), Buffer.from("audio bytes"), {
+      contentType,
+      fileName: "untrusted-name.bin",
+    });
+    const audio = requests.at(-1).body.get("audio");
+    assert.equal(audio.type, contentType);
+    assert.equal(audio.name, `audio.${extension}`);
+    assert.deepEqual([...requests.at(-1).body.keys()], ["audio", "language"]);
+  }
+  assert.equal(requests.length, supported.length);
+});
+
+test("desktop STT rejects incomplete success usage without resending", async (t) => {
+  const VoiceLabApiClient = loadClient(t);
+  const { client } = createClient(VoiceLabApiClient);
+  let fetchCalls = 0;
+  installFetch(t, async () => {
+    fetchCalls += 1;
+    return jsonResponse({
+      text: "Assalomu alaykum",
+      language: "uz",
+      duration_ms: 1_000,
+      usage: { used_seconds: 1, daily_limit_seconds: 60 },
+      request_id: "req_invalid_usage",
+    });
+  });
+
+  await assert.rejects(
+    () =>
+      client.sendDictationChunk(operation(), Buffer.from("audio bytes"), {
+        contentType: "audio/mpeg",
+        fileName: "audio.mp3",
+      }),
+    (error) =>
+      error.code === "BACKEND_RESPONSE_INVALID" &&
+      error.toPublic().requestId === "req_invalid_usage"
+  );
+  assert.equal(fetchCalls, 1);
+});
+
 test("cancelling desktop STT aborts the active upload without retrying", async (t) => {
   const VoiceLabApiClient = loadClient(t);
   const { client, authManager } = createClient(VoiceLabApiClient);
+  primeActiveSubscription(client, authManager);
   const externalAbort = new AbortController();
   let fetchCalls = 0;
   let markStarted;
@@ -631,7 +901,8 @@ test("cancelling desktop STT aborts the active upload without retrying", async (
 
 test("desktop STT enforces 64 MiB and absolute duration boundaries", async (t) => {
   const VoiceLabApiClient = loadClient(t);
-  const { client } = createClient(VoiceLabApiClient);
+  const { client, authManager } = createClient(VoiceLabApiClient);
+  primeActiveSubscription(client, authManager);
 
   const minimumDuration = await client.beginDictation({
     audioBuffer: Buffer.from("audio"),
@@ -687,5 +958,48 @@ test("desktop STT enforces 64 MiB and absolute duration boundaries", async (t) =
         language: "uz",
       }),
     (error) => error.code === "AUDIO_LIMIT_EXCEEDED" && error.status === 413
+  );
+});
+
+test("desktop STT requires an active entitlement and enforces its request limit", async (t) => {
+  const VoiceLabApiClient = loadClient(t);
+  const { client, authManager } = createClient(VoiceLabApiClient);
+  installFetch(t, async () =>
+    jsonResponse({
+      entitlement: {
+        active: false,
+        daily_seconds: 0,
+        max_request_seconds: 0,
+        cancel_at_period_end: false,
+      },
+      request_id: "req_inactive_plan",
+    })
+  );
+
+  await assert.rejects(
+    () =>
+      client.beginDictation({
+        audioBuffer: Buffer.from("audio"),
+        durationMs: 1_000,
+        language: "uz",
+      }),
+    (error) =>
+      error.code === "ENTITLEMENT_REQUIRED" &&
+      error.status === 402 &&
+      error.toPublic().requestId === "req_inactive_plan"
+  );
+
+  primeActiveSubscription(client, authManager, 120);
+  await assert.rejects(
+    () =>
+      client.beginDictation({
+        audioBuffer: Buffer.from("audio"),
+        durationMs: 120_001,
+        language: "uz",
+      }),
+    (error) =>
+      error.code === "AUDIO_LIMIT_EXCEEDED" &&
+      error.status === 413 &&
+      error.toPublic().max_duration_seconds === 120
   );
 });

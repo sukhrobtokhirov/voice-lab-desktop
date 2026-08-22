@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import AudioManager from "../helpers/audioManager";
 import logger from "../utils/logger";
 import { playStartCue, playStopCue } from "../utils/dictationCues";
-import { getSettings, useSettingsStore } from "../stores/settingsStore";
+import { getSettings } from "../stores/settingsStore";
 import { expandSnippets } from "../utils/snippets";
 import {
   getRecordingErrorTitle,
@@ -166,10 +166,6 @@ export const useAudioRecording = (toast, options = {}) => {
                     void signInWithSocial("google");
                   } else if (recovery === "billing") {
                     void window.electronAPI?.openVoiceLabBilling?.("dictate");
-                  } else if (recovery === "local") {
-                    const settings = useSettingsStore.getState();
-                    settings.setTranscriptionMode("local");
-                    settings.setUseLocalWhisper(true);
                   } else if (recovery === "retry") {
                     void audioManagerRef.current?.retryLastCloudTranscription();
                   }

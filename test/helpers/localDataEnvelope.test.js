@@ -11,7 +11,7 @@ const testCrypto = {
   decryptBuffer: (value) => Buffer.from(value).reverse(),
 };
 
-test("migrates a legacy plaintext database into a versioned OS-keyed envelope", () => {
+test("migrates a legacy plaintext database into a versioned authenticated envelope", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-envelope-"));
   const databasePath = path.join(dir, "transcriptions.db");
   const envelope = new LocalDataEnvelope(databasePath, testCrypto);
@@ -36,7 +36,7 @@ test("migrates a legacy plaintext database into a versioned OS-keyed envelope", 
   }
 });
 
-test("does not delete plaintext when OS-backed encryption is unavailable", () => {
+test("does not delete plaintext when authenticated encryption is unavailable", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-envelope-"));
   const databasePath = path.join(dir, "transcriptions.db");
   const envelope = new LocalDataEnvelope(databasePath, {

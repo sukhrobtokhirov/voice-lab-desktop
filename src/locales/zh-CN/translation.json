@@ -3090,13 +3090,41 @@
       "unavailable": "用量数据暂不可用。",
       "updated": "更新了{{time}}",
       "live": "下次听写后将显示用量。",
-      "manage": "管理账单"
+      "manage": "管理账单",
+      "activeDescription": "您的 Desktop 套餐已生效，可以使用。",
+      "inactiveDescription": "请在 VoiceLab 网站选择 Desktop 套餐。",
+      "active": "已生效",
+      "inactive": "未生效",
+      "activePlan": "当前套餐",
+      "noActivePlan": "没有生效的套餐",
+      "checking": "正在检查订阅…",
+      "remainingCompact": "今日剩余 {{duration}}",
+      "dailyCompact": "每天 {{duration}}",
+      "billingDisabled": "Desktop 套餐暂时不可用。",
+      "priceCompact": "{{price}} / {{interval}}",
+      "choosePlan": "选择套餐",
+      "dailyLimit": "每日限额",
+      "maxRecording": "最长录音",
+      "endsOn": "访问权限将于 {{date}} 结束",
+      "renewsOn": "将于 {{date}} 续订",
+      "dailyMinutes": "每天 {{count}} 分钟",
+      "maxRecordingSeconds": "每次录音最长 {{count}} 秒",
+      "refreshHint": "从付款页面返回后请刷新。",
+      "refreshing": "正在刷新…",
+      "refresh": "刷新",
+      "intervals": { "month": "月" }
     },
     "creditShortage": {
       "title": "需要更多人工智能学分",
       "description": "此录音没有足够的可用积分。添加学分或选择一个计划。",
       "required": "需要",
       "useLocal": "管理 VoiceLab 账单"
+    },
+    "subscriptionPrompt": {
+      "title": "需要 Desktop 套餐",
+      "description": "请在网站选择 VoiceLab Desktop 套餐，然后返回此处刷新访问权限。",
+      "limitTitle": "已达到每日限额",
+      "limitDescription": "您的 Desktop 套餐已生效，但今日听写限额已用完。请在 VoiceLab 管理套餐，或在限额重置后重试。"
     },
     "dictation": {
       "ready": "准备好"

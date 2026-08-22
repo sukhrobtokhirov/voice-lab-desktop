@@ -42,7 +42,7 @@ function readEncryptedStore(userData) {
   return JSON.parse(encryptedFixture.slice(4));
 }
 
-test("writes access and rotating refresh credentials only in the strict encrypted V2 envelope", () => {
+test("keeps access credentials in memory and persists only the rotating refresh session", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-token-"));
   try {
     const store = loadTokenStore(dir);
@@ -54,12 +54,61 @@ test("writes access and rotating refresh credentials only in the strict encrypte
       user: { id: "user-1", email: "desktop@example.com" },
     });
     const encoded = fs.readFileSync(path.join(dir, "auth-token.bin"));
+    assert.equal(fs.statSync(path.join(dir, "auth-token.bin")).mode & 0o777, 0o600);
     assert.equal(encoded.subarray(0, MAGIC.length).equals(MAGIC), true);
     assert.doesNotMatch(encoded.toString("utf8"), /^access$/);
     const decrypted = JSON.parse(encoded.subarray(MAGIC.length).toString("utf8").slice(4));
-    assert.equal(decrypted.session.accessToken, "access");
-    assert.equal(decrypted.session.kind, "desktop-go-v2");
+    assert.equal(store.getSession().accessToken, "access");
+    assert.equal(decrypted.session.accessToken, undefined);
+    assert.equal(decrypted.session.accessExpiresAt, undefined);
     assert.equal(decrypted.session.refreshToken, "rotating-refresh-token");
+    assert.deepEqual(Object.keys(decrypted.session), ["refreshToken"]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("tightens permissions on an existing encrypted credential store", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-token-"));
+  const file = path.join(dir, "auth-token.bin");
+  try {
+    const fixture = {
+      version: 2,
+      installationId: "550e8400-e29b-41d4-a716-446655440000",
+      session: null,
+    };
+    fs.writeFileSync(
+      file,
+      Buffer.concat([MAGIC, Buffer.from(`ENC:${JSON.stringify(fixture)}`)]),
+      { mode: 0o644 }
+    );
+    fs.chmodSync(file, 0o644);
+
+    loadTokenStore(dir).getInstallationId();
+    assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("quarantines an unreadable legacy credential blob and starts signed out", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-token-"));
+  const file = path.join(dir, "auth-token.bin");
+  const legacy = Buffer.from("opaque-legacy-vault-ciphertext");
+  try {
+    fs.writeFileSync(file, legacy, { mode: 0o644 });
+    const store = loadTokenStore(dir);
+
+    assert.equal(store.getSession(), null);
+    const id = store.getInstallationId();
+    assert.match(id, CANONICAL_UUID_PATTERN);
+    const quarantined = fs
+      .readdirSync(dir)
+      .filter((name) => name.startsWith("auth-token.bin.unreadable-"));
+    assert.equal(quarantined.length, 1);
+    assert.deepEqual(fs.readFileSync(path.join(dir, quarantined[0])), legacy);
+    assert.equal(fs.statSync(path.join(dir, quarantined[0])).mode & 0o777, 0o600);
+    assert.equal(fs.existsSync(file), true);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -86,8 +135,36 @@ test("creates and persists one canonical lowercase installation UUID before any 
   }
 });
 
+test("keeps PKCE verifier and state process-memory only", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-token-"));
+  try {
+    const store = loadTokenStore(dir);
+    store.getInstallationId();
+    store.savePending({
+      codeVerifier: "v".repeat(43),
+      state: "s".repeat(43),
+      redirectUri: "http://127.0.0.1:52753/callback",
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      authorizationRequestId: `dau_${"r".repeat(43)}`,
+      authorizationUrl: `https://voicelab.uz/app/sign-in?desktop_auth_id=dau_${"r".repeat(43)}`,
+    });
+
+    assert.equal(store.getPending().state, "s".repeat(43));
+    const persisted = readEncryptedStore(dir);
+    assert.equal(persisted.pending, undefined);
+    assert.equal(loadTokenStore(dir).getPending(), null);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("canonicalizes and persists uppercase or invalid installation identifiers", () => {
-  for (const existingId of ["550E8400-E29B-41D4-A716-446655440000", "installation-1"]) {
+  for (const existingId of [
+    "550E8400-E29B-41D4-A716-446655440000",
+    "installation-1",
+    "00000000-0000-0000-0000-000000000000",
+  ]) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-token-"));
     try {
       const fixture = {
@@ -108,14 +185,16 @@ test("canonicalizes and persists uppercase or invalid installation identifiers",
       assert.equal(canonicalId, canonicalId.toLowerCase());
       assert.equal(readEncryptedStore(dir).installationId, canonicalId);
       assert.equal(loadTokenStore(dir).getInstallationId(), canonicalId);
-      if (existingId === "installation-1") assert.notEqual(canonicalId, existingId);
+      if (existingId !== "550E8400-E29B-41D4-A716-446655440000") {
+        assert.notEqual(canonicalId, existingId);
+      }
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   }
 });
 
-test("migrates one legacy encrypted store once and records the migration", () => {
+test("drops legacy access-only credentials during encrypted store migration", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-token-"));
   try {
     fs.writeFileSync(
@@ -124,7 +203,7 @@ test("migrates one legacy encrypted store once and records the migration", () =>
       { mode: 0o600 }
     );
     const store = loadTokenStore(dir);
-    assert.equal(store.getSession().accessToken, "legacy-access");
+    assert.equal(store.getSession(), null);
     assert.equal(fs.existsSync(path.join(dir, ".auth-token-legacy-migrated")), true);
     assert.equal(
       fs.readFileSync(path.join(dir, "auth-token.bin")).subarray(0, MAGIC.length).equals(MAGIC),
@@ -135,7 +214,7 @@ test("migrates one legacy encrypted store once and records the migration", () =>
   }
 });
 
-test("restores encrypted refresh and pending PKCE state across restart", () => {
+test("migrates persisted access and PKCE state to refresh-only restart state", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-token-"));
   try {
     const existing = {
@@ -166,11 +245,13 @@ test("restores encrypted refresh and pending PKCE state across restart", () => {
     );
 
     const store = loadTokenStore(dir);
-    assert.equal(store.getSession().accessToken, "existing-access");
+    assert.equal(store.getSession().accessToken, "");
     assert.equal(store.getSession().kind, "desktop-go-v2");
     assert.equal(store.getSession().refreshToken, "legacy-refresh-secret");
-    assert.equal(store.getPending().authorizationRequestId, "3b1715a0-75c2-4fd4-bdd8-a7bfb42a9e65");
-    assert.equal(store.getPending().authorizationUrl, existing.pending.authorizationUrl);
+    assert.equal(store.getPending(), null);
+    const cleaned = readEncryptedStore(dir);
+    assert.deepEqual(cleaned.session, { refreshToken: "legacy-refresh-secret" });
+    assert.equal(cleaned.pending, undefined);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

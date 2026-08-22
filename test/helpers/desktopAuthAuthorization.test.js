@@ -6,16 +6,26 @@ const INSTALLATION_ID = "0191f85b-7b5d-7f2a-8d71-2f5ea87cdf77";
 const REQUEST_ID = `dau_${"r".repeat(43)}`;
 const CALLBACK_CODE = `dac_${"c".repeat(43)}`;
 
-function loopbackCallback(pending, { code = CALLBACK_CODE, state = pending.state, version } = {}) {
+function loopbackCallback(pending, { code = CALLBACK_CODE, state = pending.state } = {}) {
   const url = new URL(pending.redirectUri);
-  if (version != null) url.searchParams.set("v", version);
   url.searchParams.set("code", code);
   url.searchParams.set("state", state);
   return url.toString();
 }
 
 function jsonResponse(status, body) {
-  return new Response(body == null ? null : JSON.stringify(body), { status });
+  let payload = body;
+  if (body && typeof body === "object") {
+    payload = { request_id: "req_test_auth", ...body };
+    if (payload.authorization_request_id) payload.expires_in ??= 600;
+    if (payload.access_token) {
+      payload.token_type ??= "Bearer";
+      payload.expires_in ??= 900;
+      payload.refresh_expires_in ??= 3600;
+      payload.session_id ??= "dss_test_auth";
+    }
+  }
+  return new Response(payload == null ? null : JSON.stringify(payload), { status });
 }
 
 function loadDesktopAuthManager(initialSession = null) {
@@ -209,6 +219,45 @@ test("surfaces the exact sanitized backend failure alongside its stable error co
   });
 });
 
+test("preserves backend code, safe field errors, request id, and retry timing", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const { DesktopAuthManager } = loadDesktopAuthManager();
+  const manager = managerFrom(DesktopAuthManager);
+  global.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        message: "Check the highlighted fields.\n",
+        error: {
+          code: "validation_error",
+          fields: { platform: "Use darwin, windows, or linux.\u0000" },
+        },
+        request_id: "req_contract_422",
+      }),
+      { status: 422, headers: { "Retry-After": "7" } }
+    );
+
+  await assert.rejects(manager.startAuthorization(), (error) => {
+    assert.equal(error.code, "validation_error");
+    assert.equal(error.message, "Check the highlighted fields.");
+    assert.equal(error.requestId, "req_contract_422");
+    assert.deepEqual(error.fields, { platform: "Use darwin, windows, or linux." });
+    assert.equal(error.retryAfterSeconds, 7);
+    return true;
+  });
+  assert.deepEqual(manager.getPublicStatus(), {
+    status: "error",
+    user: null,
+    errorCode: "validation_error",
+    errorMessage: "Check the highlighted fields.",
+    errorRequestId: "req_contract_422",
+    errorFields: { platform: "Use darwin, windows, or linux." },
+    retryAfterSeconds: 7,
+  });
+});
+
 test("rejects untrusted, unbound, or extra authorization URL values", async (t) => {
   const originalFetch = global.fetch;
   t.after(() => {
@@ -282,7 +331,7 @@ test("loopback callback exchanges code and PKCE verifier without browser cookies
   await manager.startAuthorization();
   const pending = getPending();
 
-  const status = await manager.handleCallback(loopbackCallback(pending, { version: "1" }));
+  const status = await manager.handleCallback(loopbackCallback(pending));
 
   assert.equal(status.status, "authenticated");
   const exchange = calls[1];
@@ -346,13 +395,42 @@ test("loopback listener receives the browser redirect in the creating process", 
   assert.equal(getPending(), null);
 });
 
-test("expired callbacks cannot exchange and state mismatch waits for an explicit reopen", async (t) => {
+test("loopback listener closes and destroys temporary state after its first invalid callback", async (t) => {
   const originalFetch = global.fetch;
   t.after(() => {
     global.fetch = originalFetch;
   });
-  const { DesktopAuthManager, expirePending, getOpenCount, getOpenedUrl, getPending } =
-    loadDesktopAuthManager();
+  const { DesktopAuthManager, getPending } = loadDesktopAuthManager();
+  const manager = managerFrom(DesktopAuthManager);
+  let exchanges = 0;
+  global.fetch = async (url) => {
+    if (url.endsWith("/authorizations")) {
+      return jsonResponse(201, {
+        authorization_request_id: REQUEST_ID,
+        authorization_url: `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`,
+      });
+    }
+    exchanges += 1;
+    throw new Error("must not exchange an invalid callback");
+  };
+
+  await manager.startAuthorization();
+  const callback = loopbackCallback(getPending(), { state: "x".repeat(43) });
+  const response = await originalFetch(callback);
+
+  assert.equal(response.status, 400);
+  assert.equal(manager.callbackServer, null);
+  assert.equal(getPending(), null);
+  assert.equal(exchanges, 0);
+  await assert.rejects(originalFetch(callback));
+});
+
+test("state mismatch is terminal and expired callbacks cannot exchange", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const { DesktopAuthManager, expirePending, getPending } = loadDesktopAuthManager();
   const manager = managerFrom(DesktopAuthManager);
   let exchanges = 0;
   global.fetch = async (url) => {
@@ -367,24 +445,19 @@ test("expired callbacks cannot exchange and state mismatch waits for an explicit
   };
 
   await manager.startAuthorization();
-  const validState = getPending().state;
-  const recovered = await manager.handleCallback(
-    loopbackCallback(getPending(), { state: "x".repeat(43), version: "1" })
+  await assert.rejects(
+    manager.handleCallback(loopbackCallback(getPending(), { state: "x".repeat(43) })),
+    (error) => error.code === "AUTH_STATE_MISMATCH"
   );
-  assert.equal(recovered.status, "waiting-for-browser");
-  assert.equal(recovered.errorCode, "AUTH_STATE_MISMATCH");
-  assert.equal(recovered.errorMessage, "Authentication state mismatch");
-  assert.equal(getOpenCount(), 1);
-  assert.equal(getOpenedUrl(), `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`);
-  assert.equal(getPending().state, validState);
-  const reopened = await manager.reopenAuthorization();
-  assert.equal(reopened.status, "waiting-for-browser");
-  assert.equal(reopened.errorCode, null);
-  assert.equal(getOpenCount(), 2);
+  assert.equal(manager.getPublicStatus().status, "error");
+  assert.equal(manager.getPublicStatus().errorCode, "AUTH_STATE_MISMATCH");
+  assert.equal(getPending(), null);
+  assert.equal(exchanges, 0);
+
+  await manager.startAuthorization();
+  const expired = getPending();
   expirePending();
-  const status = await manager.handleCallback(
-    loopbackCallback({ ...getPending(), state: validState }, { version: "1" })
-  );
+  const status = await manager.handleCallback(loopbackCallback(expired));
   assert.equal(status.status, "expired");
   assert.equal(exchanges, 0);
   assert.equal(getPending(), null);
@@ -419,7 +492,7 @@ test("duplicate callbacks exchange exactly once while the first exchange is acti
     });
   };
   await manager.startAuthorization();
-  const callback = loopbackCallback(getPending(), { version: "1" });
+  const callback = loopbackCallback(getPending());
 
   const first = manager.handleCallback(callback);
   await new Promise((resolve) => setImmediate(resolve));
@@ -430,7 +503,7 @@ test("duplicate callbacks exchange exactly once while the first exchange is acti
   assert.equal((await first).status, "authenticated");
 });
 
-test("callback parser rejects duplicate, extra, and wrong-version parameters", () => {
+test("callback parser accepts only one code and state parameter", () => {
   const { DesktopAuthManager } = loadDesktopAuthManager();
   const manager = managerFrom(DesktopAuthManager);
   const state = "s".repeat(43);
@@ -454,7 +527,7 @@ test("callback parser rejects duplicate, extra, and wrong-version parameters", (
   }
 });
 
-test("starting authorization preserves the session and restart discards the stale loopback request", async (t) => {
+test("restart discards loopback state and rotates the persisted refresh credential", async (t) => {
   const originalFetch = global.fetch;
   t.after(() => {
     global.fetch = originalFetch;
@@ -479,6 +552,13 @@ test("starting authorization preserves the session and restart discards the stal
         authorization_url: `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`,
       });
     }
+    if (url.endsWith("/desktop/token")) {
+      return jsonResponse(200, {
+        access_token: "restarted-access-token-abcdefghijklmnopqrstuvwxyz",
+        refresh_token: "restarted-refresh-token-abcdefghijklmnopqrstuvwxyz",
+        session_id: "existing-session",
+      });
+    }
     throw new Error(`Unexpected request: ${url}`);
   };
 
@@ -490,7 +570,11 @@ test("starting authorization preserves the session and restart discards the stal
   const restarted = managerFrom(DesktopAuthManager);
   const status = await restarted.initialize();
   assert.equal(status.status, "authenticated");
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
+  assert.equal(
+    getStoredSession().refreshToken,
+    "restarted-refresh-token-abcdefghijklmnopqrstuvwxyz"
+  );
   assert.equal(getPending(), null);
 });
 

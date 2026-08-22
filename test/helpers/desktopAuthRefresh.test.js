@@ -6,7 +6,18 @@ const INSTALLATION_ID = "0191f85b-7b5d-7f2a-8d71-2f5ea87cdf77";
 const REQUEST_ID = `dau_${"r".repeat(43)}`;
 
 function jsonResponse(body, status = 200) {
-  return new Response(body == null ? null : JSON.stringify(body), { status });
+  let payload = body;
+  if (body && typeof body === "object") {
+    payload = { request_id: "req_test_refresh", ...body };
+    if (payload.authorization_request_id) payload.expires_in ??= 600;
+    if (payload.access_token) {
+      payload.token_type ??= "Bearer";
+      payload.expires_in ??= 900;
+      payload.refresh_expires_in ??= 3600;
+      payload.session_id ??= "dss_test_refresh";
+    }
+  }
+  return new Response(payload == null ? null : JSON.stringify(payload), { status });
 }
 
 function loadDesktopAuthManager(initialSession) {
@@ -76,7 +87,7 @@ function initialSession() {
   };
 }
 
-test("refresh uses the token grant, rotates refresh token, and reuses idempotency after retry", async (t) => {
+test("refresh sends only the exact token grant and atomically rotates the credential", async (t) => {
   const originalFetch = global.fetch;
   t.after(() => {
     global.fetch = originalFetch;
@@ -87,7 +98,6 @@ test("refresh uses the token grant, rotates refresh token, and reuses idempotenc
   const requests = [];
   global.fetch = async (url, init) => {
     requests.push({ url, init });
-    if (requests.length === 1) throw new Error("connection reset");
     return jsonResponse({
       access_token: "new-access-token-abcdefghijklmnopqrstuvwxyz",
       refresh_token: `refresh-new-${"n".repeat(40)}`,
@@ -98,20 +108,12 @@ test("refresh uses the token grant, rotates refresh token, and reuses idempotenc
     });
   };
 
-  await assert.rejects(
-    manager.refreshSession({ force: true, validateUser: false }),
-    /connection reset/
-  );
-  await manager.refreshSession({ force: true, validateUser: false });
+  await manager.refreshSession({ force: true });
 
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 1);
   assert.equal(requests[0].url, "https://api.voicelab.uz/api/v2/auth/desktop/token");
-  assert.equal(
-    requests[0].init.headers["Idempotency-Key"],
-    requests[1].init.headers["Idempotency-Key"]
-  );
-  assert.match(requests[0].init.headers["Idempotency-Key"], /^desktop-refresh-[A-Za-z0-9_-]{43}$/);
-  const body = JSON.parse(requests[1].init.body);
+  assert.equal(requests[0].init.headers["Idempotency-Key"], undefined);
+  const body = JSON.parse(requests[0].init.body);
   assert.equal(body.grant_type, "refresh_token");
   assert.equal(body.client_id, "voicelab-desktop");
   assert.equal(body.refresh_token, session.refreshToken);
@@ -123,6 +125,22 @@ test("refresh uses the token grant, rotates refresh token, and reuses idempotenc
     "refresh_token",
   ]);
   assert.equal(getSession().refreshToken, `refresh-new-${"n".repeat(40)}`);
+});
+
+test("ambiguous refresh transport failure clears the token to prevent rotated-token reuse", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const { DesktopAuthManager, getSession } = loadDesktopAuthManager(initialSession());
+  const manager = managerFrom(DesktopAuthManager);
+  global.fetch = async () => {
+    throw new Error("connection reset");
+  };
+
+  await assert.rejects(manager.refreshSession({ force: true }), /connection reset/);
+  assert.equal(getSession(), null);
+  assert.equal(manager.getPublicStatus().status, "signed-out");
 });
 
 test("refresh rejects a response that does not rotate the refresh credential", async (t) => {
@@ -141,10 +159,38 @@ test("refresh rejects a response that does not rotate the refresh credential", a
     });
 
   await assert.rejects(
-    manager.refreshSession({ force: true, validateUser: false }),
+    manager.refreshSession({ force: true }),
     (error) => error.code === "AUTH_REFRESH_ROTATION_REQUIRED"
   );
-  assert.equal(getSession().refreshToken, session.refreshToken);
+  assert.equal(getSession(), null);
+});
+
+test("refresh fails closed on a malformed token response", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const { DesktopAuthManager, getSession } = loadDesktopAuthManager(initialSession());
+  const manager = managerFrom(DesktopAuthManager);
+  global.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        access_token: "new-access-token-abcdefghijklmnopqrstuvwxyz",
+        refresh_token: `refresh-new-${"n".repeat(40)}`,
+        token_type: "bearer",
+        expires_in: 900,
+        refresh_expires_in: 3600,
+        session_id: "dss_invalid_shape",
+        request_id: "req_invalid_shape",
+      }),
+      { status: 200 }
+    );
+
+  await assert.rejects(
+    manager.refreshSession({ force: true }),
+    (error) => error.code === "AUTH_TOKEN_RESPONSE_INVALID"
+  );
+  assert.equal(getSession(), null);
 });
 
 test("logout always clears local credentials and reports failed network revocation", async (t) => {

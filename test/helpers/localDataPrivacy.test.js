@@ -15,9 +15,6 @@ Module._load = function patchedLoad(request, parent, isMain) {
         getPath: (name) =>
           name === "temp" ? os.tmpdir() : path.join(os.tmpdir(), "voicelab-privacy-test"),
       },
-      safeStorage: {
-        isEncryptionAvailable: () => false,
-      },
     };
   }
   return originalLoad.call(this, request, parent, isMain);

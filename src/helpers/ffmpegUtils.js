@@ -429,10 +429,18 @@ const CLOUD_STT_FORMATS = {
   wav: { ext: "wav", contentType: "audio/wav" },
   mp3: { ext: "mp3", contentType: "audio/mpeg" },
   mpeg: { ext: "mp3", contentType: "audio/mpeg" },
+  aac: { ext: "aac", contentType: "audio/aac" },
   ogg: { ext: "ogg", contentType: "audio/ogg" },
   oga: { ext: "ogg", contentType: "audio/ogg" },
+  webm: { ext: "webm", contentType: "audio/webm" },
+  flac: { ext: "flac", contentType: "audio/flac" },
   m4a: { ext: "m4a", contentType: "audio/mp4" },
   mp4: { ext: "m4a", contentType: "audio/mp4" },
+  aiff: { ext: "aiff", contentType: "audio/aiff" },
+  amr: { ext: "amr", contentType: "audio/amr" },
+  "3gp": { ext: "3gp", contentType: "audio/3gpp" },
+  caf: { ext: "caf", contentType: "audio/caf" },
+  wma: { ext: "wma", contentType: "audio/x-ms-wma" },
 };
 
 function detectAudioContainer(buffer) {
@@ -441,22 +449,39 @@ function detectAudioContainer(buffer) {
   if (buffer[0] === 0x4f && buffer[1] === 0x67 && buffer[2] === 0x67 && buffer[3] === 0x53) {
     return "ogg";
   }
+  if (buffer.subarray(0, 6).toString("ascii") === "#!AMR\n") return "amr";
+  if (buffer.subarray(0, 9).toString("ascii") === "#!AMR-WB\n") return "amr";
+  if (buffer[0] === 0xff && (buffer[1] & 0xf6) === 0xf0) return "aac";
   if (buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33) return "mp3";
   if (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0) return "mp3";
   if (buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3) {
     return "webm";
   }
-  // ISO BMFF (m4a/mp4): ....ftyp
-  if (buffer.toString("ascii", 4, 8) === "ftyp") return "m4a";
+  // ISO BMFF: 3GP uses a 3gp* major brand; other accepted audio brands use audio/mp4.
+  if (buffer.toString("ascii", 4, 8) === "ftyp") {
+    return buffer.toString("ascii", 8, 11).toLowerCase() === "3gp" ? "3gp" : "m4a";
+  }
   if (buffer[0] === 0x66 && buffer[1] === 0x4c && buffer[2] === 0x61 && buffer[3] === 0x43) {
     return "flac";
+  }
+  if (
+    buffer.toString("ascii", 0, 4) === "FORM" &&
+    ["AIFF", "AIFC"].includes(buffer.toString("ascii", 8, 12))
+  ) {
+    return "aiff";
+  }
+  if (buffer.toString("ascii", 0, 4) === "caff") return "caf";
+  const asfHeader = Buffer.from("3026b2758e66cf11a6d900aa0062ce6c", "hex");
+  if (buffer.length >= asfHeader.length && buffer.subarray(0, asfHeader.length).equals(asfHeader)) {
+    return "wma";
   }
   return null;
 }
 
 /**
  * Normalize audio for VoiceLab Cloud STT uploads.
- * Passthrough for wav/mp3/ogg/m4a; otherwise FFmpeg → 16 kHz mono WAV.
+ * Passthrough for every container supported by the desktop endpoint; otherwise
+ * FFmpeg converts the captured recording to a canonical 16 kHz mono WAV.
  */
 async function prepareCloudSttAudio(input, options = {}) {
   const hintExt = (options.hintExt || "").replace(/^\./, "").toLowerCase();
@@ -485,14 +510,21 @@ async function prepareCloudSttAudio(input, options = {}) {
   }
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-stt-"));
+  try {
+    fs.chmodSync(tempDir, 0o700);
+  } catch {
+    // Windows ACLs are authoritative; chmod may be unsupported.
+  }
   const inExt = detected === "webm" ? "webm" : detected === "flac" ? "flac" : hintExt || "webm";
   tempInputPath = inputPath || path.join(tempDir, `input.${inExt}`);
   const tempWavPath = path.join(tempDir, "output.wav");
 
   try {
     if (!inputPath) {
-      fs.writeFileSync(tempInputPath, buffer);
+      fs.writeFileSync(tempInputPath, buffer, { mode: 0o600 });
     }
+    const outputFd = fs.openSync(tempWavPath, "wx", 0o600);
+    fs.closeSync(outputFd);
     await convertToWav(tempInputPath, tempWavPath, { sampleRate: 16000, channels: 1 });
     const wavBuffer = fs.readFileSync(tempWavPath);
     return {

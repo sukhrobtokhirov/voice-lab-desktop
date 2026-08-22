@@ -40,3 +40,32 @@ test("all locally detected non-speech is rejected before cloud upload", () => {
       processAudio.indexOf("this.processWithVoiceLabCloud")
   );
 });
+
+test("recoverable desktop STT failures retain audio, while final success releases it", () => {
+  const source = read("src/helpers/audioManager.js");
+  const processAudio = source.slice(
+    source.indexOf("async processAudio(audioBlob"),
+    source.indexOf("async processWithLocalWhisper")
+  );
+  const saveTranscription = source.slice(
+    source.indexOf("async saveTranscription(text"),
+    source.indexOf("async saveFailedTranscription")
+  );
+
+  assert.doesNotMatch(processAudio, /isAuthenticationFailure[\s\S]*lastAudioBlob = null/);
+  assert.match(processAudio, /if \(this\.lastAudioBlob\) \{\s*this\.lastRetryMetadata = metadata/);
+  assert.match(saveTranscription, /provider !== VOICELAB_PROVIDER/);
+  assert.match(saveTranscription, /finally[\s\S]*provider === VOICELAB_PROVIDER/);
+  assert.match(saveTranscription, /this\.lastAudioBlob === capturedAudioBlob/);
+  assert.match(source, /if \(this\.lastAudioBlob && this\.lastRetryMetadata\)/);
+});
+
+test("desktop recovery UI has no local transcription fallback", () => {
+  const source = read("src/utils/recordingErrors.ts");
+  const hook = read("src/hooks/useAudioRecording.js");
+
+  assert.doesNotMatch(source, /RecordingRecoveryAction = [^\n]*"local"/);
+  assert.doesNotMatch(source, /VOICELAB_STREAMING_DISABLED/);
+  assert.doesNotMatch(source, /Use local|Lokal rejim|Локальный режим/);
+  assert.doesNotMatch(hook, /recovery === "local"|setUseLocalWhisper/);
+});

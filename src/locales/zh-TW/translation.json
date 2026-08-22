@@ -3090,13 +3090,41 @@
       "unavailable": "用量資料尚不可用。",
       "updated": "更新了{{time}}",
       "live": "下次聽寫後將顯示用量。",
-      "manage": "管理帳單"
+      "manage": "管理帳單",
+      "activeDescription": "您的 Desktop 方案已生效，可以使用。",
+      "inactiveDescription": "請在 VoiceLab 網站選擇 Desktop 方案。",
+      "active": "已生效",
+      "inactive": "未生效",
+      "activePlan": "目前方案",
+      "noActivePlan": "沒有生效的方案",
+      "checking": "正在檢查訂閱…",
+      "remainingCompact": "今日剩餘 {{duration}}",
+      "dailyCompact": "每天 {{duration}}",
+      "billingDisabled": "Desktop 方案暫時無法使用。",
+      "priceCompact": "{{price}} / {{interval}}",
+      "choosePlan": "選擇方案",
+      "dailyLimit": "每日上限",
+      "maxRecording": "最長錄音",
+      "endsOn": "存取權將於 {{date}} 結束",
+      "renewsOn": "將於 {{date}} 續訂",
+      "dailyMinutes": "每天 {{count}} 分鐘",
+      "maxRecordingSeconds": "每次錄音最長 {{count}} 秒",
+      "refreshHint": "從付款頁面返回後請重新整理。",
+      "refreshing": "正在重新整理…",
+      "refresh": "重新整理",
+      "intervals": { "month": "月" }
     },
     "creditShortage": {
       "title": "需要更多人工智慧學分",
       "description": "此錄音沒有足夠的可用積分。新增學分或選擇一個計劃。",
       "required": "需要",
       "useLocal": "管理 VoiceLab 帳單"
+    },
+    "subscriptionPrompt": {
+      "title": "需要 Desktop 方案",
+      "description": "請在網站選擇 VoiceLab Desktop 方案，然後返回此處重新整理存取權。",
+      "limitTitle": "已達每日上限",
+      "limitDescription": "您的 Desktop 方案已生效，但今日聽寫額度已用完。請在 VoiceLab 管理方案，或在額度重設後重試。"
     },
     "dictation": {
       "ready": "準備好"

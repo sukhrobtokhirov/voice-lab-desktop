@@ -6,10 +6,12 @@ const path = require("path");
 const authLogger = require("./authLogger");
 const secretCrypto = require("./secretCrypto");
 
+secretCrypto.configure?.(app.getPath("userData"));
+
 const STORE_VERSION = 2;
 const STORE_MAGIC = Buffer.from("VLAB-AUTH\0V2\0", "utf8");
-const CANONICAL_UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const CANONICAL_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 const storeFile = () => path.join(app.getPath("userData"), "auth-token.bin");
 const legacyStoreFile = () => path.join(app.getPath("userData"), "auth-token.json");
 const legacyMigrationSentinel = () =>
@@ -17,11 +19,14 @@ const legacyMigrationSentinel = () =>
 
 let cachedStore = null;
 let installationIdPersisted = false;
+let runtimeHydrated = false;
+let runtimeSession = null;
+let runtimePending = null;
 
 function canonicalInstallationId(value) {
   if (typeof value !== "string") return null;
   const normalized = value.trim().toLowerCase();
-  return CANONICAL_UUID_PATTERN.test(normalized) ? normalized : null;
+  return CANONICAL_UUID_PATTERN.test(normalized) && normalized !== ZERO_UUID ? normalized : null;
 }
 
 function createInstallationId() {
@@ -33,7 +38,6 @@ function emptyStore() {
     version: STORE_VERSION,
     installationId: createInstallationId(),
     session: null,
-    pending: null,
   };
 }
 
@@ -41,7 +45,8 @@ function normalizeSession(session) {
   if (!session || typeof session !== "object") return null;
   const accessToken = session.accessToken || session.access || session.access_token || "";
   const refreshToken = session.refreshToken || session.refresh || session.refresh_token || "";
-  if (!accessToken) return null;
+  const kind = session.kind === "desktop-go-v2" || refreshToken ? "desktop-go-v2" : "legacy";
+  if (kind === "desktop-go-v2" ? !refreshToken : !accessToken) return null;
   return {
     accessToken,
     accessExpiresAt: Number(session.accessExpiresAt) || Date.now() + 5 * 60 * 1000,
@@ -49,8 +54,26 @@ function normalizeSession(session) {
     refreshExpiresAt: Number(session.refreshExpiresAt) || 0,
     sessionId: session.sessionId || session.session_id || "",
     user: session.user && typeof session.user === "object" ? session.user : null,
-    kind: session.kind === "desktop-go-v2" ? "desktop-go-v2" : "legacy",
+    kind,
   };
+}
+
+function persistentSession(session) {
+  const normalized = normalizeSession(session);
+  if (!normalized || normalized.kind !== "desktop-go-v2") return null;
+  return {
+    refreshToken: normalized.refreshToken,
+  };
+}
+
+function hydrateRuntime(store) {
+  if (runtimeHydrated) return;
+  runtimeHydrated = true;
+  const persisted = normalizeSession(store?.session);
+  runtimeSession = persisted ? { ...persisted, accessToken: "", accessExpiresAt: 0 } : null;
+  // Authorization requests are process-bound. PKCE verifier/state and the
+  // loopback listener never survive a restart.
+  runtimePending = null;
 }
 
 function normalizePending(pending) {
@@ -85,8 +108,7 @@ function parseStore(raw, { allowLegacy = false } = {}) {
     return {
       version: STORE_VERSION,
       installationId: String(parsed.installationId),
-      session: normalizeSession(parsed.session),
-      pending: normalizePending(parsed.pending),
+      session: persistentSession(parsed.session),
     };
   }
 
@@ -94,24 +116,70 @@ function parseStore(raw, { allowLegacy = false } = {}) {
     throw new Error("Unsupported secure token store version");
   }
   const legacySession = normalizeSession(parsed);
-  return { ...emptyStore(), session: legacySession };
+  return { ...emptyStore(), session: persistentSession(legacySession) };
+}
+
+function tightenCredentialFilePermissions(file) {
+  try {
+    fs.chmodSync(file, 0o600);
+  } catch {}
+}
+
+function quarantineUnreadableStore(file) {
+  if (!fs.existsSync(file)) return null;
+  tightenCredentialFilePermissions(file);
+  const quarantine = `${file}.unreadable-${Date.now()}-${crypto
+    .randomBytes(4)
+    .toString("hex")}`;
+  try {
+    fs.renameSync(file, quarantine);
+    tightenCredentialFilePermissions(quarantine);
+    return quarantine;
+  } catch {
+    // Never delete or overwrite an unreadable legacy/corrupt credential blob.
+    return null;
+  }
 }
 
 function markLegacyMigrationComplete() {
-  if (fs.existsSync(legacyMigrationSentinel())) return;
+  if (fs.existsSync(legacyMigrationSentinel())) {
+    tightenCredentialFilePermissions(legacyMigrationSentinel());
+    return;
+  }
   fs.writeFileSync(legacyMigrationSentinel(), String(Date.now()), {
     mode: 0o600,
     flag: "wx",
   });
 }
 
+function containsRuntimeOnlyAuthState(raw) {
+  try {
+    const parsed = JSON.parse(raw);
+    const session = parsed?.session;
+    return Boolean(
+      parsed?.pending ||
+      session?.accessToken ||
+      session?.access ||
+      session?.access_token ||
+      session?.accessExpiresAt ||
+      (session && Object.keys(session).some((key) => key !== "refreshToken"))
+    );
+  } catch {
+    return false;
+  }
+}
+
 function readStore() {
-  if (cachedStore) return cachedStore;
+  if (cachedStore) {
+    hydrateRuntime(cachedStore);
+    return cachedStore;
+  }
   const file = storeFile();
   if (!fs.existsSync(file)) {
     const legacyFile = legacyStoreFile();
     if (fs.existsSync(legacyFile) && !fs.existsSync(legacyMigrationSentinel())) {
       try {
+        tightenCredentialFilePermissions(legacyFile);
         const legacy = parseStore(fs.readFileSync(legacyFile, "utf8"), { allowLegacy: true });
         writeStore(legacy);
         markLegacyMigrationComplete();
@@ -124,17 +192,22 @@ function readStore() {
       }
     }
     installationIdPersisted = false;
-    return (cachedStore = emptyStore());
+    cachedStore = emptyStore();
+    hydrateRuntime(cachedStore);
+    return cachedStore;
   }
   if (!secretCrypto.isAvailable()) {
     authLogger.error("secure_storage_unavailable", {
       errorCode: "AUTH_SECURE_STORAGE_UNAVAILABLE",
     });
     installationIdPersisted = false;
-    return (cachedStore = emptyStore());
+    cachedStore = emptyStore();
+    hydrateRuntime(cachedStore);
+    return cachedStore;
   }
 
   try {
+    tightenCredentialFilePermissions(file);
     const encoded = fs.readFileSync(file);
     const hasMagic =
       encoded.length > STORE_MAGIC.length &&
@@ -145,8 +218,10 @@ function readStore() {
     const encrypted = hasMagic ? encoded.subarray(STORE_MAGIC.length) : encoded;
     const decrypted = secretCrypto.decrypt(encrypted);
     const raw = decrypted.value;
-    const needsReencrypt = !hasMagic || decrypted.needsReencrypt;
+    const needsReencrypt =
+      !hasMagic || decrypted.needsReencrypt || containsRuntimeOnlyAuthState(raw);
     cachedStore = parseStore(raw, { allowLegacy: !hasMagic });
+    hydrateRuntime(cachedStore);
     installationIdPersisted = Boolean(
       canonicalInstallationId(cachedStore.installationId) === cachedStore.installationId
     );
@@ -156,9 +231,15 @@ function readStore() {
     }
     return cachedStore;
   } catch {
-    authLogger.error("secure_store_read_failed", { errorCode: "AUTH_SECURE_STORE_READ_FAILED" });
+    const quarantined = quarantineUnreadableStore(file);
+    authLogger.error("secure_store_read_failed", {
+      errorCode: "AUTH_SECURE_STORE_READ_FAILED",
+      legacyStatePreserved: Boolean(quarantined),
+    });
     installationIdPersisted = false;
-    return (cachedStore = emptyStore());
+    cachedStore = emptyStore();
+    hydrateRuntime(cachedStore);
+    return cachedStore;
   }
 }
 
@@ -173,11 +254,12 @@ function writeStore(value) {
   const directory = path.dirname(file);
   const temporary = `${file}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
   const persistedValue = {
-    ...value,
     version: STORE_VERSION,
     installationId: canonicalInstallationId(value?.installationId) || createInstallationId(),
+    session: persistentSession(value?.session),
   };
-  fs.mkdirSync(directory, { recursive: true });
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  fs.chmodSync(directory, 0o700);
   const encrypted = Buffer.concat([
     STORE_MAGIC,
     secretCrypto.encrypt(JSON.stringify(persistedValue)),
@@ -189,6 +271,7 @@ function writeStore(value) {
       fs.chmodSync(file, 0o600);
     } catch {}
     cachedStore = persistedValue;
+    hydrateRuntime(cachedStore);
     installationIdPersisted = true;
   } finally {
     try {
@@ -223,37 +306,58 @@ function getInstallationId() {
 }
 
 function getSession() {
-  return readStore().session;
+  readStore();
+  return runtimeSession;
 }
 
 function saveSession(session) {
   const normalized = normalizeSession(session);
   if (!normalized) throw new Error("Invalid authentication session");
-  update((store) => ({ ...store, session: normalized }));
+  readStore();
+  const previousSession = runtimeSession;
+  runtimeSession = normalized;
+  try {
+    update((store) => ({ ...store, session: persistentSession(normalized) }));
+  } catch (error) {
+    runtimeSession = previousSession;
+    throw error;
+  }
 }
 
 function clearSession() {
+  runtimeSession = null;
   update((store) => ({ ...store, session: null }), { allowMemoryOnly: true });
 }
 
 function getPending() {
-  return readStore().pending;
+  readStore();
+  return runtimePending;
 }
 
 function savePending(pending) {
   const normalized = normalizePending(pending);
   if (!normalized) throw new Error("Invalid pending authorization");
-  update((store) => ({ ...store, pending: normalized }));
+  readStore();
+  runtimePending = normalized;
 }
 
 function clearPending() {
-  update((store) => ({ ...store, pending: null }), { allowMemoryOnly: true });
+  runtimePending = null;
 }
 
 function completeAuthorization(session) {
   const normalized = normalizeSession(session);
   if (!normalized) throw new Error("Invalid authentication session");
-  update((store) => ({ ...store, session: normalized, pending: null }));
+  readStore();
+  const previousSession = runtimeSession;
+  runtimeSession = normalized;
+  runtimePending = null;
+  try {
+    update((store) => ({ ...store, session: persistentSession(normalized) }));
+  } catch (error) {
+    runtimeSession = previousSession;
+    throw error;
+  }
 }
 
 function get() {
@@ -276,7 +380,9 @@ function set(token) {
 }
 
 function clear() {
-  update((store) => ({ ...store, session: null, pending: null }), { allowMemoryOnly: true });
+  runtimeSession = null;
+  runtimePending = null;
+  update((store) => ({ ...store, session: null }), { allowMemoryOnly: true });
 }
 
 module.exports = {

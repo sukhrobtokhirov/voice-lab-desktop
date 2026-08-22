@@ -13,7 +13,7 @@ test("does not save cloud API failures as workspace transcriptions", () => {
     source.indexOf("async processWithLocalWhisper(")
   );
 
-  assert.match(processAudio, /error\.code === "AUTH_EXPIRED" \|\| error\.code === "AUTH_REQUIRED"/);
+  assert.match(processAudio, /API failures are transient request state/);
   assert.doesNotMatch(processAudio, /saveFailedTranscription/);
   assert.match(processAudio, /this\.lastRetryMetadata = metadata/);
 });

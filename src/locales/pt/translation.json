@@ -3095,13 +3095,41 @@
       "unavailable": "Os dados de utilização ainda não estão disponíveis.",
       "updated": "{{time}} atualizado",
       "live": "A utilização aparecerá após o próximo ditado.",
-      "manage": "Gerenciar faturamento"
+      "manage": "Gerenciar faturamento",
+      "activeDescription": "O seu plano Desktop está ativo e pronto a usar.",
+      "inactiveDescription": "Escolha um plano Desktop no site VoiceLab.",
+      "active": "Ativo",
+      "inactive": "Inativo",
+      "activePlan": "Plano ativo",
+      "noActivePlan": "Sem plano ativo",
+      "checking": "A verificar subscrição…",
+      "remainingCompact": "Restam {{duration}} hoje",
+      "dailyCompact": "{{duration}} por dia",
+      "billingDisabled": "Os planos Desktop estão temporariamente indisponíveis.",
+      "priceCompact": "{{price}} / {{interval}}",
+      "choosePlan": "Escolher plano",
+      "dailyLimit": "Limite diário",
+      "maxRecording": "Gravação máxima",
+      "endsOn": "O acesso termina em {{date}}",
+      "renewsOn": "Renova em {{date}}",
+      "dailyMinutes": "{{count}} minutos por dia",
+      "maxRecordingSeconds": "Até {{count}} segundos por gravação",
+      "refreshHint": "Atualize após regressar do pagamento.",
+      "refreshing": "A atualizar…",
+      "refresh": "Atualizar",
+      "intervals": { "month": "mês" }
     },
     "creditShortage": {
       "title": "São necessários mais créditos de IA",
       "description": "Não há créditos disponíveis suficientes para esta gravação. Adicione créditos ou escolha um plano.",
       "required": "Necessário",
       "useLocal": "Gerenciar faturamento do VoiceLab"
+    },
+    "subscriptionPrompt": {
+      "title": "É necessário um plano Desktop",
+      "description": "Escolha um plano VoiceLab Desktop no site e volte aqui para atualizar o acesso.",
+      "limitTitle": "Limite diário atingido",
+      "limitDescription": "O plano Desktop está ativo, mas o limite de ditado de hoje foi usado. Gerencie o plano no VoiceLab ou tente novamente após a reposição."
     },
     "dictation": {
       "ready": "Preparar"

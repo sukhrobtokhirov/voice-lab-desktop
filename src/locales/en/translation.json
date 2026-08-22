@@ -3095,13 +3095,41 @@
       "unavailable": "Usage is not available yet.",
       "updated": "Updated {{time}}",
       "live": "Usage appears after your next dictation.",
-      "manage": "Manage billing"
+      "manage": "Manage billing",
+      "activeDescription": "Your desktop plan is active and ready to use.",
+      "inactiveDescription": "Choose a desktop plan on the VoiceLab website.",
+      "active": "Active",
+      "inactive": "Inactive",
+      "activePlan": "Active plan",
+      "noActivePlan": "No active plan",
+      "checking": "Checking subscription…",
+      "remainingCompact": "{{duration}} remaining today",
+      "dailyCompact": "{{duration}} per day",
+      "billingDisabled": "Desktop plans are temporarily unavailable.",
+      "priceCompact": "{{price}} / {{interval}}",
+      "choosePlan": "Choose plan",
+      "dailyLimit": "Daily allowance",
+      "maxRecording": "Maximum recording",
+      "endsOn": "Access ends on {{date}}",
+      "renewsOn": "Renews on {{date}}",
+      "dailyMinutes": "{{count}} minutes per day",
+      "maxRecordingSeconds": "Up to {{count}} seconds per recording",
+      "refreshHint": "Refresh after returning from payment.",
+      "refreshing": "Refreshing…",
+      "refresh": "Refresh",
+      "intervals": { "month": "month" }
     },
     "creditShortage": {
       "title": "More AI Credits needed",
       "description": "There are not enough available credits for this recording. Add credits or choose a plan.",
       "required": "Needed",
       "useLocal": "Manage VoiceLab billing"
+    },
+    "subscriptionPrompt": {
+      "title": "Desktop plan required",
+      "description": "Choose a VoiceLab Desktop plan on the website, then return here to refresh your access.",
+      "limitTitle": "Daily allowance reached",
+      "limitDescription": "Your desktop plan is active, but today’s dictation allowance has been used. Manage the plan on VoiceLab or try again after the allowance resets."
     },
     "dictation": {
       "ready": "Ready"

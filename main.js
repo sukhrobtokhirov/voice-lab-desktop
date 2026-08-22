@@ -27,6 +27,16 @@ const {
   systemPreferences,
   webContents,
 } = require("electron");
+
+// Chromium otherwise creates and reads a "VoiceLab Safe Storage" item in the
+// macOS Keychain even though desktop authentication never uses browser-cookie
+// sessions. Keep Chromium's profile storage local so app launch cannot trigger
+// a Keychain password prompt. Dedicated desktop credentials remain protected
+// by the application's authenticated local storage layer.
+if (process.platform === "darwin") {
+  app.commandLine.appendSwitch("use-mock-keychain");
+}
+
 const path = require("path");
 const tls = require("tls");
 // Development may load local configuration. Packaged builds never load or ship

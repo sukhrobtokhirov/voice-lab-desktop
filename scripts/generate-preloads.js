@@ -102,6 +102,7 @@ const controlOnly = new Set([
   "authLogout",
   "authDeleteAccount",
   "desktopPricing",
+  "desktopSubscription",
   "onDictationComplete",
 ]);
 

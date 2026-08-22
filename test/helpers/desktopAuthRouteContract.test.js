@@ -5,6 +5,9 @@ const test = require("node:test");
 
 const repositoryRoot = path.resolve(__dirname, "../..");
 const desktopAuthManagerPath = path.join(repositoryRoot, "src/helpers/desktopAuthManager.js");
+const voiceLabApiClientPath = path.join(repositoryRoot, "src/helpers/voiceLabApiClient.js");
+const rendererAuthPath = path.join(repositoryRoot, "src/lib/auth.ts");
+const ipcHandlersPath = path.join(repositoryRoot, "src/helpers/ipcHandlers.js");
 const executableExtensions = new Set([".js", ".jsx", ".ts", ".tsx"]);
 const forbiddenDesktopSessionRoutes = ["/api/v2/auth/login", "/api/v2/auth/refresh"];
 
@@ -56,4 +59,34 @@ test("every DesktopAuthManager POST uses a dedicated desktop auth endpoint", () 
     assert.match(route, /^\/api\/v2\/auth\/desktop\//);
     assert.equal(forbiddenDesktopSessionRoutes.includes(route), false);
   }
+});
+
+test("desktop VoiceLab data requests are limited to documented API routes", () => {
+  const source = fs.readFileSync(voiceLabApiClientPath, "utf8");
+  const endpointConstants = [
+    ...source.matchAll(/const\s+\w+_PATH\s*=\s*(\[[^\n]+\])\.join\(["']\/["']\)/g),
+  ].map((match) => [...match[1].matchAll(/["']([^"']*)["']/g)].map((part) => part[1]).join("/"));
+
+  assert.deepEqual(endpointConstants.sort(), [
+    "/api/v1/billing/desktop/pricing",
+    "/api/v1/billing/desktop/subscription",
+    "/v1/desktop/stt",
+  ]);
+  assert.doesNotMatch(source, /\/api\/v1\/desktop\/sync/);
+  assert.doesNotMatch(source, /\/approve(?:["'/?]|$)/);
+  assert.doesNotMatch(source, /\/polar\/checkout/);
+});
+
+test("renderer auth helpers delegate to desktop auth instead of website account routes", () => {
+  const source = fs.readFileSync(rendererAuthPath, "utf8");
+
+  assert.doesNotMatch(source, /\bfetch\s*\(/);
+  assert.doesNotMatch(source, /\/api\/auth\/(?:forgot-password|resend-verification-code)/);
+  assert.match(source, /authStartBrowser/);
+});
+
+test("legacy website IPC cannot attach a desktop bearer token", () => {
+  const source = fs.readFileSync(ipcHandlersPath, "utf8");
+
+  assert.match(source, /const getAuthHeaderFromWindow = async \(\) => \(\{\}\);/);
 });

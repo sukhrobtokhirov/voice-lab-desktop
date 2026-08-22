@@ -1,6 +1,5 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
-const Module = require("node:module");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -102,62 +101,18 @@ test("installers present VoiceLab and retain legacy cache cleanup", () => {
   assert.doesNotMatch(nsis, /Removed OpenWhispr/);
 });
 
-test("legacy Keychain material is migrated without deleting the old entry", () => {
+test("desktop secrets use local authenticated encryption without native vault dependencies", () => {
   const source = read("src/helpers/secretCrypto.js");
-  assert.match(source, /const SERVICE = "VoiceLab"/);
-  assert.match(source, /const LEGACY_SERVICE = "OpenWhispr"/);
-  assert.match(source, /new Entry\(LEGACY_SERVICE, ACCOUNT\)/);
-  assert.match(source, /entry\.setPassword\(stored\)/);
-  assert.doesNotMatch(source, /deletePassword|removePassword/);
-});
+  const pkg = JSON.parse(read("package.json"));
+  const lock = read("package-lock.json");
+  const builder = JSON.parse(read("electron-builder.json"));
 
-test("legacy Keychain key remains usable and is copied to VoiceLab", () => {
-  const modulePath = require.resolve("../../src/helpers/secretCrypto");
-  const originalLoad = Module._load;
-  const originalNodeEnv = process.env.NODE_ENV;
-  const legacyKey = Buffer.alloc(32, 7).toString("base64");
-  const entries = new Map([["OpenWhispr:secrets-master-key", legacyKey]]);
-
-  class Entry {
-    constructor(service, account) {
-      this.key = `${service}:${account}`;
-    }
-    getPassword() {
-      return entries.get(this.key) || null;
-    }
-    setPassword(value) {
-      entries.set(this.key, value);
-    }
-  }
-
-  delete process.env.NODE_ENV;
-  delete require.cache[modulePath];
-  Module._load = function mockedLoad(request, parent, isMain) {
-    if (request === "electron") {
-      return {
-        app: { getPath: () => root },
-        safeStorage: { isEncryptionAvailable: () => false },
-      };
-    }
-    if (request === "@napi-rs/keyring") return { Entry };
-    if (request === "./debugLogger") {
-      return { info: () => {}, warn: () => {} };
-    }
-    return originalLoad.call(this, request, parent, isMain);
-  };
-
-  try {
-    const crypto = require(modulePath);
-    const encrypted = crypto.encrypt("migration-check");
-    assert.equal(crypto.decrypt(encrypted).value, "migration-check");
-    assert.equal(entries.get("VoiceLab:secrets-master-key"), legacyKey);
-    assert.equal(entries.get("OpenWhispr:secrets-master-key"), legacyKey);
-  } finally {
-    Module._load = originalLoad;
-    delete require.cache[modulePath];
-    if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = originalNodeEnv;
-  }
+  assert.equal(pkg.dependencies["@napi-rs/keyring"], undefined);
+  assert.doesNotMatch(source, /require\(["']electron["']\)|@napi-rs\/keyring|new Entry\(/);
+  assert.doesNotMatch(lock, /node_modules\/@napi-rs\/keyring/);
+  assert.match(source, /aes-256-gcm/);
+  assert.match(source, /device-master-key\.v1/);
+  assert.ok(builder.files.includes("!**/node_modules/@napi-rs/keyring/**"));
 });
 
 test("Google Calendar callback uses VoiceLab schemes with legacy env compatibility", () => {

@@ -3095,13 +3095,41 @@
       "unavailable": "使用量データはまだありません。",
       "updated": "{{time}} を更新しました",
       "live": "次の音声入力後に使用量が表示されます。",
-      "manage": "請求の管理"
+      "manage": "請求の管理",
+      "activeDescription": "Desktopプランは有効で、すぐに利用できます。",
+      "inactiveDescription": "VoiceLabウェブサイトでDesktopプランを選択してください。",
+      "active": "有効",
+      "inactive": "無効",
+      "activePlan": "有効なプラン",
+      "noActivePlan": "有効なプランなし",
+      "checking": "サブスクリプションを確認中…",
+      "remainingCompact": "本日あと{{duration}}",
+      "dailyCompact": "1日{{duration}}",
+      "billingDisabled": "Desktopプランは一時的に利用できません。",
+      "priceCompact": "{{price}} / {{interval}}",
+      "choosePlan": "プランを選択",
+      "dailyLimit": "1日の上限",
+      "maxRecording": "最大録音時間",
+      "endsOn": "{{date}}にアクセス終了",
+      "renewsOn": "{{date}}に更新",
+      "dailyMinutes": "1日{{count}}分",
+      "maxRecordingSeconds": "1回の録音は最大{{count}}秒",
+      "refreshHint": "支払い画面から戻った後に更新してください。",
+      "refreshing": "更新中…",
+      "refresh": "更新",
+      "intervals": { "month": "月" }
     },
     "creditShortage": {
       "title": "さらに多くの AI クレジットが必要です",
       "description": "この録音には利用可能なクレジットが不足しています。クレジットを追加するか、プランを選択します。",
       "required": "必要です",
       "useLocal": "VoiceLab の請求を管理する"
+    },
+    "subscriptionPrompt": {
+      "title": "Desktopプランが必要です",
+      "description": "ウェブサイトでVoiceLab Desktopプランを選択し、ここに戻ってアクセスを更新してください。",
+      "limitTitle": "1日の上限に達しました",
+      "limitDescription": "Desktopプランは有効ですが、本日の音声入力上限を使い切りました。VoiceLabでプランを管理するか、上限のリセット後に再試行してください。"
     },
     "dictation": {
       "ready": "準備ができて"

@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const secretCrypto = require("./secretCrypto");
+const debugLogger = require("./debugLogger");
 
 const KEYRING_MAGIC = Buffer.from("VLAB-KEYRING\0V1\0", "utf8");
 const FIELD_PREFIX = "vlabf:1:";
@@ -83,6 +84,9 @@ class LocalDataCrypto {
     this.keyringPath =
       keyringPath || path.join(this.userDataPath, "secure-keys", "local-data-keys.v1.enc");
     this.wrappingCrypto = wrappingCrypto;
+    if (this.wrappingCrypto === secretCrypto) {
+      this.wrappingCrypto.configure(this.userDataPath);
+    }
     this.persist = persist;
     this.registry = registry ? normalizeRegistry(registry) : this._loadOrCreateRegistry();
   }
@@ -121,7 +125,7 @@ class LocalDataCrypto {
   _persistRegistry() {
     if (!this.persist) return;
     if (!this.wrappingCrypto?.isAvailable?.()) {
-      throw new Error("OS-backed encryption is required for local data");
+      throw new Error("Authenticated local encryption is required for local data");
     }
     const wrapped = this.wrappingCrypto.encryptBuffer(this._serializeRegistry());
     atomicWrite(this.keyringPath, Buffer.concat([KEYRING_MAGIC, wrapped]));
@@ -138,10 +142,24 @@ class LocalDataCrypto {
         throw new LocalDataCorruptionError("Local data key registry format is unsupported");
       }
       try {
-        const plaintext = this.wrappingCrypto.decryptBuffer(
-          contents.subarray(KEYRING_MAGIC.length)
-        );
-        return normalizeRegistry(JSON.parse(plaintext.toString("utf8")));
+        const wrapped = contents.subarray(KEYRING_MAGIC.length);
+        const decrypted = this.wrappingCrypto.decryptBufferWithMetadata
+          ? this.wrappingCrypto.decryptBufferWithMetadata(wrapped)
+          : { value: this.wrappingCrypto.decryptBuffer(wrapped), needsReencrypt: false };
+        const registry = normalizeRegistry(JSON.parse(decrypted.value.toString("utf8")));
+        if (decrypted.needsReencrypt && this.persist) {
+          this.registry = registry;
+          try {
+            this._persistRegistry();
+          } catch (error) {
+            debugLogger.warn(
+              "could not rewrap legacy local data key registry",
+              { error: error?.message },
+              "localDataCrypto"
+            );
+          }
+        }
+        return registry;
       } catch (error) {
         throw new LocalDataCorruptionError(
           "Local data key registry could not be authenticated",
@@ -150,7 +168,7 @@ class LocalDataCrypto {
       }
     }
     if (!this.wrappingCrypto?.isAvailable?.()) {
-      throw new Error("OS-backed encryption is required for local data");
+      throw new Error("Authenticated local encryption is required for local data");
     }
     const registry = normalizeRegistry({
       format: 1,

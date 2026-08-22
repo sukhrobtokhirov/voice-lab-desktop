@@ -3097,13 +3097,41 @@
       "unavailable": "Foydalanish maʼlumoti hali yoʻq.",
       "updated": "{{time}} da yangilandi",
       "live": "Foydalanish keyingi diktovkadan soʻng ko‘rinadi.",
-      "manage": "Billingni boshqarish"
+      "manage": "Billingni boshqarish",
+      "activeDescription": "Desktop tarifingiz faol va foydalanishga tayyor.",
+      "inactiveDescription": "VoiceLab saytida desktop tarifini tanlang.",
+      "active": "Faol",
+      "inactive": "Faol emas",
+      "activePlan": "Faol tarif",
+      "noActivePlan": "Faol tarif yo‘q",
+      "checking": "Tarif holati tekshirilmoqda…",
+      "remainingCompact": "Bugun {{duration}} qoldi",
+      "dailyCompact": "Kuniga {{duration}}",
+      "billingDisabled": "Desktop tariflari vaqtincha mavjud emas.",
+      "priceCompact": "{{price}} / {{interval}}",
+      "choosePlan": "Tarifni tanlash",
+      "dailyLimit": "Kunlik limit",
+      "maxRecording": "Eng uzun yozuv",
+      "endsOn": "Foydalanish {{date}} kuni tugaydi",
+      "renewsOn": "{{date}} kuni yangilanadi",
+      "dailyMinutes": "Kuniga {{count}} daqiqa",
+      "maxRecordingSeconds": "Har yozuv {{count}} soniyagacha",
+      "refreshHint": "To‘lovdan qaytgach yangilang.",
+      "refreshing": "Yangilanmoqda…",
+      "refresh": "Yangilash",
+      "intervals": { "month": "oy" }
     },
     "creditShortage": {
       "title": "Ko‘proq AI Credit kerak",
       "description": "Bu yozuv uchun mavjud credit yetmaydi. Credit qo‘shing yoki tarifni tanlang.",
       "required": "Kerak",
       "useLocal": "VoiceLab billingni boshqarish"
+    },
+    "subscriptionPrompt": {
+      "title": "Desktop tarifi kerak",
+      "description": "VoiceLab saytida Desktop tarifini tanlang, so‘ng foydalanish huquqini yangilash uchun bu yerga qayting.",
+      "limitTitle": "Kunlik limit tugadi",
+      "limitDescription": "Desktop tarifingiz faol, lekin bugungi diktovka limiti ishlatildi. VoiceLab saytida tarifni boshqaring yoki limit yangilangach qayta urinib ko‘ring."
     },
     "dictation": {
       "ready": "Tayyor"

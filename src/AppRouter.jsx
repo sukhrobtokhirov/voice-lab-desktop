@@ -39,7 +39,6 @@ function MainApp() {
   const { isSignedIn, isGracePeriodOnly, isLoaded: authLoaded } = useAuth();
 
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [needsReauth, setNeedsReauth] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [postOnboardingSettingsSection, setPostOnboardingSettingsSection] = useState(undefined);
 
@@ -80,8 +79,8 @@ function MainApp() {
     if (isControlPanel) {
       if (!resolved) {
         setShowOnboarding(true);
-      } else if (!isSignedIn) {
-        setNeedsReauth(true);
+      } else {
+        setShowOnboarding(false);
       }
     }
 
@@ -114,15 +113,10 @@ function MainApp() {
     return <LoadingFallback />;
   }
 
-  if (isControlPanel && showOnboarding) {
-    return (
-      <Suspense fallback={<LoadingFallback />}>
-        <OnboardingFlow onComplete={handleOnboardingComplete} />
-      </Suspense>
-    );
-  }
-
-  if (isControlPanel && needsReauth) {
+  // Derive this gate directly from the authoritative auth state. A duplicated
+  // route flag allowed a failed/expired session to render an authenticated
+  // dashboard or a stale onboarding step while React effects caught up.
+  if (isControlPanel && authLoaded && !isSignedIn) {
     return (
       <div
         className="h-screen flex flex-col bg-background"
@@ -143,7 +137,7 @@ function MainApp() {
             <Card className="bg-card/90 backdrop-blur-2xl border border-border/50 dark:border-white/5 shadow-lg rounded-xl overflow-hidden">
               <CardContent className="p-6">
                 <AuthenticationStep
-                  onAuthComplete={() => setNeedsReauth(false)}
+                  onAuthComplete={() => {}}
                   onNeedsVerification={() => {}}
                 />
               </CardContent>
@@ -151,6 +145,14 @@ function MainApp() {
           </div>
         </div>
       </div>
+    );
+  }
+
+  if (isControlPanel && showOnboarding) {
+    return (
+      <Suspense fallback={<LoadingFallback />}>
+        <OnboardingFlow onComplete={handleOnboardingComplete} />
+      </Suspense>
     );
   }
 

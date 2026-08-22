@@ -27,7 +27,10 @@ const {
 class WindowManager {
   constructor() {
     this.mainWindow = null;
+    this._mainWindowCreationPromise = null;
+    this._windowLoadPromises = new WeakMap();
     this.controlPanelWindow = null;
+    this._controlPanelCreationPromise = null;
     this.agentWindow = null;
     this.notificationWindow = null;
     this._notificationTimeout = null;
@@ -62,6 +65,35 @@ class WindowManager {
   }
 
   async createMainWindow() {
+    // A BrowserWindow is assigned before loadFile() settles. Check the
+    // creation promise first so a macOS `activate` event cannot observe that
+    // half-created window and let startup continue while its navigation is
+    // still in flight.
+    if (this._mainWindowCreationPromise) {
+      return this._mainWindowCreationPromise;
+    }
+
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      return this.mainWindow;
+    }
+
+    const creation = this._createMainWindow();
+    this._mainWindowCreationPromise = creation;
+    try {
+      return await creation;
+    } catch (error) {
+      const failedWindow = this.mainWindow;
+      if (failedWindow && !failedWindow.isDestroyed()) failedWindow.destroy();
+      if (this.mainWindow === failedWindow) this.mainWindow = null;
+      throw error;
+    } finally {
+      if (this._mainWindowCreationPromise === creation) {
+        this._mainWindowCreationPromise = null;
+      }
+    }
+  }
+
+  async _createMainWindow() {
     const cursorPos = screen.getCursorScreenPoint();
     const display = screen.getDisplayNearestPoint(cursorPos);
     const position = WindowPositionUtil.getMainWindowPosition(
@@ -112,6 +144,7 @@ class WindowManager {
     await this.initializeHotkey();
     this.dragManager.setTargetWindow(this.mainWindow);
     MenuManager.setupMainMenu(() => this.openSettings());
+    return this.mainWindow;
   }
 
   setMainWindowInteractivity(shouldCapture) {
@@ -199,6 +232,22 @@ class WindowManager {
   }
 
   async loadWindowContent(window, isControlPanel = false, isAgent = false) {
+    if (!window || window.isDestroyed()) throw new Error("Cannot load a destroyed window");
+    const activeLoad = this._windowLoadPromises.get(window);
+    if (activeLoad) return activeLoad;
+
+    const load = this._loadWindowContent(window, isControlPanel, isAgent);
+    this._windowLoadPromises.set(window, load);
+    try {
+      return await load;
+    } finally {
+      if (this._windowLoadPromises.get(window) === load) {
+        this._windowLoadPromises.delete(window);
+      }
+    }
+  }
+
+  async _loadWindowContent(window, isControlPanel = false, isAgent = false) {
     if (process.env.NODE_ENV === "development") {
       let appUrl = DevServerManager.getAppUrl(isControlPanel);
       if (isAgent) {
@@ -641,6 +690,10 @@ class WindowManager {
   }
 
   async createControlPanelWindow() {
+    if (this._controlPanelCreationPromise) {
+      return this._controlPanelCreationPromise;
+    }
+
     if (this.controlPanelWindow && !this.controlPanelWindow.isDestroyed()) {
       if (this.controlPanelWindow.isMinimized()) {
         this.controlPanelWindow.restore();
@@ -650,9 +703,26 @@ class WindowManager {
       }
       this.controlPanelWindow.focus();
       dockManager.setControlPanelVisible(true);
-      return;
+      return this.controlPanelWindow;
     }
 
+    const creation = this._createControlPanelWindow();
+    this._controlPanelCreationPromise = creation;
+    try {
+      return await creation;
+    } catch (error) {
+      const failedWindow = this.controlPanelWindow;
+      if (failedWindow && !failedWindow.isDestroyed()) failedWindow.destroy();
+      if (this.controlPanelWindow === failedWindow) this.controlPanelWindow = null;
+      throw error;
+    } finally {
+      if (this._controlPanelCreationPromise === creation) {
+        this._controlPanelCreationPromise = null;
+      }
+    }
+  }
+
+  async _createControlPanelWindow() {
     this.controlPanelWindow = new BrowserWindow(CONTROL_PANEL_CONFIG);
     hardenWindow(this.controlPanelWindow);
 
@@ -735,6 +805,7 @@ class WindowManager {
     });
 
     await this.loadControlPanel();
+    return this.controlPanelWindow;
   }
 
   async loadControlPanel() {

@@ -3095,13 +3095,41 @@
       "unavailable": "Les données d’utilisation ne sont pas encore disponibles.",
       "updated": "{{time}} mis à jour",
       "live": "L’utilisation apparaîtra après la prochaine dictée.",
-      "manage": "Gérer la facturation"
+      "manage": "Gérer la facturation",
+      "activeDescription": "Votre forfait Desktop est actif et prêt à l’emploi.",
+      "inactiveDescription": "Choisissez un forfait Desktop sur le site VoiceLab.",
+      "active": "Actif",
+      "inactive": "Inactif",
+      "activePlan": "Forfait actif",
+      "noActivePlan": "Aucun forfait actif",
+      "checking": "Vérification de l’abonnement…",
+      "remainingCompact": "{{duration}} restantes aujourd’hui",
+      "dailyCompact": "{{duration}} par jour",
+      "billingDisabled": "Les forfaits Desktop sont temporairement indisponibles.",
+      "priceCompact": "{{price}} / {{interval}}",
+      "choosePlan": "Choisir un forfait",
+      "dailyLimit": "Quota quotidien",
+      "maxRecording": "Enregistrement maximal",
+      "endsOn": "L’accès prend fin le {{date}}",
+      "renewsOn": "Renouvellement le {{date}}",
+      "dailyMinutes": "{{count}} minutes par jour",
+      "maxRecordingSeconds": "Jusqu’à {{count}} secondes par enregistrement",
+      "refreshHint": "Actualisez après votre retour du paiement.",
+      "refreshing": "Actualisation…",
+      "refresh": "Actualiser",
+      "intervals": { "month": "mois" }
     },
     "creditShortage": {
       "title": "Plus de crédits IA nécessaires",
       "description": "Il n'y a pas assez de crédits disponibles pour cet enregistrement. Ajoutez des crédits ou choisissez un forfait.",
       "required": "Nécessaire",
       "useLocal": "Gérer la facturation de VoiceLab"
+    },
+    "subscriptionPrompt": {
+      "title": "Forfait Desktop requis",
+      "description": "Choisissez un forfait VoiceLab Desktop sur le site, puis revenez ici pour actualiser votre accès.",
+      "limitTitle": "Quota quotidien atteint",
+      "limitDescription": "Votre forfait Desktop est actif, mais le quota de dictée du jour est épuisé. Gérez le forfait sur VoiceLab ou réessayez après sa réinitialisation."
     },
     "dictation": {
       "ready": "Prêt"

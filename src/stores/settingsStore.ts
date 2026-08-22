@@ -1368,8 +1368,12 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
 
   setCustomDictionary: (words: string[]) => {
     set({ dictionarySaving: true });
-    window.electronAPI
-      ?.setDictionary(words)
+    const saveDictionary = window.electronAPI?.setDictionary;
+    if (!saveDictionary) {
+      set({ dictionarySaving: false });
+      return;
+    }
+    saveDictionary(words)
       .then(async () => {
         const state = await window.electronAPI?.getDictionaryState?.();
         if (state) {

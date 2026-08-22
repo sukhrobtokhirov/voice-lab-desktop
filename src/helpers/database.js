@@ -6,6 +6,7 @@ const debugLogger = require("./debugLogger");
 const { app } = require("electron");
 const { LocalDataEnvelope } = require("./localDataEnvelope");
 const { LocalDataCrypto } = require("./localDataCrypto");
+const { preserveLegacyKeychainData } = require("./legacyLocalDataRecovery");
 const {
   LocalDataProtection,
   normalizeDictionaryValue,
@@ -32,6 +33,10 @@ class DatabaseManager {
 
       const dbPath = path.join(app.getPath("userData"), dbFileName);
       this.dbPath = dbPath;
+      preserveLegacyKeychainData({
+        userDataPath: app.getPath("userData"),
+        databasePath: dbPath,
+      });
       this.dataEnvelope = new LocalDataEnvelope(dbPath);
       this.dataEnvelope.restore();
       fs.mkdirSync(path.dirname(dbPath), { recursive: true, mode: 0o700 });

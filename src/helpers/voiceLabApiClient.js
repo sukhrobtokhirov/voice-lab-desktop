@@ -6,8 +6,25 @@ const MAX_AUDIO_BYTES = 64 * 1024 * 1024;
 const MIN_AUDIO_DURATION_MS = 500;
 const MAX_AUDIO_DURATION_MS = 300 * 1000;
 const SUPPORTED_LANGUAGES = new Set(["uz", "en", "ru"]);
+const CANONICAL_AUDIO_UPLOADS = new Map([
+  ["audio/mpeg", "mp3"],
+  ["audio/wav", "wav"],
+  ["audio/mp4", "m4a"],
+  ["audio/aac", "aac"],
+  ["audio/ogg", "ogg"],
+  ["audio/webm", "webm"],
+  ["audio/flac", "flac"],
+  ["audio/aiff", "aiff"],
+  ["audio/amr", "amr"],
+  ["audio/3gpp", "3gp"],
+  ["audio/caf", "caf"],
+  ["audio/x-ms-wma", "wma"],
+]);
 const DESKTOP_STT_PATH = ["", "v1", "desktop", "stt"].join("/");
 const DESKTOP_PRICING_PATH = ["", "api", "v1", "billing", "desktop", "pricing"].join("/");
+const DESKTOP_SUBSCRIPTION_PATH = ["", "api", "v1", "billing", "desktop", "subscription"].join("/");
+const MAX_JSON_RESPONSE_BYTES = 1024 * 1024;
+const REQUEST_ID_PATTERN = /^req_[A-Za-z0-9_-]{1,256}$/;
 const STATUS_CODE = {
   400: "INVALID_REQUEST",
   401: "AUTH_EXPIRED",
@@ -38,6 +55,7 @@ function normalizeErrorCode(status, body) {
     AUDIO_TOO_LARGE: "AUDIO_LIMIT_EXCEEDED",
     AUDIO_TOO_LONG: "AUDIO_LIMIT_EXCEEDED",
     UNSUPPORTED_AUDIO_FORMAT: "AUDIO_INVALID",
+    UNSUPPORTED_LANGUAGE: "AUDIO_LANGUAGE_UNSUPPORTED",
     INVALID_AUDIO: "AUDIO_INVALID",
     NO_SPEECH_DETECTED: "NO_SPEECH_DETECTED",
     CONCURRENT_DICTATION: "CONCURRENCY_LIMIT",
@@ -68,7 +86,7 @@ function normalizeErrorCode(status, body) {
 
 class VoiceLabApiError extends Error {
   constructor({ code, message, status = null, retryAfterSeconds = null, details = {} }) {
-    super(message || code || "VoiceLab request failed");
+    super(publicMessage(message) || code || "VoiceLab request failed");
     this.name = "VoiceLabApiError";
     this.code = code || "BACKEND_FAILED";
     this.status = status;
@@ -89,7 +107,7 @@ class VoiceLabApiError extends Error {
       error: this.message,
       code: this.code,
       serverCode: serverError.code || details.code || null,
-      requestId: details.requestId || details.request_id || null,
+      requestId: safeRequestId(details.requestId || details.request_id),
       hint: details.hint || serverError.hint || null,
       status: this.status,
       retryAfterSeconds: this.retryAfterSeconds,
@@ -105,6 +123,7 @@ class VoiceLabApiError extends Error {
       "rolling_24h_credit_limit",
       "rolling_24h_credits_used",
       "operation_id",
+      "retry_requires_confirmation",
     ])
       if (details[key] != null) result[key] = details[key];
     return result;
@@ -118,6 +137,15 @@ function retryAfterSeconds(response) {
   if (Number.isFinite(numeric) && numeric >= 0) return numeric;
   const date = Date.parse(raw);
   return Number.isFinite(date) ? Math.max(0, Math.ceil((date - Date.now()) / 1000)) : null;
+}
+
+function publicMessage(value) {
+  return typeof value === "string"
+    ? value
+        .replace(/[\u0000-\u001f\u007f]+/g, " ")
+        .trim()
+        .slice(0, 500) || null
+    : null;
 }
 
 function authSessionContext(authManager) {
@@ -153,35 +181,194 @@ function safeString(...values) {
   return null;
 }
 
-function safeNumber(value, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
-  const number = Number(value);
-  return Number.isFinite(number) && number >= min && number <= max ? number : null;
+function safeRequestId(value) {
+  return typeof value === "string" && REQUEST_ID_PATTERN.test(value) ? value : null;
+}
+
+function validRfc3339(value) {
+  if (typeof value !== "string" || value.length > 64) return null;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)) return null;
+  return Number.isFinite(Date.parse(value)) ? value : null;
+}
+
+function invalidResponse(resource, requestId = null) {
+  throw new VoiceLabApiError({
+    code: "BACKEND_RESPONSE_INVALID",
+    message: `VoiceLab returned an invalid ${resource} response.`,
+    status: 502,
+    details: { request_id: requestId },
+  });
+}
+
+function safeInteger(value, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  return Number.isSafeInteger(value) && value >= min && value <= max ? value : null;
+}
+
+function normalizeUsage(payload) {
+  const usage = record(payload);
+  const usedSeconds = usage.used_seconds;
+  const dailyLimitSeconds = usage.daily_limit_seconds;
+  const remainingSeconds = usage.remaining_seconds;
+  if (
+    !Number.isSafeInteger(usedSeconds) ||
+    usedSeconds < 0 ||
+    !Number.isSafeInteger(dailyLimitSeconds) ||
+    dailyLimitSeconds < 0 ||
+    !Number.isSafeInteger(remainingSeconds) ||
+    remainingSeconds < 0
+  ) {
+    return null;
+  }
+  return {
+    used_seconds: usedSeconds,
+    daily_limit_seconds: dailyLimitSeconds,
+    remaining_seconds: remainingSeconds,
+  };
+}
+
+function normalizeDesktopSttResponse(payload) {
+  const root = record(payload);
+  const usage = normalizeUsage(root.usage);
+  const requestId = safeRequestId(root.request_id);
+  const canonical =
+    typeof root.text === "string" &&
+    root.text.length > 0 &&
+    root.text.length <= 1_000_000 &&
+    !root.text.includes("\0") &&
+    SUPPORTED_LANGUAGES.has(root.language) &&
+    Number.isInteger(root.duration_ms) &&
+    root.duration_ms >= MIN_AUDIO_DURATION_MS &&
+    root.duration_ms <= MAX_AUDIO_DURATION_MS &&
+    usage &&
+    requestId;
+  if (canonical) {
+    return {
+      text: root.text,
+      language: root.language,
+      duration_ms: root.duration_ms,
+      usage,
+      request_id: requestId,
+    };
+  }
+  return invalidResponse("transcription", requestId);
 }
 
 function normalizeDesktopPricing(payload) {
   const root = record(payload);
-  const plans = Array.isArray(root.plans) ? root.plans.map(record) : [];
-  const plan = plans.find((candidate) => safeString(candidate.code) && safeString(candidate.name));
-  const priceCents = safeNumber(plan?.price_cents, { max: 100_000_000 });
-  const priceUsd =
-    safeString(plan?.price_usd) ?? (priceCents === null ? null : (priceCents / 100).toFixed(2));
+  const requestId = safeRequestId(root.request_id);
+  const currency = safeString(root.currency);
+  const provider = safeString(root.provider);
+  if (
+    typeof root.enabled !== "boolean" ||
+    !currency ||
+    !provider ||
+    !Array.isArray(root.plans) ||
+    !requestId ||
+    (!root.enabled && root.plans.length !== 0)
+  ) {
+    return invalidResponse("pricing", requestId);
+  }
+  const plans = root.plans.map((value) => {
+    const plan = record(value);
+    const code = safeString(plan.code);
+    const name = safeString(plan.name);
+    const priceCents = safeInteger(plan.price_cents, { max: 100_000_000 });
+    const priceUsd = safeString(plan.price_usd);
+    const planCurrency = safeString(plan.currency);
+    const billingInterval = safeString(plan.billing_interval);
+    const billingIntervalCount = safeInteger(plan.billing_interval_count, { min: 1, max: 120 });
+    const dailyMinutes = safeInteger(plan.daily_minutes, { min: 1, max: 24 * 60 });
+    const maxRecordingSeconds = safeInteger(plan.max_recording_seconds, {
+      min: 1,
+      max: 300,
+    });
+    if (
+      !code ||
+      !name ||
+      !Number.isSafeInteger(priceCents) ||
+      !priceUsd ||
+      !planCurrency ||
+      !billingInterval ||
+      !Number.isSafeInteger(billingIntervalCount) ||
+      !Number.isSafeInteger(dailyMinutes) ||
+      !Number.isSafeInteger(maxRecordingSeconds)
+    ) {
+      return invalidResponse("pricing", requestId);
+    }
+    return {
+      code,
+      name,
+      priceCents,
+      priceUsd,
+      currency: planCurrency,
+      billingInterval,
+      billingIntervalCount,
+      dailyMinutes,
+      maxRecordingSeconds,
+    };
+  });
   return {
-    enabled: root.enabled === true,
-    currency: safeString(root.currency, plan?.currency) || "USD",
-    provider: safeString(root.provider),
-    plan: plan
-      ? {
-          code: safeString(plan.code),
-          name: safeString(plan.name),
-          priceUsd,
-          currency: safeString(plan.currency, root.currency) || "USD",
-          billingInterval: safeString(plan.billing_interval),
-          billingIntervalCount: safeNumber(plan.billing_interval_count, { min: 1, max: 120 }),
-          dailyMinutes: safeNumber(plan.daily_minutes, { max: 24 * 60 }),
-          maxRecordingSeconds: safeNumber(plan.max_recording_seconds, { max: 24 * 60 * 60 }),
-        }
-      : null,
-    requestId: safeString(root.request_id),
+    enabled: root.enabled,
+    currency,
+    provider,
+    plans,
+    requestId,
+  };
+}
+
+function normalizeDesktopSubscription(payload) {
+  const root = record(payload);
+  const rawEntitlement = record(root.entitlement);
+  const requestId = safeRequestId(root.request_id);
+  const dailySeconds = safeInteger(rawEntitlement.daily_seconds, { max: 24 * 60 * 60 });
+  const maxRequestSeconds = safeInteger(rawEntitlement.max_request_seconds, {
+    max: 300,
+  });
+  const periodStartsAt =
+    rawEntitlement.period_starts_at == null ? null : validRfc3339(rawEntitlement.period_starts_at);
+  const periodEndsAt =
+    rawEntitlement.period_ends_at == null ? null : validRfc3339(rawEntitlement.period_ends_at);
+  if (
+    !requestId ||
+    typeof rawEntitlement.active !== "boolean" ||
+    dailySeconds === null ||
+    !Number.isSafeInteger(dailySeconds) ||
+    maxRequestSeconds === null ||
+    !Number.isSafeInteger(maxRequestSeconds) ||
+    typeof rawEntitlement.cancel_at_period_end !== "boolean" ||
+    (rawEntitlement.period_starts_at != null && !periodStartsAt) ||
+    (rawEntitlement.period_ends_at != null && !periodEndsAt)
+  ) {
+    return invalidResponse("subscription", requestId);
+  }
+  const packageCode = safeString(rawEntitlement.package_code);
+  const packageName = safeString(rawEntitlement.package_name);
+  const status = safeString(rawEntitlement.status);
+  if (
+    rawEntitlement.active &&
+    (!packageCode ||
+      !packageName ||
+      !status ||
+      !periodStartsAt ||
+      !periodEndsAt ||
+      dailySeconds <= 0 ||
+      maxRequestSeconds <= 0)
+  ) {
+    return invalidResponse("subscription", requestId);
+  }
+  return {
+    entitlement: {
+      active: rawEntitlement.active,
+      packageCode,
+      packageName,
+      status,
+      dailySeconds,
+      maxRequestSeconds,
+      periodStartsAt,
+      periodEndsAt,
+      cancelAtPeriodEnd: rawEntitlement.cancel_at_period_end,
+    },
+    requestId,
   };
 }
 
@@ -212,17 +399,17 @@ class VoiceLabApiClient {
     this.appVersion = appVersion;
     this.channel = channel;
     this.billingOrigin = billingOrigin.replace(/\/+$/, "");
-    this.walletCache = null;
-    this.walletFetchedAt = 0;
-    this.walletAccountId = null;
+    this.subscriptionCache = null;
+    this.subscriptionFetchedAt = 0;
+    this.subscriptionAuthContext = null;
     this.activeDictationOperations = new Map();
     this.sessionAccountId = null;
   }
 
   resetSessionState() {
-    this.walletCache = null;
-    this.walletFetchedAt = 0;
-    this.walletAccountId = null;
+    this.subscriptionCache = null;
+    this.subscriptionFetchedAt = 0;
+    this.subscriptionAuthContext = null;
   }
 
   handleAuthStatus(status) {
@@ -248,7 +435,16 @@ class VoiceLabApiClient {
 
   async authenticatedFetch(pathname, options = {}) {
     const method = String(options.method || "GET").toUpperCase();
-    const mayRefreshDesktopToken = method === "POST" && pathname === DESKTOP_STT_PATH;
+    const isDesktopStt = method === "POST" && pathname === DESKTOP_STT_PATH;
+    const isDesktopSubscription = method === "GET" && pathname === DESKTOP_SUBSCRIPTION_PATH;
+    const isCanonicalDesktopBoundary = isDesktopStt || isDesktopSubscription;
+    if (isDesktopStt && options.idempotencyKey) {
+      throw new VoiceLabApiError({
+        code: "INVALID_REQUEST",
+        message: "Desktop STT does not accept an idempotency key.",
+        status: 400,
+      });
+    }
     const initialAuthContext = authSessionContext(this.authManager);
     let authRetried = false;
     let retryAuthContext = null;
@@ -272,25 +468,46 @@ class VoiceLabApiClient {
       const metadata = this.authManager.getSessionMetadata();
       const timed = composeSignal(options.signals || options.signal, options.timeoutMs || 45_000);
       let response;
+      let text;
       try {
         response = await fetch(`${this.apiBaseUrl}${pathname}`, {
           method,
           headers: {
+            ...(options.headers || {}),
             Accept: "application/json",
             Authorization: `Bearer ${accessToken}`,
-            "X-VoiceLab-Client": CLIENT_ID,
-            "X-VoiceLab-App-Version": this.appVersion,
-            "X-VoiceLab-Channel": this.channel,
-            "X-VoiceLab-Installation-ID": metadata.installationId,
-            ...(metadata.sessionId ? { "X-VoiceLab-Session-ID": metadata.sessionId } : {}),
-            ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
-            ...(options.headers || {}),
+            ...(!isCanonicalDesktopBoundary
+              ? {
+                  "X-VoiceLab-Client": CLIENT_ID,
+                  "X-VoiceLab-App-Version": this.appVersion,
+                  "X-VoiceLab-Channel": this.channel,
+                  "X-VoiceLab-Installation-ID": metadata.installationId,
+                  ...(metadata.sessionId ? { "X-VoiceLab-Session-ID": metadata.sessionId } : {}),
+                  ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
+                }
+              : {}),
           },
           body: options.bodyFactory ? options.bodyFactory() : options.body,
           signal: timed.signal,
         });
+        const declaredLength = Number(response.headers.get("content-length"));
+        if (Number.isFinite(declaredLength) && declaredLength > MAX_JSON_RESPONSE_BYTES) {
+          throw new VoiceLabApiError({
+            code: "BACKEND_RESPONSE_INVALID",
+            message: "VoiceLab returned an oversized response.",
+            status: response.status,
+          });
+        }
+        text = await response.text();
+        if (Buffer.byteLength(text, "utf8") > MAX_JSON_RESPONSE_BYTES) {
+          throw new VoiceLabApiError({
+            code: "BACKEND_RESPONSE_INVALID",
+            message: "VoiceLab returned an oversized response.",
+            status: response.status,
+          });
+        }
       } catch (error) {
-        timed.cleanup();
+        if (error instanceof VoiceLabApiError) throw error;
         const externalSignals = (
           Array.isArray(options.signals) ? options.signals : [options.signal]
         ).filter(Boolean);
@@ -298,28 +515,63 @@ class VoiceLabApiClient {
           throw new VoiceLabApiError({ code: "CANCELLED", message: "Request cancelled" });
         throw new VoiceLabApiError({
           code: "SERVICE_UNAVAILABLE",
-          message: "VoiceLab is temporarily unavailable. Retry the same operation shortly.",
+          message: isDesktopStt
+            ? "The dictation result is unknown because the connection ended. Confirm before retrying this recording."
+            : "VoiceLab is temporarily unavailable. Try again.",
+          details: isDesktopStt ? { retry_requires_confirmation: true } : {},
         });
+      } finally {
+        timed.cleanup();
       }
-      timed.cleanup();
-      const text = await response.text();
+      const responseRequestId = safeString(response.headers.get("x-request-id"));
+      const responseContentType = String(response.headers.get("content-type") || "")
+        .split(";", 1)[0]
+        .trim()
+        .toLowerCase();
       let body = null;
       if (text) {
+        if (isCanonicalDesktopBoundary && responseContentType !== "application/json") {
+          throw new VoiceLabApiError({
+            code: "BACKEND_RESPONSE_INVALID",
+            message: "VoiceLab returned a non-JSON response.",
+            status: response.status,
+            details: {
+              request_id: safeRequestId(responseRequestId),
+              content_type: responseContentType || null,
+            },
+          });
+        }
         try {
           body = JSON.parse(text);
         } catch {
+          authLogger.warn("voicelab_response_invalid", {
+            errorCode: "BACKEND_RESPONSE_INVALID",
+            httpStatus: response.status,
+            method,
+            path: pathname,
+            requestId: safeRequestId(responseRequestId),
+            contentType: responseContentType || null,
+          });
           throw new VoiceLabApiError({
             code: "BACKEND_RESPONSE_INVALID",
-            message: "VoiceLab returned an invalid response.",
+            message: "VoiceLab returned an invalid JSON response.",
             status: response.status,
+            details: {
+              request_id: safeRequestId(responseRequestId),
+              content_type: responseContentType || null,
+            },
           });
         }
       }
       if (response.ok) return body;
 
-      const invalidDesktopToken =
-        response.status === 401 && body?.error?.code === "invalid_desktop_token";
-      if (mayRefreshDesktopToken && invalidDesktopToken && !authRetried) {
+      const serverAuthCode = body?.error?.code;
+      const refreshableDesktopToken =
+        response.status === 401 &&
+        ((isDesktopStt && serverAuthCode === "invalid_desktop_token") ||
+          (isDesktopSubscription &&
+            ["session_expired", "invalid_desktop_token"].includes(serverAuthCode)));
+      if (refreshableDesktopToken && !authRetried) {
         if (!sameAuthSessionContext(initialAuthContext, authSessionContext(this.authManager))) {
           throw new VoiceLabApiError({
             code: "AUTH_ACCOUNT_CHANGED",
@@ -330,10 +582,11 @@ class VoiceLabApiClient {
         }
         authRetried = true;
         try {
-          await this.authManager.refreshSession({ force: true, validateUser: false });
+          await this.authManager.refreshSession({ force: true });
         } catch (refreshError) {
           const terminal =
             [400, 401, 403].includes(Number(refreshError?.httpStatus)) ||
+            refreshError?.httpStatus == null ||
             refreshError?.code === "AUTH_EXPIRED" ||
             refreshError?.code === "AUTH_REQUIRED";
           throw new VoiceLabApiError({
@@ -356,13 +609,12 @@ class VoiceLabApiClient {
         continue;
       }
       if (
-        mayRefreshDesktopToken &&
-        invalidDesktopToken &&
+        refreshableDesktopToken &&
         authRetried &&
         sameAuthSessionContext(retryAuthContext, authSessionContext(this.authManager))
       ) {
         this.authManager.invalidateSession?.({
-          code: "invalid_desktop_token",
+          code: serverAuthCode,
           message: body?.message || "VoiceLab session expired. Sign in again.",
         });
       }
@@ -390,74 +642,34 @@ class VoiceLabApiClient {
     }
   }
 
-  normalizeWallet(payload) {
-    const plan = payload?.account?.plan || {};
-    const credits = payload?.credits || {};
-    const total = credits.total == null ? null : String(credits.total);
-    const available = credits.remaining == null ? null : String(credits.remaining);
-    return {
-      isUnlimited: credits.is_unlimited === true,
-      balanceCredits: total,
-      reservedCredits: "0",
-      availableCredits: available,
-      currency: credits.unit || "credits",
-      plan: plan.id || "free",
-      planName: plan.name || plan.id || "Free",
-      planStatus: plan.status || null,
-      limits: {
-        dictation_enabled: true,
-        dictation_max_concurrent_operations: 1,
-        dictation_max_duration_seconds: Number(
-          process.env.VOICELAB_DICTATION_MAX_DURATION_SECONDS || 300
-        ),
-        supported_languages: ["uz", "en", "ru"],
-        auto_detection_supported: true,
-      },
-      topUpUrl: this.getBillingUrl("dictate"),
-    };
-  }
-
-  async getWallet({ force = false } = {}) {
-    const accountId = this.authManager.getSessionMetadata().accountId;
-    if (
-      !force &&
-      this.walletCache &&
-      this.walletAccountId === accountId &&
-      Date.now() - this.walletFetchedAt < 30_000
-    ) {
-      return this.walletCache;
-    }
-    const wallet = this.normalizeWallet(
-      await this.authenticatedFetch("/api/v1/account/usage", { timeoutMs: 15_000 })
-    );
-    if (this.authManager.getSessionMetadata().accountId !== accountId) {
-      throw new VoiceLabApiError({
-        code: "AUTH_ACCOUNT_CHANGED",
-        message: "The active VoiceLab account changed during this request.",
-        status: 409,
-      });
-    }
-    this.walletCache = wallet;
-    this.walletAccountId = accountId;
-    this.walletFetchedAt = Date.now();
-    return this.walletCache;
-  }
-
   async getDesktopPricing() {
     const timed = composeSignal(null, 15_000);
     let response;
+    let text;
     try {
       response = await fetch(`${this.apiBaseUrl}${DESKTOP_PRICING_PATH}`, {
         method: "GET",
-        headers: {
-          Accept: "application/json",
-          "X-VoiceLab-Client": CLIENT_ID,
-          "X-VoiceLab-App-Version": this.appVersion,
-          "X-VoiceLab-Channel": this.channel,
-        },
+        headers: { Accept: "application/json" },
         signal: timed.signal,
       });
-    } catch {
+      const declaredLength = Number(response.headers.get("content-length"));
+      if (Number.isFinite(declaredLength) && declaredLength > MAX_JSON_RESPONSE_BYTES) {
+        throw new VoiceLabApiError({
+          code: "BACKEND_RESPONSE_INVALID",
+          message: "VoiceLab returned an oversized pricing response.",
+          status: response.status,
+        });
+      }
+      text = await response.text();
+      if (Buffer.byteLength(text, "utf8") > MAX_JSON_RESPONSE_BYTES) {
+        throw new VoiceLabApiError({
+          code: "BACKEND_RESPONSE_INVALID",
+          message: "VoiceLab returned an oversized pricing response.",
+          status: response.status,
+        });
+      }
+    } catch (error) {
+      if (error instanceof VoiceLabApiError) throw error;
       throw new VoiceLabApiError({
         code: "SERVICE_UNAVAILABLE",
         message: "VoiceLab pricing is temporarily unavailable.",
@@ -466,7 +678,19 @@ class VoiceLabApiClient {
       timed.cleanup();
     }
 
-    const text = await response.text();
+    const headerRequestId = safeRequestId(response.headers.get("x-request-id"));
+    const contentType = String(response.headers.get("content-type") || "")
+      .split(";", 1)[0]
+      .trim()
+      .toLowerCase();
+    if (contentType !== "application/json") {
+      throw new VoiceLabApiError({
+        code: "BACKEND_RESPONSE_INVALID",
+        message: "VoiceLab returned a non-JSON pricing response.",
+        status: response.status,
+        details: { request_id: headerRequestId, content_type: contentType || null },
+      });
+    }
     let body = null;
     try {
       body = text ? JSON.parse(text) : null;
@@ -475,17 +699,55 @@ class VoiceLabApiClient {
         code: "BACKEND_RESPONSE_INVALID",
         message: "VoiceLab returned an invalid pricing response.",
         status: response.status,
+        details: { request_id: headerRequestId, content_type: contentType },
       });
     }
     if (!response.ok) {
-      throw new VoiceLabApiError({
+      const error = new VoiceLabApiError({
         code: normalizeErrorCode(response.status, body),
         message: body?.message || "VoiceLab pricing is unavailable.",
         status: response.status,
+        retryAfterSeconds: retryAfterSeconds(response),
         details: body || {},
       });
+      authLogger.warn("voicelab_request_failed", {
+        errorCode: error.code,
+        serverCode: body?.error?.code || body?.code,
+        httpStatus: response.status,
+        method: "GET",
+        path: DESKTOP_PRICING_PATH,
+        requestId: safeRequestId(body?.request_id) || headerRequestId,
+      });
+      throw error;
     }
     return normalizeDesktopPricing(body);
+  }
+
+  async getDesktopSubscription({ force = false } = {}) {
+    const requestContext = authSessionContext(this.authManager);
+    if (
+      !force &&
+      this.subscriptionCache &&
+      sameAuthSessionContext(this.subscriptionAuthContext, requestContext) &&
+      Date.now() - this.subscriptionFetchedAt < 30_000
+    ) {
+      return this.subscriptionCache;
+    }
+    const body = await this.authenticatedFetch(DESKTOP_SUBSCRIPTION_PATH, {
+      method: "GET",
+      timeoutMs: 15_000,
+    });
+    if (!sameAuthSessionContext(requestContext, authSessionContext(this.authManager))) {
+      throw new VoiceLabApiError({
+        code: "AUTH_ACCOUNT_CHANGED",
+        message: "The active VoiceLab session changed during this request.",
+        status: 409,
+      });
+    }
+    this.subscriptionCache = normalizeDesktopSubscription(body);
+    this.subscriptionFetchedAt = Date.now();
+    this.subscriptionAuthContext = requestContext;
+    return this.subscriptionCache;
   }
 
   async beginDictation({ audioBuffer, source = "dictate", durationMs = null, language = null }) {
@@ -529,13 +791,6 @@ class VoiceLabApiClient {
         status: 422,
         details: { min_duration_ms: MIN_AUDIO_DURATION_MS },
       });
-    if (Number.isFinite(durationMs) && durationMs > MAX_AUDIO_DURATION_MS)
-      throw new VoiceLabApiError({
-        code: "AUDIO_LIMIT_EXCEEDED",
-        message: "The recording must be no longer than 300 seconds.",
-        status: 413,
-        details: { max_duration_seconds: 300 },
-      });
     if (this.activeDictationOperations.size >= 1)
       throw new VoiceLabApiError({
         code: "CONCURRENCY_LIMIT",
@@ -543,12 +798,36 @@ class VoiceLabApiClient {
         status: 429,
         details: { max_concurrent_operations: 1 },
       });
-    const accountId = this.authManager.getSessionMetadata().accountId;
-    if (!accountId) {
+    const operationAuthContext = authSessionContext(this.authManager);
+    if (!operationAuthContext.sessionId && !operationAuthContext.accountId) {
       throw new VoiceLabApiError({
         code: "AUTH_REQUIRED",
         message: "Authentication required.",
         status: 401,
+      });
+    }
+    const { entitlement, requestId } = await this.getDesktopSubscription();
+    if (entitlement.active !== true) {
+      throw new VoiceLabApiError({
+        code: "ENTITLEMENT_REQUIRED",
+        message: "An active VoiceLab desktop plan is required.",
+        status: 402,
+        details: {
+          error: { code: "desktop_subscription_required" },
+          request_id: requestId,
+        },
+      });
+    }
+    const maxDurationSeconds = Math.min(300, entitlement.maxRequestSeconds);
+    if (Number.isFinite(durationMs) && durationMs > maxDurationSeconds * 1000) {
+      throw new VoiceLabApiError({
+        code: "AUDIO_LIMIT_EXCEEDED",
+        message: `The recording must be no longer than ${maxDurationSeconds} seconds.`,
+        status: 413,
+        details: {
+          max_duration_seconds: maxDurationSeconds,
+          request_id: requestId,
+        },
       });
     }
     const operation = {
@@ -556,7 +835,8 @@ class VoiceLabApiClient {
       source,
       durationMs: Number.isFinite(durationMs) ? durationMs : null,
       language: normalizedLanguage,
-      accountId,
+      accountId: operationAuthContext.accountId,
+      authContext: operationAuthContext,
       abortController: new AbortController(),
     };
     this.activeDictationOperations.set(operation.operationId, operation);
@@ -564,7 +844,11 @@ class VoiceLabApiClient {
   }
 
   async sendDictationChunk(operation, audioBuffer, metadata = {}) {
-    if (operation.accountId !== this.authManager.getSessionMetadata().accountId) {
+    const currentAuthContext = authSessionContext(this.authManager);
+    const operationStillOwned = operation.authContext
+      ? sameAuthSessionContext(operation.authContext, currentAuthContext)
+      : Boolean(operation.accountId) && operation.accountId === currentAuthContext.accountId;
+    if (!operationStillOwned) {
       throw new VoiceLabApiError({
         code: "AUTH_ACCOUNT_CHANGED",
         message: "This operation belongs to a different VoiceLab account.",
@@ -579,12 +863,23 @@ class VoiceLabApiClient {
         status: 422,
       });
     }
+    const contentType = String(metadata.contentType || "")
+      .trim()
+      .toLowerCase();
+    const canonicalExtension = CANONICAL_AUDIO_UPLOADS.get(contentType);
+    if (!canonicalExtension) {
+      throw new VoiceLabApiError({
+        code: "AUDIO_INVALID",
+        message: "The recording format is not supported by VoiceLab.",
+        status: 415,
+      });
+    }
     const bodyFactory = () => {
       const form = new FormData();
       form.append(
         "audio",
-        new Blob([audioBuffer], { type: metadata.contentType || "audio/mpeg" }),
-        metadata.fileName || "dictation.mp3"
+        new Blob([audioBuffer], { type: contentType }),
+        `audio.${canonicalExtension}`
       );
       if (language) form.append("language", language);
       return form;
@@ -595,49 +890,31 @@ class VoiceLabApiClient {
       timeoutMs: 120_000,
       signals: [operation.abortController?.signal, metadata.signal],
     });
-    if (!result || typeof result.text !== "string") {
-      throw new VoiceLabApiError({
-        code: "BACKEND_RESPONSE_INVALID",
-        message: "VoiceLab returned an invalid transcription response.",
-        status: 502,
-        details: { request_id: result?.request_id || null },
-      });
-    }
-    return result;
+    return normalizeDesktopSttResponse(result);
   }
 
-  async getSyncBootstrap(snapshotCursor = null) {
-    const query = new URLSearchParams();
-    if (snapshotCursor) query.set("snapshot_cursor", snapshotCursor);
-    const suffix = query.size > 0 ? `?${query}` : "";
-    return this.authenticatedFetch(`/api/v1/desktop/sync/bootstrap/${suffix}`, {
-      method: "GET",
-      timeoutMs: 20_000,
+  _unsupportedDesktopEndpoint() {
+    throw new VoiceLabApiError({
+      code: "DESKTOP_ENDPOINT_UNAVAILABLE",
+      message: "This desktop network feature is not available.",
+      status: 501,
     });
   }
 
-  async pushSyncMutations(payload, idempotencyKey) {
-    return this.authenticatedFetch("/api/v1/desktop/sync/mutations/", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      idempotencyKey,
-      timeoutMs: 30_000,
-    });
+  async getSyncBootstrap() {
+    return this._unsupportedDesktopEndpoint();
   }
 
-  async getSyncChanges(cursor, limit = 200) {
-    const query = new URLSearchParams({ limit: String(Math.min(200, Math.max(1, limit))) });
-    if (cursor) query.set("cursor", cursor);
-    return this.authenticatedFetch(`/api/v1/desktop/sync/changes/?${query}`, {
-      method: "GET",
-      timeoutMs: 30_000,
-    });
+  async pushSyncMutations() {
+    return this._unsupportedDesktopEndpoint();
+  }
+
+  async getSyncChanges() {
+    return this._unsupportedDesktopEndpoint();
   }
 
   finishDictation(operation) {
     this.activeDictationOperations.delete(operation.operationId);
-    this.walletFetchedAt = 0;
   }
   failDictation(operation, error) {
     void error;

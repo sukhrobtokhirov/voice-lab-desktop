@@ -456,8 +456,8 @@ const fullElectronAPI = {
   cloudReason: (text, opts) => ipcRenderer.invoke("cloud-reason", text, opts),
   cloudStreamingUsage: (text, audioDurationSeconds, opts) =>
     ipcRenderer.invoke("cloud-streaming-usage", text, audioDurationSeconds, opts),
-  cloudUsage: () => ipcRenderer.invoke("cloud-usage"),
   desktopPricing: () => ipcRenderer.invoke("desktop-pricing"),
+  desktopSubscription: () => ipcRenderer.invoke("desktop-subscription"),
   openVoiceLabBilling: (source = "dictate") => ipcRenderer.invoke("open-voicelab-billing", source),
   cloudCheckout: (opts) => ipcRenderer.invoke("cloud-checkout", opts),
   cloudBillingPortal: () => ipcRenderer.invoke("cloud-billing-portal"),

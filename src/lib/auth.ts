@@ -291,40 +291,27 @@ export async function signInWithSSO(_email: string): Promise<{ error?: Error }> 
 }
 
 export async function requestPasswordReset(email: string): Promise<{ error?: Error }> {
+  void email;
   try {
-    const response = await fetch(`${AUTH_URL.replace(/\/+$/, "")}/api/auth/forgot-password`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email.trim() }),
-    });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || "Failed to send reset email");
+    const status = await window.electronAPI?.authStartBrowser?.();
+    if (!status || status.status === "error") {
+      throw new Error(status?.errorMessage || "Unable to open VoiceLab sign-in");
     }
     return {};
   } catch (error) {
-    return { error: error instanceof Error ? error : new Error("Failed to send reset email") };
+    return { error: desktopAuthError(error, "Unable to open VoiceLab sign-in") };
   }
 }
 
 export async function resendVerificationEmail(email: string): Promise<{ error?: Error }> {
+  void email;
   try {
-    const response = await fetch(
-      `${AUTH_URL.replace(/\/+$/, "")}/api/auth/resend-verification-code`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
-      }
-    );
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.error || "Failed to resend verification");
+    const status = await window.electronAPI?.authStartBrowser?.();
+    if (!status || status.status === "error") {
+      throw new Error(status?.errorMessage || "Unable to open VoiceLab sign-in");
     }
     return {};
   } catch (error) {
-    return {
-      error: error instanceof Error ? error : new Error("Failed to resend verification"),
-    };
+    return { error: desktopAuthError(error, "Unable to open VoiceLab sign-in") };
   }
 }

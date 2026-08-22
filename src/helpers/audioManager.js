@@ -1165,6 +1165,14 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       this.onStateChange?.({ isRecording: false, isProcessing: false });
       return true;
     }
+    if (this.lastAudioBlob && this.lastRetryMetadata) {
+      // An explicit cancel after a recoverable failure dismisses the retained
+      // retry payload without adding it to workspace history.
+      this.lastAudioBlob = null;
+      this.lastAudioMetadata = null;
+      this.lastRetryMetadata = null;
+      return true;
+    }
     return false;
   }
 
@@ -1213,6 +1221,12 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         model: activeModel || null,
       };
       this.onTranscriptionComplete?.(result);
+      if (result?.source === VOICELAB_PROVIDER && !result?.text?.trim()) {
+        // A final cloud response with no text has no history-save path. Release
+        // the recording immediately instead of retaining it indefinitely.
+        this.lastAudioBlob = null;
+        this.lastAudioMetadata = null;
+      }
       if (result?.source === VOICELAB_PROVIDER) {
         window.dispatchEvent(
           new CustomEvent("usage-changed", {
@@ -1267,16 +1281,9 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           fields: error.fields,
         });
 
-        const isAuthenticationFailure =
-          error.code === "AUTH_EXPIRED" || error.code === "AUTH_REQUIRED";
-
         // API failures are transient request state, not workspace history items.
         // Keep retryable audio only in memory until retry, dismissal, or a new recording.
-        if (isAuthenticationFailure) {
-          this.lastAudioBlob = null;
-          this.lastAudioMetadata = null;
-          this.lastRetryMetadata = null;
-        } else if (this.lastAudioBlob) {
+        if (this.lastAudioBlob) {
           this.lastRetryMetadata = metadata;
         }
       }
@@ -2144,8 +2151,10 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       return true;
     }
 
+    const capturedAudioBlob = this.lastAudioBlob;
+    const capturedAudioMetadata = this.lastAudioMetadata;
+    const provider = canonicalProviderName(capturedAudioMetadata?.provider);
     try {
-      const provider = canonicalProviderName(this.lastAudioMetadata?.provider);
       const syncSource = provider.startsWith("local")
         ? "local"
         : provider && provider !== VOICELAB_PROVIDER
@@ -2156,31 +2165,41 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         routeKind: this.translationRequested ? "translation" : null,
         syncSource,
         provider: provider || null,
-        model: this.lastAudioMetadata?.model || null,
-        audioDurationMs: this.lastAudioMetadata?.durationMs || null,
+        model: capturedAudioMetadata?.model || null,
+        audioDurationMs: capturedAudioMetadata?.durationMs || null,
       });
       if (result?.id) syncService.debouncedPush("transcription", result.id);
 
       // Save audio if we have a captured blob and the transcription was saved successfully
-      if (result?.id && this.lastAudioBlob) {
+      if (provider !== VOICELAB_PROVIDER && result?.id && capturedAudioBlob) {
         try {
-          const arrayBuffer = await this.lastAudioBlob.arrayBuffer();
+          const arrayBuffer = await capturedAudioBlob.arrayBuffer();
           await window.electronAPI.saveTranscriptionAudio(
             result.id,
             arrayBuffer,
-            this.lastAudioMetadata
+            capturedAudioMetadata
           );
         } catch (audioErr) {
           // Non-blocking: transcription is saved even if audio save fails
           logger.warn("Failed to save transcription audio", { error: audioErr.message }, "audio");
         }
-        this.lastAudioBlob = null;
-        this.lastAudioMetadata = null;
+        if (this.lastAudioBlob === capturedAudioBlob) {
+          this.lastAudioBlob = null;
+          this.lastAudioMetadata = null;
+        }
       }
 
       return true;
     } catch (error) {
       return false;
+    } finally {
+      // /v1/desktop/stt never retains source audio. Once its final response has
+      // been saved as text locally, release the captured recording as well.
+      if (provider === VOICELAB_PROVIDER && this.lastAudioBlob === capturedAudioBlob) {
+        this.lastAudioBlob = null;
+        this.lastAudioMetadata = null;
+        this.lastRetryMetadata = null;
+      }
     }
   }
 

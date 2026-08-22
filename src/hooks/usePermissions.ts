@@ -250,8 +250,15 @@ export const usePermissions = (
         return;
       }
 
-      // Open System Settings directly — avoids the undismissable macOS TCC dialog
-      // that isTrustedAccessibilityClient(true) would show.
+      // Ask macOS to register this exact installed build with TCC first. Merely
+      // opening System Settings can leave an old ad-hoc-signed build selected,
+      // so toggling the visible VoiceLab row never grants the running binary.
+      const promptedGranted = await window.electronAPI?.promptAccessibilityPermission?.();
+      if (promptedGranted) {
+        setAccessibilityPermissionGranted(true);
+        return;
+      }
+
       await openSystemSettings("accessibility", window.electronAPI?.openAccessibilitySettings);
       return;
     }
