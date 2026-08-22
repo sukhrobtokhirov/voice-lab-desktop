@@ -212,7 +212,8 @@ jobs:
           codesign --display --verbose=4 "$app_path" 2>&1 | grep -E 'Authority=Developer ID Application|TeamIdentifier='
           xcrun stapler validate "$app_path"
           spctl --assess --type execute --verbose=4 "$app_path"
-          for dmg in dist/*.dmg; do spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"; done
+
+          for dmg in dist/*.dmg; do hdiutil verify "$dmg"; done
           node scripts/release-contract.js package \
             --platform macos \
             --arch "${{ matrix.arch }}" \

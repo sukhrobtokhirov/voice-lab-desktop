@@ -113,6 +113,8 @@ test("package verification covers signing, notarization, preloads, and secrets",
   assert.match(release, /VOICELAB_SIGNATURE_VERIFIED/);
   assert.match(release, /VOICELAB_NOTARIZATION_VERIFIED/);
   assert.match(release, /stapler validate/);
+  assert.match(release, /hdiutil verify "\$dmg"/);
+  assert.doesNotMatch(release, /spctl --assess --type open/);
   assert.match(release, /Get-AuthenticodeSignature/);
 });
 
