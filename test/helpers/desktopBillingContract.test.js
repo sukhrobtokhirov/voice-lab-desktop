@@ -21,12 +21,12 @@ test("desktop billing reads public pricing and authenticated subscription only",
   const openBilling = handlerBlock(ipc, "open-voicelab-billing");
 
   assert.match(client, /DESKTOP_PRICING_PATH/);
-  assert.match(client, /DESKTOP_SUBSCRIPTION_PATH/);
+  assert.match(client, /DESKTOP_USAGE_PATH/);
   assert.match(client, /async getDesktopPricing\(\)/);
-  assert.match(client, /async getDesktopSubscription\(/);
+  assert.match(client, /async getDesktopUsage\(/);
   assert.doesNotMatch(client, /billing\/desktop\/polar\/checkout/);
   assert.match(pricing, /getDesktopPricing/);
-  assert.match(subscription, /getDesktopSubscription/);
+  assert.match(subscription, /getDesktopUsage/);
   assert.match(openBilling, /shell\.openExternal/);
   assert.match(openBilling, /getBillingUrl/);
   assert.doesNotMatch(openBilling, /checkout|accessToken|refreshToken/);
@@ -38,6 +38,10 @@ test("renderer treats entitlement active as authoritative and never infers it fr
   assert.match(hook, /desktopSubscription/);
   assert.match(hook, /return result\.entitlement\.active/);
   assert.match(hook, /const isSubscribed = entitlement \? entitlement\.active : null/);
+  assert.match(
+    hook,
+    /status: entitlement \? \(entitlement\.active \? "active" : "inactive"\) : "unknown"/
+  );
   assert.doesNotMatch(
     hook,
     /subscriptionFromUser|subscription_status|subscriptionStatus|is_subscribed|isSubscribed\s*\?\?/
@@ -47,6 +51,8 @@ test("renderer treats entitlement active as authoritative and never infers it fr
 
 test("website billing refresh waits for app return and uses bounded documented delays", () => {
   const hook = read("src/hooks/useUsage.ts");
+  const main = read("main.js");
+  const preload = read("preload.js");
 
   assert.match(hook, /BILLING_POLL_DELAYS_MS = \[1_000, 2_000, 3_000, 5_000, 8_000\]/);
   assert.match(hook, /billingReturnArmed\.current = true/);
@@ -54,22 +60,60 @@ test("website billing refresh waits for app return and uses bounded documented d
   assert.match(hook, /document\.addEventListener\("visibilitychange", refreshAfterBillingReturn\)/);
   assert.match(hook, /for \(const delay of BILLING_POLL_DELAYS_MS\)/);
   assert.match(hook, /active === true/);
-  assert.match(hook, /openVoiceLabBilling\("dictate"\)/);
+  assert.match(hook, /openVoiceLabBilling\("desktop"\)/);
+  assert.doesNotMatch(hook, /catalog\.enabled === false/);
+  assert.match(main, /value === `\$\{OAUTH_PROTOCOL\}:\/\/billing-complete`/);
+  assert.doesNotMatch(main, /upgrade-success/);
+  assert.match(main, /webContents\.send\("desktop-usage-refresh", \{ reason \}\)/);
+  assert.match(preload, /onDesktopUsageRefresh/);
+  assert.match(hook, /onDesktopUsageRefresh/);
+  assert.match(hook, /loadSubscription\(\{ silent: true \}\)/);
+});
+
+test("billing handoff URL contains only the fixed desktop source", () => {
+  const client = read("src/helpers/voiceLabApiClient.js");
+
+  assert.match(client, /url\.searchParams\.set\("source", "desktop"\)/);
+  assert.doesNotMatch(
+    client,
+    /searchParams\.set\([^\n]*(?:access|refresh|token|user|plan|credit|payment)/i
+  );
 });
 
 test("sidebar and settings show server plan limits and manual refresh", () => {
   const display = read("src/components/UsageDisplay.tsx");
   const sidebar = read("src/components/ControlPanelSidebar.tsx");
+  const hook = read("src/hooks/useUsage.ts");
+  const compactStart = display.indexOf("if (compact)");
+  const compactEnd = display.indexOf("\n  }\n\n  return (", compactStart);
+  const compactDisplay = display.slice(compactStart, compactEnd);
 
   assert.match(sidebar, /<UsageDisplay compact \/>/);
-  assert.match(display, /usage\.plans\[0\]/);
+  assert.doesNotMatch(display, /usage\.plans\[0\]/);
   assert.match(display, /usage\.plans\.map/);
-  assert.match(display, /entitlement\.dailySeconds/);
+  assert.match(display, /entitlement\.usageLimitSeconds/);
   assert.match(display, /entitlement\.maxRequestSeconds/);
+  assert.match(display, /entitlement\?\.usageWindow/);
+  assert.match(display, /entitlement\?\.resetsAt/);
   assert.match(display, /plan\.dailyMinutes/);
   assert.match(display, /plan\.maxRecordingSeconds/);
   assert.match(display, /usage\.refetch\(\)/);
+  assert.match(display, /usage\.hasSubscriptionData && entitlement !== null/);
+  assert.match(compactDisplay, /needsEntitlementRefresh[\s\S]*usage\.refetch\(\)/);
+  assert.match(compactDisplay, /desktop\.wallet\.unavailable/);
+  assert.doesNotMatch(
+    compactDisplay,
+    /priceCompact|formatPrice|plans\[0\]|noActivePlan|inactiveDescription/
+  );
+  assert.match(
+    display,
+    /hasAuthoritativeEntitlement &&[\s\S]*usage\.pricingEnabled === true[\s\S]*usage\.plans\.length > 0/
+  );
   assert.match(display, /disabled=\{!usage\.billingAvailable \|\| usage\.checkoutLoading\}/);
+  assert.match(hook, /DESKTOP_USAGE_UPDATED_EVENT/);
+  assert.match(hook, /subscriptionRequests\.get\(accountKey\)/);
+  assert.match(hook, /loadSubscription\(\{ silent: true \}\)/);
+  assert.match(display, /text-2xs/);
 });
 
 test("sidebar hides Studio and STT until the product is available", () => {
@@ -80,24 +124,15 @@ test("sidebar hides Studio and STT until the product is available", () => {
   assert.doesNotMatch(sidebar, /id: "upload" as const/);
 });
 
-test("dashboard fails closed until the server confirms an active entitlement", () => {
+test("desktop usage never blocks the authenticated dashboard", () => {
   const router = read("src/AppRouter.jsx");
-  const gate = read("src/components/SubscriptionAccessGate.tsx");
+  const controlPanel = read("src/components/ControlPanel.tsx");
 
   const authGate = router.indexOf("isControlPanel && authLoaded && !isSignedIn");
-  const subscriptionGate = router.indexOf("<SubscriptionAccessGate>");
   const dashboard = router.indexOf("<ControlPanel initialSettingsSection=");
-  assert.ok(authGate > -1 && authGate < subscriptionGate, "authentication must be checked first");
-  assert.ok(subscriptionGate > -1 && subscriptionGate < dashboard, "plan gate must wrap dashboard");
-
-  assert.match(gate, /usage\?\.entitlement\?\.active === true/);
-  assert.match(gate, /usage\?\.plans\[0\]/);
-  assert.match(gate, /offer\.dailyMinutes/);
-  assert.match(gate, /offer\.maxRecordingSeconds/);
-  assert.match(gate, /usage\?\.openCheckout\(\)/);
-  assert.match(gate, /usage\?\.refetch\(\)/);
-  assert.match(gate, /usage\.errorRequestId/);
-  assert.match(gate, /!usage\.hasSubscriptionData && !usage\.error/);
+  assert.ok(authGate > -1 && authGate < dashboard, "authentication must be checked first");
+  assert.doesNotMatch(router, /SubscriptionAccessGate/);
+  assert.doesNotMatch(controlPanel, /UpgradePrompt|onLimitReached/);
 });
 
 test("every locale contains the desktop subscription and plan labels", () => {
@@ -114,6 +149,11 @@ test("every locale contains the desktop subscription and plan labels", () => {
       "checking",
       "choosePlan",
       "dailyLimit",
+      "hourlyLimit",
+      "remainingHourCompact",
+      "usedThisHour",
+      "remainingThisHour",
+      "resetsOn",
       "maxRecording",
       "refresh",
     ]) {

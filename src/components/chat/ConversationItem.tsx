@@ -71,7 +71,7 @@ export default function ConversationItem({
             {conversation.title}
           </p>
           <div className="flex items-center gap-0.5 shrink-0">
-            <span className="text-[10px] text-muted-foreground/40 tabular-nums group-hover:opacity-0 transition-opacity">
+            <span className="text-2xs text-muted-foreground/40 tabular-nums group-hover:opacity-0 transition-opacity">
               {formatTimestamp(conversation.updated_at)}
             </span>
             <DropdownMenu>
@@ -121,7 +121,7 @@ export default function ConversationItem({
           </div>
         </div>
         {conversation.preview && (
-          <p className="text-[11px] text-muted-foreground/50 line-clamp-1 mt-0.5">
+          <p className="text-2xs text-muted-foreground/50 line-clamp-1 mt-0.5">
             {conversation.preview}
           </p>
         )}

@@ -43,7 +43,7 @@ export default function WorkspaceSwitcher({ userName }: { userName?: string | nu
         >
           <span
             className={cn(
-              "shrink-0 w-5 h-5 rounded-md text-[10px] font-semibold flex items-center justify-center",
+              "shrink-0 w-5 h-5 rounded-md text-2xs font-semibold flex items-center justify-center",
               active
                 ? "bg-primary/12 text-primary"
                 : "bg-foreground/8 text-foreground/70 dark:bg-white/8 dark:text-foreground/65"
@@ -55,7 +55,7 @@ export default function WorkspaceSwitcher({ userName }: { userName?: string | nu
           <ChevronsUpDown size={12} className="text-foreground/40 shrink-0" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" sideOffset={4} className="min-w-[12rem]">
-          <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground/70 font-medium">
+          <DropdownMenuLabel className="text-2xs uppercase tracking-wide text-muted-foreground/70 font-medium">
             {t("workspaces.switcher.workspaces")}
           </DropdownMenuLabel>
           {workspaces.length === 0 && (
@@ -73,7 +73,7 @@ export default function WorkspaceSwitcher({ userName }: { userName?: string | nu
               >
                 <span
                   className={cn(
-                    "shrink-0 w-5 h-5 rounded-md text-[10px] font-semibold flex items-center justify-center",
+                    "shrink-0 w-5 h-5 rounded-md text-2xs font-semibold flex items-center justify-center",
                     "bg-primary/12 text-primary"
                   )}
                 >
@@ -86,7 +86,7 @@ export default function WorkspaceSwitcher({ userName }: { userName?: string | nu
           })}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setActive(null)} className="gap-2 text-xs">
-            <span className="shrink-0 w-5 h-5 rounded-md text-[10px] font-semibold flex items-center justify-center bg-foreground/8 text-foreground/70 dark:bg-white/8 dark:text-foreground/65">
+            <span className="shrink-0 w-5 h-5 rounded-md text-2xs font-semibold flex items-center justify-center bg-foreground/8 text-foreground/70 dark:bg-white/8 dark:text-foreground/65">
               {userName?.[0]?.toUpperCase() ?? "P"}
             </span>
             <span className="flex-1 truncate">{t("workspaces.switcher.personal")}</span>

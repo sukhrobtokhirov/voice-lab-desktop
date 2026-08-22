@@ -404,9 +404,7 @@ function isTrustedAppWebContents(contents) {
 function installSessionPermissionPolicy(targetSession) {
   targetSession.setPermissionCheckHandler((contents, permission, _origin, details = {}) => {
     return (
-      permission === "media" &&
-      isTrustedAppWebContents(contents) &&
-      details.mediaType !== "video"
+      permission === "media" && isTrustedAppWebContents(contents) && details.mediaType !== "video"
     );
   });
   targetSession.setPermissionRequestHandler((contents, permission, callback, details = {}) => {
@@ -469,12 +467,8 @@ function parseProtocolRoute(value) {
     return { kind: "auth", value: url.toString() };
   }
 
-  if (
-    url.hostname === "upgrade-success" &&
-    (url.pathname === "" || url.pathname === "/") &&
-    !url.search
-  ) {
-    return { kind: "upgrade", value: url.toString() };
+  if (value === `${OAUTH_PROTOCOL}://billing-complete`) {
+    return { kind: "billing", value };
   }
 
   const singlePathPart = url.pathname.match(/^\/([^/]+)\/?$/)?.[1] || "";
@@ -500,8 +494,8 @@ async function dispatchProtocolRoute(route) {
     await handleOAuthDeepLink(route.value);
     return;
   }
-  if (route.kind === "upgrade") {
-    handleUpgradeDeepLink();
+  if (route.kind === "billing") {
+    await handleBillingCompleteDeepLink();
     return;
   }
   if (route.kind === "note") {
@@ -822,11 +816,17 @@ async function handleOAuthDeepLink(deepLinkUrl) {
   }
 }
 
-function handleUpgradeDeepLink() {
+function notifyDesktopUsageRefresh(reason) {
   if (isLiveWindow(windowManager?.controlPanelWindow)) {
-    windowManager.controlPanelWindow.webContents.executeJavaScript(
-      'window.dispatchEvent(new Event("upgrade-success"))'
-    );
+    windowManager.controlPanelWindow.webContents.send("desktop-usage-refresh", { reason });
+  }
+}
+
+async function handleBillingCompleteDeepLink() {
+  if (!windowManager) return;
+  await windowManager.createControlPanelWindow();
+  if (isLiveWindow(windowManager?.controlPanelWindow)) {
+    notifyDesktopUsageRefresh("billing-complete");
     windowManager.controlPanelWindow.show();
     windowManager.controlPanelWindow.focus();
     dockManager.setControlPanelVisible(true);
@@ -1390,28 +1390,12 @@ async function startApp() {
       }
     });
 
-    // After starting globe-listener, check if accessibility is granted.
-    // If not, notify the control panel so it can prompt the user.
-    const checkAndNotifyAccessibility = () => {
-      if (!systemPreferences.isTrustedAccessibilityClient(false)) {
-        debugLogger.info("[Accessibility] macOS accessibility not trusted — notifying renderers");
-        if (isLiveWindow(windowManager.controlPanelWindow)) {
-          windowManager.controlPanelWindow.webContents.send("accessibility-missing");
-        }
-      }
-    };
-
-    // Check shortly after startup (give windows time to load)
-    setTimeout(checkAndNotifyAccessibility, 3000);
-
-    // Allow renderer to request an accessibility check (e.g. on sign-in).
-    // Also sends accessibility-missing events if untrusted.
+    // Read-only status check. Missing Accessibility access is surfaced by the
+    // permissions UI and paste result; startup and sign-in must never trigger
+    // the native macOS prompt. The prompt is reserved for the explicit
+    // "Grant access" action in Settings.
     handleTrustedIpc("check-accessibility-trusted", () => {
-      const trusted = systemPreferences.isTrustedAccessibilityClient(false);
-      if (!trusted) {
-        checkAndNotifyAccessibility();
-      }
-      return trusted;
+      return systemPreferences.isTrustedAccessibilityClient(false);
     });
 
     // Reset native key state when hotkey changes
@@ -1648,6 +1632,10 @@ if (gotSingleInstanceLock) {
       }
     }
 
+    if (window === windowManager?.controlPanelWindow) {
+      notifyDesktopUsageRefresh("app-active");
+    }
+
     // Control panel doesn't need any special handling on focus
     // It should behave like a normal window
   });
@@ -1678,6 +1666,7 @@ if (gotSingleInstanceLock) {
         windowManager.enforceMainWindowOnTop();
       }
     }
+    notifyDesktopUsageRefresh("app-active");
   });
 
   let isShuttingDown = false;

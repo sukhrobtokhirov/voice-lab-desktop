@@ -8,7 +8,7 @@ const Module = require("node:module");
 const API_BASE_URL = "https://api.voicelab.test";
 const DESKTOP_STT_URL = `${API_BASE_URL}/v1/desktop/stt`;
 const DESKTOP_PRICING_URL = `${API_BASE_URL}/api/v1/billing/desktop/pricing`;
-const DESKTOP_SUBSCRIPTION_URL = `${API_BASE_URL}/api/v1/billing/desktop/subscription`;
+const DESKTOP_USAGE_URL = `${API_BASE_URL}/v1/desktop/usage`;
 const MAX_AUDIO_BYTES = 64 * 1024 * 1024;
 
 function jsonResponse(body, status = 200, headers = {}) {
@@ -89,26 +89,23 @@ function createClient(VoiceLabApiClient, authManager = createAuthManager()) {
   return { client, authManager };
 }
 
-function primeActiveSubscription(client, authManager, maxRequestSeconds = 300) {
-  client.subscriptionCache = {
+function primeActiveSubscription(client, _authManager, maxRequestSeconds = 300) {
+  client.getDesktopUsage = async () => ({
     entitlement: {
       active: true,
-      packageCode: "desktop-pro",
-      packageName: "VoiceLab Flow Pro",
-      status: "active",
-      dailySeconds: 27_000,
+      planId: "plan_pro",
+      planName: "Pro",
+      usageWindow: "day",
+      usageLimitSeconds: 28_800,
+      usedSeconds: 842,
+      reservedSeconds: 0,
+      remainingSeconds: 27_958,
       maxRequestSeconds,
-      periodStartsAt: null,
-      periodEndsAt: null,
-      cancelAtPeriodEnd: false,
+      windowStartsAt: "2026-08-22T00:00:00Z",
+      resetsAt: "2026-08-23T00:00:00Z",
     },
     requestId: "req_subscription_cached",
-  };
-  client.subscriptionFetchedAt = Date.now();
-  client.subscriptionAuthContext = {
-    accountId: authManager.state.accountId,
-    sessionId: authManager.state.sessionId,
-  };
+  });
 }
 
 function installFetch(t, implementation) {
@@ -204,45 +201,58 @@ test("desktop pricing rejects a non-canonical catalog instead of inventing defau
   );
 });
 
-test("desktop subscription uses the desktop token and preserves server entitlement", async (t) => {
+test("desktop plan purchase always opens the normal website billing flow", (t) => {
+  const VoiceLabApiClient = loadClient(t);
+  const { client } = createClient(VoiceLabApiClient);
+
+  assert.equal(client.getBillingUrl("dictate"), "https://voicelab.test/app/billing?source=desktop");
+  assert.equal(client.getBillingUrl("desktop"), "https://voicelab.test/app/billing?source=desktop");
+});
+
+test("desktop subscription uses the desktop token and preserves desktop STT entitlement", async (t) => {
   const VoiceLabApiClient = loadClient(t);
   const { client, authManager } = createClient(VoiceLabApiClient);
   const calls = [];
   installFetch(t, async (url, init) => {
     calls.push({ url, init });
     return jsonResponse({
-      entitlement: {
-        active: true,
-        package_code: "desktop-pro",
-        package_name: "VoiceLab Flow Pro",
-        status: "trialing",
-        daily_seconds: 27_000,
+      desktop_stt: {
+        enabled: true,
+        plan_id: "plan_pro",
+        plan_name: "Pro",
+        usage_window: "day",
+        usage_limit_seconds: 28_800,
+        used_seconds: 842,
+        reserved_seconds: 0,
+        remaining_seconds: 27_958,
         max_request_seconds: 300,
-        period_starts_at: "2026-08-21T00:00:00Z",
-        period_ends_at: "2026-09-21T00:00:00Z",
-        cancel_at_period_end: true,
+        window_starts_at: "2026-08-22T00:00:00Z",
+        resets_at: "2026-08-23T00:00:00Z",
       },
       request_id: "req_subscription_1",
     });
   });
 
-  assert.deepEqual(await client.getDesktopSubscription(), {
+  assert.deepEqual(await client.getDesktopUsage(), {
     entitlement: {
       active: true,
-      packageCode: "desktop-pro",
-      packageName: "VoiceLab Flow Pro",
-      status: "trialing",
-      dailySeconds: 27_000,
+      planId: "plan_pro",
+      planName: "Pro",
+      usageWindow: "day",
+      usageLimitSeconds: 28_800,
+      usedSeconds: 842,
+      reservedSeconds: 0,
+      remainingSeconds: 27_958,
       maxRequestSeconds: 300,
-      periodStartsAt: "2026-08-21T00:00:00Z",
-      periodEndsAt: "2026-09-21T00:00:00Z",
-      cancelAtPeriodEnd: true,
+      windowStartsAt: "2026-08-22T00:00:00Z",
+      resetsAt: "2026-08-23T00:00:00Z",
     },
     requestId: "req_subscription_1",
   });
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, DESKTOP_SUBSCRIPTION_URL);
+  assert.equal(calls[0].url, DESKTOP_USAGE_URL);
   assert.equal(calls[0].init.method, "GET");
+  assert.equal(calls[0].init.cache, "no-store");
   assert.equal(
     new Headers(calls[0].init.headers).get("authorization"),
     "Bearer desktop-access-token-1"
@@ -251,66 +261,138 @@ test("desktop subscription uses the desktop token and preserves server entitleme
   assert.equal(authManager.state.getValidAccessTokenCalls, 1);
 });
 
-test("desktop subscription refreshes session_expired once and retries once", async (t) => {
+test("desktop usage 401 clears the session without retrying", async (t) => {
   const VoiceLabApiClient = loadClient(t);
   const { client, authManager } = createClient(VoiceLabApiClient);
   const calls = [];
   installFetch(t, async (url, init) => {
     calls.push({ url, init });
-    if (calls.length === 1) {
-      return jsonResponse(
-        {
-          message: "Desktop session expired.",
-          error: { code: "session_expired" },
-          request_id: "req_subscription_expired",
-        },
-        401
-      );
-    }
-    return jsonResponse({
-      entitlement: {
-        active: false,
-        daily_seconds: 0,
-        max_request_seconds: 0,
-        cancel_at_period_end: false,
+    return jsonResponse(
+      {
+        message: "Desktop session expired.",
+        error: { code: "invalid_desktop_token" },
+        request_id: "req_subscription_expired",
       },
-      request_id: "req_subscription_refreshed",
-    });
+      401
+    );
   });
 
-  const result = await client.getDesktopSubscription();
-
-  assert.equal(result.entitlement.active, false);
-  assert.equal(calls.length, 2);
-  assert.equal(authManager.state.refreshCalls, 1);
-  assert.deepEqual(authManager.state.refreshOptions, [{ force: true }]);
-  assert.equal(
-    new Headers(calls[1].init.headers).get("authorization"),
-    "Bearer desktop-access-token-2"
+  await assert.rejects(
+    client.getDesktopUsage(),
+    (error) =>
+      error.code === "AUTH_EXPIRED" &&
+      error.status === 401 &&
+      error.toPublic().requestId === "req_subscription_expired"
   );
+  assert.equal(calls.length, 1);
+  assert.equal(authManager.state.refreshCalls, 0);
+  assert.equal(authManager.state.invalidateCalls, 1);
+  assert.equal(authManager.state.invalidations[0]?.code, "invalid_desktop_token");
 });
 
-test("desktop subscription keeps active false authoritative even when status says active", async (t) => {
+test("desktop subscription keeps enabled false authoritative without plan fields", async (t) => {
   const VoiceLabApiClient = loadClient(t);
   const { client } = createClient(VoiceLabApiClient);
   installFetch(t, async () =>
     jsonResponse({
-      entitlement: {
-        active: false,
-        status: "active",
-        daily_seconds: 0,
-        max_request_seconds: 0,
-        cancel_at_period_end: false,
-      },
+      desktop_stt: { enabled: false },
       request_id: "req_subscription_inactive",
     })
   );
 
-  const result = await client.getDesktopSubscription();
+  const result = await client.getDesktopUsage();
   assert.equal(result.entitlement.active, false);
-  assert.equal(result.entitlement.status, "active");
-  assert.equal(result.entitlement.dailySeconds, 0);
+  assert.equal(result.entitlement.planId, null);
+  assert.equal(result.entitlement.usageLimitSeconds, 0);
   assert.equal(result.entitlement.maxRequestSeconds, 0);
+});
+
+test("desktop usage accepts omitted zero counters for an enabled Free plan", async (t) => {
+  const VoiceLabApiClient = loadClient(t);
+  const { client } = createClient(VoiceLabApiClient);
+  installFetch(t, async () =>
+    jsonResponse({
+      desktop_stt: {
+        enabled: true,
+        plan_id: "plan_free",
+        plan_name: "Free",
+        usage_window: "day",
+        usage_limit_seconds: 480,
+        remaining_seconds: 480,
+        max_request_seconds: 300,
+        window_starts_at: "2026-08-22T00:00:00Z",
+        resets_at: "2026-08-23T00:00:00Z",
+      },
+      request_id: "req_free_zero_counters",
+    })
+  );
+
+  const result = await client.getDesktopUsage();
+  assert.equal(result.entitlement.active, true);
+  assert.equal(result.entitlement.planId, "plan_free");
+  assert.equal(result.entitlement.usedSeconds, 0);
+  assert.equal(result.entitlement.reservedSeconds, 0);
+  assert.equal(result.entitlement.remainingSeconds, 480);
+});
+
+test("desktop subscription accepts hourly windows and never caches no-store usage", async (t) => {
+  const VoiceLabApiClient = loadClient(t);
+  const { client } = createClient(VoiceLabApiClient);
+  let calls = 0;
+  installFetch(t, async (_url, init) => {
+    calls += 1;
+    assert.equal(init.cache, "no-store");
+    return jsonResponse({
+      desktop_stt: {
+        enabled: true,
+        plan_id: "plan_hourly",
+        plan_name: "Hourly",
+        usage_window: "hour",
+        usage_limit_seconds: 3_600,
+        used_seconds: calls,
+        reserved_seconds: 0,
+        remaining_seconds: 3_600 - calls,
+        max_request_seconds: 120,
+        window_starts_at: "2026-08-22T12:00:00Z",
+        resets_at: "2026-08-22T13:00:00Z",
+      },
+      request_id: `req_subscription_hour_${calls}`,
+    });
+  });
+
+  const first = await client.getDesktopUsage();
+  const second = await client.getDesktopUsage();
+  assert.equal(calls, 2);
+  assert.equal(first.entitlement.usageWindow, "hour");
+  assert.equal(second.entitlement.usedSeconds, 2);
+});
+
+test("desktop subscription rejects malformed active usage windows", async (t) => {
+  const VoiceLabApiClient = loadClient(t);
+  const { client } = createClient(VoiceLabApiClient);
+  installFetch(t, async () =>
+    jsonResponse({
+      desktop_stt: {
+        enabled: true,
+        plan_id: "plan_pro",
+        plan_name: "Pro",
+        usage_window: "week",
+        usage_limit_seconds: 28_800,
+        used_seconds: 842,
+        reserved_seconds: 0,
+        remaining_seconds: 27_958,
+        max_request_seconds: 300,
+        window_starts_at: "2026-08-22T00:00:00Z",
+        resets_at: "2026-08-23T00:00:00Z",
+      },
+      request_id: "req_subscription_invalid",
+    })
+  );
+
+  await assert.rejects(
+    client.getDesktopUsage(),
+    (error) => error.code === "BACKEND_RESPONSE_INVALID"
+  );
 });
 
 test("desktop STT sends one exact multipart request and exposes synchronous usage", async (t) => {
@@ -322,8 +404,9 @@ test("desktop STT sends one exact multipart request and exposes synchronous usag
     duration_ms: 1_250,
     usage: {
       used_seconds: 31,
-      daily_limit_seconds: 600,
+      limit_seconds: 600,
       remaining_seconds: 569,
+      usage_window: "day",
     },
     request_id: "req_desktop_stt_1",
     stt_provider: "openwhispr",
@@ -481,7 +564,12 @@ test("invalid desktop token refreshes once and rebuilds multipart for one retry"
       text: "Yangilangan token bilan",
       language: "uz",
       duration_ms: 900,
-      usage: { used_seconds: 1, daily_limit_seconds: 600, remaining_seconds: 599 },
+      usage: {
+        used_seconds: 1,
+        limit_seconds: 600,
+        remaining_seconds: 599,
+        usage_window: "day",
+      },
       request_id: "req_auth_2",
     });
   });
@@ -692,9 +780,9 @@ test("desktop STT errors preserve server semantics, Retry-After, and nested fiel
       publicCode: "CONCURRENCY_LIMIT",
     },
     {
-      name: "daily allowance is exhausted",
+      name: "desktop usage allowance is exhausted",
       status: 429,
-      serverCode: "daily_dictation_limit_reached",
+      serverCode: "desktop_usage_limit_reached",
       publicCode: "DAILY_CAP_REACHED",
     },
     {
@@ -720,10 +808,10 @@ test("desktop STT errors preserve server semantics, Retry-After, and nested fiel
       publicCode: "AUDIO_INVALID",
     },
     {
-      name: "language is unsupported",
+      name: "request validation failed",
       status: 422,
-      serverCode: "unsupported_language",
-      publicCode: "AUDIO_LANGUAGE_UNSUPPORTED",
+      serverCode: "validation_error",
+      publicCode: "INVALID_REQUEST",
     },
     {
       name: "no speech was detected",
@@ -842,7 +930,12 @@ test("desktop STT uses canonical filenames for every supported MIME type", async
       text: "Test",
       language: "uz",
       duration_ms: 1_000,
-      usage: { used_seconds: 1, daily_limit_seconds: 60, remaining_seconds: 59 },
+      usage: {
+        used_seconds: 1,
+        limit_seconds: 60,
+        remaining_seconds: 59,
+        usage_window: "day",
+      },
       request_id: `req_mime_${requests.length}`,
     });
   });
@@ -884,7 +977,7 @@ test("desktop STT rejects incomplete success usage without resending", async (t)
       text: "Assalomu alaykum",
       language: "uz",
       duration_ms: 1_000,
-      usage: { used_seconds: 1, daily_limit_seconds: 60 },
+      usage: { used_seconds: 1, limit_seconds: 60 },
       request_id: "req_invalid_usage",
     });
   });
@@ -1012,12 +1105,7 @@ test("desktop STT requires an active entitlement and enforces its request limit"
   const { client, authManager } = createClient(VoiceLabApiClient);
   installFetch(t, async () =>
     jsonResponse({
-      entitlement: {
-        active: false,
-        daily_seconds: 0,
-        max_request_seconds: 0,
-        cancel_at_period_end: false,
-      },
+      desktop_stt: { enabled: false },
       request_id: "req_inactive_plan",
     })
   );

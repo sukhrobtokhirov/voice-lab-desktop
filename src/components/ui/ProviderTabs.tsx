@@ -108,12 +108,12 @@ export function ProviderTabs({
             {renderIcon ? renderIcon(provider.id) : <ProviderIcon provider={provider.id} />}
             <span>{provider.name}</span>
             {provider.recommended && (
-              <span className="text-[10px] text-primary/70 font-medium">
+              <span className="text-2xs text-primary/70 font-medium">
                 {t("common.recommended")}
               </span>
             )}
             {isDisabled && provider.disabledLabel && (
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
+              <span className="text-2xs uppercase tracking-wide text-muted-foreground/70">
                 {provider.disabledLabel}
               </span>
             )}

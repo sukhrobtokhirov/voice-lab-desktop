@@ -71,12 +71,17 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Build test runtime dependencies
+        run: npm rebuild better-sqlite3 ffmpeg-static
 
       - name: Run release workflow contract tests
         run: npm run test:release-contract
 
       - name: Run full test and quality gate
+        env:
+          ELECTRON_OVERRIDE_DIST_PATH: /tmp
         run: |
           npm test
           npm run typecheck

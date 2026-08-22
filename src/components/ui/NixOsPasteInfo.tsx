@@ -41,7 +41,7 @@ function StatusPill({ ok, label }: { ok: boolean; label: string }) {
 function CodeBlock({ code, copyLabel }: { code: string; copyLabel: string }) {
   return (
     <div className="flex items-start gap-1.5">
-      <pre className="flex-1 text-[11px] bg-muted/60 rounded-md px-3 py-2 font-mono whitespace-pre-wrap break-all select-all overflow-x-auto">
+      <pre className="flex-1 text-2xs bg-muted/60 rounded-md px-3 py-2 font-mono whitespace-pre-wrap break-all select-all overflow-x-auto">
         {code}
       </pre>
       <button

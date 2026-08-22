@@ -68,7 +68,7 @@ export default function BatchQueueView({
               variant="ghost"
               size="sm"
               onClick={onClearQueue}
-              className="h-6 text-[10px] text-foreground/30"
+              className="h-6 text-2xs text-foreground/30"
             >
               {t("notes.upload.clearQueue")}
             </Button>
@@ -117,7 +117,7 @@ export default function BatchQueueView({
             {item.status === "done" && item.noteId && onOpenNote && (
               <button
                 onClick={() => onOpenNote(item.noteId!)}
-                className="text-[10px] text-primary/50 hover:text-primary/70"
+                className="text-2xs text-primary/50 hover:text-primary/70"
                 aria-label={t("notes.upload.openNote")}
               >
                 {t("notes.upload.openNote")}
@@ -126,7 +126,7 @@ export default function BatchQueueView({
 
             {item.status === "error" && item.error && (
               <span
-                className="text-[10px] text-destructive/50 truncate max-w-20"
+                className="text-2xs text-destructive/50 truncate max-w-20"
                 title={t(`notes.upload.${item.error}`, { defaultValue: item.error })}
               >
                 {t(`notes.upload.${item.error}`, { defaultValue: item.error })}

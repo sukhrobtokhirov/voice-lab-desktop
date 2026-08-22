@@ -127,33 +127,57 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
       <div className="flex h-10 items-center justify-end border-b border-border px-2 [app-region:drag]">
-        <div className="[app-region:no-drag]"><WindowControls /></div>
+        <div className="[app-region:no-drag]">
+          <WindowControls />
+        </div>
       </div>
-      <div className="border-b border-border px-5 py-3"><StepProgress steps={progress} currentStep={stepIndex} /></div>
-      <main className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col justify-center overflow-y-auto px-6 py-7">
+      <div className="border-b border-border px-5 py-3">
+        <StepProgress steps={progress} currentStep={stepIndex} />
+      </div>
+      <main className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col overflow-y-auto px-6 py-7">
         {step === "welcome" && (
-          <div className="space-y-5 text-center">
+          <div className="my-auto space-y-5 text-center">
             <img src={logoIcon} alt="VoiceLab" className="mx-auto h-16 w-16 rounded-2xl" />
-            <div><h1 className="text-2xl font-semibold">{t("desktop.onboarding.welcome.title")}</h1><p className="mt-2 text-sm text-muted-foreground">{t("desktop.onboarding.welcome.description")}</p></div>
+            <div>
+              <h1 className="text-2xl font-semibold leading-tight tracking-tight">
+                {t("desktop.onboarding.welcome.title")}
+              </h1>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {t("desktop.onboarding.welcome.description")}
+              </p>
+            </div>
           </div>
         )}
 
         {step === "mode" && (
-          <AuthenticationStep
-            onAuthComplete={() => go("language-permissions")}
-          />
+          <div className="my-auto">
+            <AuthenticationStep onAuthComplete={() => go("language-permissions")} />
+          </div>
         )}
 
         {step === "language-permissions" && (
-          <div className="space-y-5">
-            <div><h2 className="text-xl font-semibold">{t("desktop.onboarding.language.title")}</h2><p className="mt-1 text-sm text-muted-foreground">{t("desktop.onboarding.language.description")}</p></div>
+          <div className="my-auto space-y-5">
+            <div>
+              <h2 className="text-xl font-semibold leading-tight tracking-tight">
+                {t("desktop.onboarding.language.title")}
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                {t("desktop.onboarding.language.description")}
+              </p>
+            </div>
             {usage?.isLoading && (
-              <p role="status" className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+              <p
+                role="status"
+                className="rounded-lg bg-muted/60 px-3 py-2 text-sm leading-5 text-muted-foreground"
+              >
                 {t("desktop.onboarding.language.loadingCapabilities")}
               </p>
             )}
             {usage?.error && (
-              <p role="status" className="rounded-lg bg-amber-500/8 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+              <p
+                role="status"
+                className="rounded-lg bg-amber-500/8 px-3 py-2 text-sm leading-5 text-amber-700 dark:text-amber-300"
+              >
                 {t("desktop.onboarding.language.capabilitiesUnavailable")}
               </p>
             )}
@@ -164,20 +188,43 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
               </p>
             )}
             <PermissionsSection permissions={permissions} systemAudio={systemAudio} />
-            {!permissions.micPermissionGranted && <p className="text-xs text-muted-foreground">{t("desktop.onboarding.language.microphoneRequired")}</p>}
+            {!permissions.micPermissionGranted && (
+              <p className="text-sm leading-5 text-muted-foreground">
+                {t("desktop.onboarding.language.microphoneRequired")}
+              </p>
+            )}
           </div>
         )}
 
         {step === "hotkey" && (
-          <div className="space-y-5">
-            <div><h2 className="text-xl font-semibold">{t("desktop.onboarding.hotkey.title")}</h2><p className="mt-1 text-sm text-muted-foreground">{t("desktop.onboarding.hotkey.description")}</p></div>
+          <div className="my-auto space-y-5">
+            <div>
+              <h2 className="text-xl font-semibold leading-tight tracking-tight">
+                {t("desktop.onboarding.hotkey.title")}
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                {t("desktop.onboarding.hotkey.description")}
+              </p>
+            </div>
             <HotkeyInput value={hotkey} disabled={isRegistering} variant="hero" onChange={async (value) => { if (await registerHotkey(value)) { setHotkey(value); localStorage.setItem("hotkey", value); } }} />
             <Textarea value={testText} onChange={(event) => setTestText(event.target.value)} placeholder={t("desktop.onboarding.hotkey.placeholder")} className="min-h-24" autoFocus />
           </div>
         )}
 
         {step === "ready" && (
-          <div className="space-y-5 text-center"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10"><CheckCircle2 className="h-7 w-7 text-emerald-500" /></div><div><h2 className="text-2xl font-semibold">{t("desktop.onboarding.ready.title")}</h2><p className="mt-2 text-sm text-muted-foreground">{t("desktop.onboarding.ready.account")}</p></div></div>
+          <div className="my-auto space-y-5 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10">
+              <CheckCircle2 className="h-7 w-7 text-emerald-500" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-semibold leading-tight tracking-tight">
+                {t("desktop.onboarding.ready.title")}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {t("desktop.onboarding.ready.account")}
+              </p>
+            </div>
+          </div>
         )}
       </main>
       <footer className="flex shrink-0 items-center justify-between border-t border-border bg-background px-6 py-4">

@@ -137,6 +137,8 @@
     "refresh": "Actualiser",
     "download": "Télécharger",
     "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "ok": "OK",
     "recommended": "Recommandé",
     "active": "Actif",
     "freeAccountRequired": "Compte gratuit requis",
@@ -161,6 +163,7 @@
     "error": "Une erreur s'est produite",
     "unknownError": "Une erreur inconnue s'est produite",
     "copy": "Copier",
+    "copyError": "Copier l’erreur",
     "copied": "Copié",
     "done": "Terminé",
     "skip": "Passer"
@@ -740,9 +743,9 @@
     }
   },
   "auth": {
-    "desktopTitle": "Se connecter à VoiceLab Desktop",
+    "desktopTitle": "Se connecter à VoiceLab Flow",
     "desktopBrowserHint": "La connexion sécurisée s’ouvre dans votre navigateur, puis revient automatiquement dans l’application.",
-    "desktopWaiting": "Terminez la connexion dans votre navigateur. VoiceLab Desktop continuera automatiquement.",
+    "desktopWaiting": "Terminez la connexion dans votre navigateur. VoiceLab Flow continuera automatiquement.",
     "desktopSecurity": "Votre mot de passe n’entre jamais dans l’application. Le jeton d’actualisation est chiffré dans un stockage local privé.",
     "desktopOpenBrowser": "Continuer dans le navigateur",
     "desktopOpening": "Ouverture de la connexion sécurisée…",
@@ -758,10 +761,10 @@
     "desktopSecurityError": "Le lien de connexion n’a pas passé les contrôles de sécurité VoiceLab. Recommencez la connexion.",
     "desktopReplayDetected": "Ce lien de connexion a déjà été utilisé. Créez une nouvelle demande.",
     "desktopUnauthorized": "Votre session VoiceLab n’est plus valide. Reconnectez-vous.",
-    "desktopUnavailable": "L’authentification Desktop n’est pas disponible dans cette session. Redémarrez VoiceLab Desktop.",
+    "desktopUnavailable": "L’authentification Desktop n’est pas disponible dans cette session. Redémarrez VoiceLab Flow.",
     "desktopServerRejected": "Le serveur d’authentification a refusé la demande. Réessayez ou contactez l’assistance avec le code d’erreur ci-dessous.",
     "desktopReopenFailed": "Le navigateur n’a pas pu être rouvert. Annulez et recommencez la connexion.",
-    "desktopProtocolUnavailable": "Le lien de retour sécurisé n’est pas enregistré. Redémarrez ou réinstallez VoiceLab Desktop.",
+    "desktopProtocolUnavailable": "Le lien de retour sécurisé n’est pas enregistré. Redémarrez ou réinstallez VoiceLab Flow.",
     "cloudNotConfigured": "Cloud non configuré",
     "common": {
       "back": "Retour",
@@ -1098,7 +1101,7 @@
       "reset": "Réinitialiser",
       "save": "Enregistrer"
     },
-    "defaultTestInput": "Hey Whispr, quel temps fait-il aujourd'hui ?",
+    "defaultTestInput": "Hey VoiceLab, quel temps fait-il aujourd'hui ?",
     "defaultTestInputTranslate": "Il fait très beau aujourd'hui, ça te dit d'aller te promener ?",
     "dialogs": {
       "reset": {
@@ -3085,7 +3088,7 @@
     "join": "Rejoindre et transcrire"
   },
   "desktop": {
-    "offline": "Hors ligne. La dictée locale fonctionne toujours.",
+    "offline": "Vous êtes hors ligne. La dictée vocale nécessite une connexion Internet.",
     "nav": {
       "history": "Histoire",
       "vocabulary": "Vocabulaire",
@@ -3103,6 +3106,7 @@
       "updated": "{{time}} mis à jour",
       "live": "L’utilisation apparaîtra après la prochaine dictée.",
       "manage": "Gérer la facturation",
+      "upgradePlan": "Améliorer le forfait",
       "activeDescription": "Votre forfait Desktop est actif et prêt à l’emploi.",
       "inactiveDescription": "Choisissez un forfait Desktop sur le site VoiceLab.",
       "active": "Actif",
@@ -3110,15 +3114,21 @@
       "activePlan": "Forfait actif",
       "noActivePlan": "Aucun forfait actif",
       "checking": "Vérification de l’abonnement…",
-      "remainingCompact": "{{duration}} restantes aujourd’hui",
+      "remainingCompact": "{{duration}} restantes · limite quotidienne",
+      "remainingHourCompact": "{{duration}} restantes · limite horaire",
       "dailyCompact": "{{duration}} par jour",
+      "hourlyCompact": "{{duration}} par heure",
       "billingDisabled": "Les forfaits Desktop sont temporairement indisponibles.",
       "priceCompact": "{{price}} / {{interval}}",
       "choosePlan": "Choisir un forfait",
       "dailyLimit": "Quota quotidien",
+      "hourlyLimit": "Quota horaire",
+      "usedThisHour": "Utilisé cette heure",
+      "remainingThisHour": "Restant cette heure",
       "maxRecording": "Enregistrement maximal",
       "endsOn": "L’accès prend fin le {{date}}",
       "renewsOn": "Renouvellement le {{date}}",
+      "resetsOn": "Le quota se réinitialise le {{date}}",
       "dailyMinutes": "{{count}} minutes par jour",
       "maxRecordingSeconds": "Jusqu’à {{count}} secondes par enregistrement",
       "refreshHint": "Actualisez après votre retour du paiement.",
@@ -3134,7 +3144,7 @@
     },
     "subscriptionPrompt": {
       "title": "Forfait Desktop requis",
-      "description": "Choisissez un forfait VoiceLab Desktop sur le site, puis revenez ici pour actualiser votre accès.",
+      "description": "Choisissez un forfait VoiceLab Flow sur le site, puis revenez ici pour actualiser votre accès.",
       "limitTitle": "Quota quotidien atteint",
       "limitDescription": "Votre forfait Desktop est actif, mais le quota de dictée du jour est épuisé. Gérez le forfait sur VoiceLab ou réessayez après sa réinitialisation."
     },
@@ -3246,7 +3256,7 @@
       "advanced": "Avancé",
       "advancedDescription": "VoiceLab Cloud et outils de développement",
       "advancedSetup": "Transcription cloud",
-      "advancedSetupDescription": "VoiceLab Dictate utilise automatiquement votre compte connecté."
+      "advancedSetupDescription": "VoiceLab Flow utilise automatiquement votre compte connecté."
     },
     "session": {
       "active": "Connecté",

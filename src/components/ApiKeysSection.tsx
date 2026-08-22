@@ -134,7 +134,7 @@ export default function ApiKeysSection() {
                     <span className="text-xs font-medium text-foreground truncate">
                       {apiKey.name}
                     </span>
-                    <code className="text-[10px] font-mono text-muted-foreground/60 shrink-0">
+                    <code className="text-2xs font-mono text-muted-foreground/60 shrink-0">
                       {apiKey.key_prefix}...
                     </code>
                   </div>
@@ -142,11 +142,11 @@ export default function ApiKeysSection() {
                     {apiKey.scopes
                       .filter((scope) => scope in API_SCOPE_I18N_KEY)
                       .map((scope) => (
-                        <Badge key={scope} variant="outline" className="text-[10px] px-1.5 py-0">
+                        <Badge key={scope} variant="outline" className="text-2xs px-1.5 py-0">
                           {t(`apiKeysSection.scopes.${API_SCOPE_I18N_KEY[scope as ApiScope]}`)}
                         </Badge>
                       ))}
-                    <span className="text-[10px] text-muted-foreground/50 ml-1">
+                    <span className="text-2xs text-muted-foreground/50 ml-1">
                       {apiKey.last_used_at
                         ? t("apiKeysSection.lastUsed", {
                             time: formatRelativeTime(apiKey.last_used_at),
@@ -169,7 +169,7 @@ export default function ApiKeysSection() {
 
           {keys.length >= MAX_API_KEYS && (
             <SettingsPanelRow>
-              <p className="text-[10px] text-muted-foreground/50 text-center">
+              <p className="text-2xs text-muted-foreground/50 text-center">
                 {t("apiKeysSection.maxKeysReached", { max: MAX_API_KEYS })}
               </p>
             </SettingsPanelRow>
@@ -320,7 +320,7 @@ function CreateKeyDialog({
 
               <div className="flex items-start gap-2 rounded-lg border border-warning/20 bg-warning/5 dark:bg-warning/10 px-3 py-2">
                 <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0 mt-0.5" />
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                <p className="text-2xs text-muted-foreground leading-relaxed">
                   {t("apiKeysSection.created.warning")}
                 </p>
               </div>

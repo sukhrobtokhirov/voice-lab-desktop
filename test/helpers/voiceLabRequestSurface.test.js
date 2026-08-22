@@ -109,18 +109,20 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
         request_id: "req_pricing",
       });
     }
-    if (url.endsWith("/billing/desktop/subscription")) {
+    if (url.endsWith("/desktop/usage")) {
       return jsonResponse({
-        entitlement: {
-          active: true,
-          package_code: "desktop-pro",
-          package_name: "VoiceLab Pro",
-          status: "active",
-          daily_seconds: 27_000,
+        desktop_stt: {
+          enabled: true,
+          plan_id: "plan_pro",
+          plan_name: "Pro",
+          usage_window: "day",
+          usage_limit_seconds: 28_800,
+          used_seconds: 842,
+          reserved_seconds: 0,
+          remaining_seconds: 27_958,
           max_request_seconds: 300,
-          period_starts_at: "2026-08-01T00:00:00Z",
-          period_ends_at: "2026-09-01T00:00:00Z",
-          cancel_at_period_end: false,
+          window_starts_at: "2026-08-22T00:00:00Z",
+          resets_at: "2026-08-23T00:00:00Z",
         },
         request_id: "req_subscription",
       });
@@ -130,7 +132,12 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
         text: "salom",
         language: "uz",
         duration_ms: 1_250,
-        usage: { used_seconds: 12, daily_limit_seconds: 120, remaining_seconds: 108 },
+        usage: {
+          used_seconds: 12,
+          limit_seconds: 120,
+          remaining_seconds: 108,
+          usage_window: "day",
+        },
         request_id: "req_stt",
       });
     }
@@ -138,7 +145,7 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
   });
 
   await client.getDesktopPricing();
-  await client.getDesktopSubscription({ force: true });
+  await client.getDesktopUsage();
   await client.sendDictationChunk(
     {
       operationId: "operation-7",
@@ -155,7 +162,7 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
     calls.map(({ url, init }) => [url, init.method]),
     [
       [`${API_ORIGIN}/api/v1/billing/desktop/pricing`, "GET"],
-      [`${API_ORIGIN}/api/v1/billing/desktop/subscription`, "GET"],
+      [`${API_ORIGIN}/v1/desktop/usage`, "GET"],
       [`${API_ORIGIN}/v1/desktop/stt`, "POST"],
     ]
   );
@@ -224,7 +231,7 @@ test("authenticated subscription errors preserve fixtures and never retry", asyn
     );
   });
 
-  const operations = [() => client.getDesktopSubscription({ force: true })];
+  const operations = [() => client.getDesktopUsage()];
   for (let index = 0; index < operations.length; index += 1) {
     await assert.rejects(operations[index](), (error) => {
       assert.equal(error.code, "RATE_LIMITED");
@@ -240,42 +247,55 @@ test("authenticated subscription errors preserve fixtures and never retry", asyn
   assert.equal(authManager.state.invalidations, 0);
 });
 
-test("desktop subscription cache is session-bound and force causes one revalidation", async (t) => {
-  const { client, authManager } = createClient(t);
+test("desktop usage unavailable preserves the documented server code", async (t) => {
+  const { client } = createClient(t);
+  installFetch(t, async () =>
+    jsonResponse(
+      {
+        message: "Desktop usage is temporarily unavailable.",
+        error: { code: "desktop_usage_unavailable" },
+        request_id: "req_usage_unavailable",
+      },
+      503
+    )
+  );
+
+  await assert.rejects(client.getDesktopUsage(), (error) => {
+    assert.equal(error.code, "SERVICE_UNAVAILABLE");
+    assert.equal(error.status, 503);
+    assert.equal(error.toPublic().serverCode, "desktop_usage_unavailable");
+    assert.equal(error.toPublic().requestId, "req_usage_unavailable");
+    return true;
+  });
+});
+
+test("desktop subscription usage is never cached", async (t) => {
+  const { client } = createClient(t);
   let calls = 0;
   installFetch(t, async () => {
     calls += 1;
     return jsonResponse({
-      entitlement: {
-        active: true,
-        package_code: "desktop-pro",
-        package_name: "VoiceLab Pro",
-        status: "active",
-        daily_seconds: 27_000,
+      desktop_stt: {
+        enabled: true,
+        plan_id: "plan_pro",
+        plan_name: "Pro",
+        usage_window: "day",
+        usage_limit_seconds: 28_800,
+        used_seconds: calls,
+        reserved_seconds: 0,
+        remaining_seconds: 28_800 - calls,
         max_request_seconds: 300,
-        period_starts_at: "2026-08-01T00:00:00Z",
-        period_ends_at: "2026-09-01T00:00:00Z",
-        cancel_at_period_end: false,
+        window_starts_at: "2026-08-22T00:00:00Z",
+        resets_at: "2026-08-23T00:00:00Z",
       },
       request_id: `req_subscription_${calls}`,
     });
   });
 
-  const first = await client.getDesktopSubscription();
-  const cached = await client.getDesktopSubscription();
-  assert.equal(calls, 1);
-  assert.equal(cached, first);
-
-  await client.getDesktopSubscription({ force: true });
+  const first = await client.getDesktopUsage();
+  const second = await client.getDesktopUsage();
   assert.equal(calls, 2);
-
-  authManager.getSessionMetadata = () => ({
-    accountId: "account-8",
-    installationId: INSTALLATION_ID,
-    sessionId: "desktop-session-8",
-  });
-  await client.getDesktopSubscription();
-  assert.equal(calls, 3);
+  assert.notEqual(second.requestId, first.requestId);
 });
 
 test("public pricing preserves Retry-After and structured error diagnostics", async (t) => {
@@ -310,14 +330,16 @@ test("public pricing preserves Retry-After and structured error diagnostics", as
 
 test("invalid pricing JSON retains request id and content type diagnostics", async (t) => {
   const { client } = createClient(t);
-  installFetch(t, async () =>
-    new Response("<html>upstream failure</html>", {
-      status: 502,
-      headers: {
-        "content-type": "text/html; charset=utf-8",
-        "x-request-id": "req_pricing_invalid_json",
-      },
-    })
+  installFetch(
+    t,
+    async () =>
+      new Response("<html>upstream failure</html>", {
+        status: 502,
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "x-request-id": "req_pricing_invalid_json",
+        },
+      })
   );
 
   await assert.rejects(client.getDesktopPricing(), (error) => {

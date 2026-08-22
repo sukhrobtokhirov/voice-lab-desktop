@@ -72,11 +72,13 @@ function writeClipboardInRenderer(webContents, text) {
 class ClipboardManager {
   constructor() {
     this.accessibilityCache = { value: null, expiresAt: 0 };
+    this.accessibilityPastePromptAttempted = false;
     this.commandAvailabilityCache = new Map();
     this.nircmdPath = null;
     this.nircmdChecked = false;
     this.fastPastePath = null;
     this.fastPasteChecked = false;
+    this.macPasteAddon = undefined;
     this.winFastPastePath = null;
     this.winFastPasteChecked = false;
     this.linuxFastPastePath = null;
@@ -321,6 +323,48 @@ class ClipboardManager {
       "fastPasteChecked",
       "fastPastePath"
     );
+  }
+
+  resolveMacOSPasteAddon() {
+    if (process.platform !== "darwin") return null;
+    if (this.macPasteAddon !== undefined) return this.macPasteAddon;
+
+    const candidates = new Set([
+      path.join(__dirname, "..", "..", "resources", "bin", "macos-paste-addon.node"),
+    ]);
+    if (process.resourcesPath) {
+      candidates.add(path.join(process.resourcesPath, "bin", "macos-paste-addon.node"));
+      candidates.add(
+        path.join(
+          process.resourcesPath,
+          "app.asar.unpacked",
+          "resources",
+          "bin",
+          "macos-paste-addon.node"
+        )
+      );
+    }
+
+    for (const candidate of candidates) {
+      try {
+        if (!fs.statSync(candidate).isFile()) continue;
+        const addon = require(candidate);
+        if (typeof addon?.paste !== "function" || typeof addon?.isTrusted !== "function") {
+          continue;
+        }
+        this.macPasteAddon = addon;
+        return addon;
+      } catch (error) {
+        debugLogger.warn(
+          "Failed to load in-process macOS paste addon",
+          { path: candidate, error: error?.message },
+          "clipboard"
+        );
+      }
+    }
+
+    this.macPasteAddon = null;
+    return null;
   }
 
   resolveWindowsFastPasteBinary() {
@@ -751,6 +795,12 @@ class ClipboardManager {
     try {
       const result = await this._pasteText(text, options);
       Promise.resolve(result?.restoreComplete).then(markRestoreComplete, markRestoreComplete);
+      // IPC results must be structured-cloneable. Keep the restoration Promise
+      // private to the main process and return only the user-visible outcome.
+      return {
+        pasted: result?.pasted !== false,
+        copied: result?.copied !== false,
+      };
     } catch (error) {
       markRestoreComplete();
       throw error;
@@ -790,20 +840,28 @@ class ClipboardManager {
       if (platform === "darwin") {
         method = "applescript";
         this.safeLog("🔍 Checking accessibility permissions for paste operation...");
-        const hasPermissions = await this.checkAccessibilityPermissions(allowClipboardFallback);
+        const hasPermissions = await this.checkAccessibilityPermissions(true);
 
         if (!hasPermissions) {
-          this.safeLog("⚠️ No accessibility permissions - text copied to clipboard only");
+          this.safeLog("⚠️ VoiceLab accessibility trust is not confirmed");
           if (allowClipboardFallback) {
             this.safeLog("✅ Clipboard fallback used (manual paste required)");
-            return { restoreComplete: Promise.resolve() };
+            return { pasted: false, copied: true, restoreComplete: Promise.resolve() };
           }
-          const errorMsg =
-            "Accessibility permissions required for automatic pasting. Text has been copied to clipboard - please paste manually with Cmd+V.";
-          throw new Error(errorMsg);
+          // This path is reached only after the user explicitly finishes a
+          // dictation that requests auto-paste. Ask macOS once per app session;
+          // startup, sign-in and background permission checks remain silent.
+          if (!this.accessibilityPastePromptAttempted) {
+            this.accessibilityPastePromptAttempted = true;
+            systemPreferences.isTrustedAccessibilityClient(true);
+          }
+          const error = new Error("VoiceLab needs macOS Accessibility access to paste text.");
+          error.code = "PASTE_ACCESSIBILITY_REQUIRED";
+          throw error;
         }
 
-        this.safeLog("✅ Permissions granted, attempting to paste...");
+        this.accessibilityPastePromptAttempted = false;
+        if (hasPermissions) this.safeLog("✅ Permissions granted, attempting to paste...");
         // Pasting is not safely retryable: a helper can deliver Cmd+V and then
         // report an ambiguous failure, causing a retry to insert the same text
         // twice. Use one System Events invocation and fail closed after it.
@@ -850,15 +908,130 @@ class ClipboardManager {
   async pasteMacOS(originalClipboard, options = {}) {
     const delayMs = options.fromStreaming ? 50 : PASTE_DELAYS.darwin;
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+
+    const addon = this.resolveMacOSPasteAddon();
+    if (addon) {
+      return this.pasteMacOSInProcess(addon, originalClipboard, options);
+    }
+
+    const fastPastePath = this.resolveFastPasteBinary();
+    if (fastPastePath) {
+      return this.pasteMacOSWithNativeHelper(fastPastePath, originalClipboard, options);
+    }
+
     return this.pasteMacOSWithOsascript(originalClipboard, options);
+  }
+
+  pasteMacOSInProcess(addon, originalClipboard, options = {}) {
+    try {
+      if (!addon.isTrusted()) {
+        const error = new Error("VoiceLab does not have macOS Accessibility access.");
+        error.code = "PASTE_ACCESSIBILITY_REQUIRED";
+        throw error;
+      }
+      if (addon.paste() !== true) {
+        const error = new Error("VoiceLab could not send the macOS paste event.");
+        error.code = "PASTE_EVENT_CREATION_FAILED";
+        throw error;
+      }
+      return {
+        pasted: true,
+        copied: true,
+        restoreComplete:
+          originalClipboard != null
+            ? this._restoreClipboardAfterDelay(originalClipboard, {
+                delayMs: RESTORE_DELAYS.darwin,
+                expectedText: options.expectedClipboardText,
+              })
+            : Promise.resolve(),
+      };
+    } catch (cause) {
+      this.accessibilityCache = { value: null, expiresAt: 0 };
+      const error = new Error(cause?.message || "VoiceLab could not paste the text.");
+      error.code = cause?.code || "PASTE_ACCESSIBILITY_REQUIRED";
+      throw error;
+    }
+  }
+
+  async pasteMacOSWithNativeHelper(fastPastePath, originalClipboard, options = {}) {
+    return new Promise((resolve, reject) => {
+      const pasteProcess = spawn(fastPastePath, [], { stdio: "ignore" });
+      let hasTimedOut = false;
+
+      pasteProcess.on("close", (code) => {
+        if (hasTimedOut) return;
+        clearTimeout(timeoutId);
+        pasteProcess.removeAllListeners();
+
+        if (code === 0) {
+          resolve({
+            pasted: true,
+            copied: true,
+            restoreComplete:
+              originalClipboard != null
+                ? this._restoreClipboardAfterDelay(originalClipboard, {
+                    delayMs: RESTORE_DELAYS.darwin,
+                    expectedText: options.expectedClipboardText,
+                  })
+                : Promise.resolve(),
+          });
+          return;
+        }
+
+        if (code === 2) {
+          // The nested helper can have a separate ad-hoc code identity and fail
+          // AXIsProcessTrusted even when the containing VoiceLab app is trusted.
+          // Exit 2 occurs before it posts any CGEvent, so this fallback cannot
+          // duplicate text. Bind System Events to the captured target PID.
+          this.pasteMacOSWithOsascript(originalClipboard, options).then(resolve, reject);
+          return;
+        }
+
+        this.accessibilityCache = { value: null, expiresAt: 0 };
+        const error = new Error(
+          `The macOS paste helper failed with code ${code}. The text remains in the clipboard.`
+        );
+        error.code = "PASTE_ACCESSIBILITY_REQUIRED";
+        reject(error);
+      });
+
+      pasteProcess.on("error", (spawnError) => {
+        if (hasTimedOut) return;
+        clearTimeout(timeoutId);
+        pasteProcess.removeAllListeners();
+        const error = new Error(
+          `The macOS paste helper could not start: ${spawnError.message}. The text remains in the clipboard.`
+        );
+        error.code = "PASTE_ACCESSIBILITY_REQUIRED";
+        reject(error);
+      });
+
+      const timeoutId = setTimeout(() => {
+        hasTimedOut = true;
+        killProcess(pasteProcess, "SIGKILL");
+        pasteProcess.removeAllListeners();
+        const error = new Error(
+          "The macOS paste helper timed out. The text remains in the clipboard."
+        );
+        error.code = "PASTE_ACCESSIBILITY_REQUIRED";
+        reject(error);
+      }, 3000);
+    });
   }
 
   async pasteMacOSWithOsascript(originalClipboard, options = {}) {
     return new Promise((resolve, reject) => {
-      const pasteProcess = spawn("osascript", [
-        "-e",
-        'tell application "System Events" to key code 9 using command down',
-      ]);
+      const targetPid =
+        Number.isSafeInteger(options.targetPid) && options.targetPid > 0 ? options.targetPid : null;
+      const script = targetPid
+        ? `tell application "System Events"
+  set targetProcess to first application process whose unix id is ${targetPid}
+  set frontmost of targetProcess to true
+  delay 0.05
+  tell targetProcess to keystroke "v" using command down
+end tell`
+        : 'tell application "System Events" to key code 9 using command down';
+      const pasteProcess = spawn("osascript", ["-e", script]);
 
       let hasTimedOut = false;
 
@@ -871,18 +1044,22 @@ class ClipboardManager {
           this.safeLog("Text pasted successfully via osascript fallback");
           if (originalClipboard != null) {
             resolve({
+              pasted: true,
+              copied: true,
               restoreComplete: this._restoreClipboardAfterDelay(originalClipboard, {
                 delayMs: RESTORE_DELAYS.darwin,
                 expectedText: options.expectedClipboardText,
               }),
             });
           } else {
-            resolve({ restoreComplete: Promise.resolve() });
+            resolve({ pasted: true, copied: true, restoreComplete: Promise.resolve() });
           }
         } else {
           this.accessibilityCache = { value: null, expiresAt: 0 };
           const errorMsg = `Paste failed (code ${code}). Text is copied to clipboard - please paste manually with Cmd+V.`;
-          reject(new Error(errorMsg));
+          const error = new Error(errorMsg);
+          error.code = "PASTE_ACCESSIBILITY_REQUIRED";
+          reject(error);
         }
       });
 

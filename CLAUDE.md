@@ -32,7 +32,7 @@ OpenWhispr is the Electron desktop client for VoiceLab. Speech transcription is 
    - ONNX Utility Process: hosts all `onnxruntime-node` inference (text embeddings, speaker embeddings, fbank). Lazy-spawned on first use via `src/helpers/onnxWorkerClient.js` → `src/workers/onnxWorker.js`. Native crashes (e.g., ORT `bad_alloc`) confine to the worker; main process rejects in-flight requests and respawns with backoff. Stopped in `will-quit`.
 
 3. **Audio Pipeline**:
-   - MediaRecorder API → Blob → restricted IPC → FFmpeg normalization → VoiceLab Dictate operation
+   - MediaRecorder API → Blob → restricted IPC → FFmpeg normalization → VoiceLab Flow operation
    - Desktop bearer authentication and server-authoritative AI Credits billing
    - Automatic cleanup of temporary files after processing
 
@@ -162,7 +162,7 @@ OpenWhispr is the Electron desktop client for VoiceLab. Speech transcription is 
   - Per-scope LLM config: 4 scopes (`dictationCleanup`, `dictationAgent`, `noteFormatting`, `chatIntelligence`) defined in `src/config/inferenceScopes.ts`
   - `selectResolvedLLMConfig(state, scope)` in `settingsStore.ts` resolves provider/model per scope with fallback chains
 
-### VoiceLab Dictate Integration
+### VoiceLab Flow Integration
 
 - Desktop speech transcription is cloud-only through the authenticated VoiceLab Desktop API.
 - No local STT server, speech model download, or transcription API key is supported.
@@ -237,7 +237,7 @@ FFmpeg is bundled with the app and doesn't require system installation:
 6. `VoiceLabApiClient` reads the authoritative wallet, submits an idempotent Dictate operation, and polls it to completion
 7. Result is returned to the renderer; VoiceLab charges the signed-in account's AI Credits wallet
 
-### 3. VoiceLab Dictate
+### 3. VoiceLab Flow
 
 - No local speech model or speech API key is supported.
 - The backend publishes language, duration, concurrency, device, and rolling-credit limits through `GET /api/v1/desktop/wallet/`.
@@ -278,7 +278,7 @@ Optional reasoning-provider secrets are encrypted at rest via Electron `safeStor
 
 - Each language has a two-letter code and label
 - "auto" for automatic detection
-- Validated against the authoritative `supported_languages` wallet capability and sent unchanged to VoiceLab Dictate
+- Validated against the authoritative `supported_languages` wallet capability and sent unchanged to VoiceLab Flow
 
 ### 7. Agent Naming System
 

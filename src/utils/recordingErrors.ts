@@ -13,7 +13,7 @@ type RecordingError = {
 };
 
 type RecoveryCopy = { title: string; description: string };
-export type RecordingRecoveryAction = "auth" | "billing" | "retry" | null;
+export type RecordingRecoveryAction = "auth" | "billing" | "permission" | "retry" | null;
 
 const COPY: Record<string, Record<string, RecoveryCopy>> = {
   en: {
@@ -22,8 +22,8 @@ const COPY: Record<string, Record<string, RecoveryCopy>> = {
       description: "Add credits or choose a plan, then try again.",
     },
     ENTITLEMENT_REQUIRED: {
-      title: "Dictate is not included",
-      description: "Open billing to choose a plan that includes VoiceLab Dictate.",
+      title: "Flow is not included",
+      description: "Open billing to choose a plan that includes VoiceLab Flow.",
     },
     AUTH_EXPIRED: {
       title: "Sign in again",
@@ -78,6 +78,11 @@ const COPY: Record<string, Record<string, RecoveryCopy>> = {
       description:
         "Your recording is kept on this device. Retry only when you want to send it again.",
     },
+    PASTE_ACCESSIBILITY_REQUIRED: {
+      title: "Permission needed for automatic paste",
+      description:
+        "The text was copied to your clipboard. Enable VoiceLab in System Settings → Privacy & Security → Accessibility, then paste again.",
+    },
   },
   uz: {
     INSUFFICIENT_CREDITS: {
@@ -85,8 +90,8 @@ const COPY: Record<string, Record<string, RecoveryCopy>> = {
       description: "Credit qo‘shing yoki mos VoiceLab tarifini tanlang.",
     },
     ENTITLEMENT_REQUIRED: {
-      title: "Dictate tarifga kirmagan",
-      description: "VoiceLab Dictate bor tarifni billing sahifasidan tanlang.",
+      title: "Flow tarifga kirmagan",
+      description: "VoiceLab Flow bor tarifni billing sahifasidan tanlang.",
     },
     AUTH_EXPIRED: {
       title: "Qayta kiring",
@@ -140,6 +145,11 @@ const COPY: Record<string, Record<string, RecoveryCopy>> = {
       title: "VoiceLab vaqtincha ishlamayapti",
       description: "Yozuv qurilmada saqlandi. Qayta yubormoqchi bo‘lsangizgina urinib ko‘ring.",
     },
+    PASTE_ACCESSIBILITY_REQUIRED: {
+      title: "Avtomatik joylash uchun ruxsat kerak",
+      description:
+        "Matn clipboardga nusxalandi. Tizim sozlamalari → Maxfiylik va xavfsizlik → Qulayliklar bo‘limida VoiceLab’ni yoqing, so‘ng qayta joylang.",
+    },
   },
   ru: {
     INSUFFICIENT_CREDITS: {
@@ -147,8 +157,8 @@ const COPY: Record<string, Record<string, RecoveryCopy>> = {
       description: "Пополните баланс или выберите подходящий тариф VoiceLab.",
     },
     ENTITLEMENT_REQUIRED: {
-      title: "Dictate не входит в тариф",
-      description: "Откройте биллинг и выберите тариф с VoiceLab Dictate.",
+      title: "Flow не входит в тариф",
+      description: "Откройте биллинг и выберите тариф с VoiceLab Flow.",
     },
     AUTH_EXPIRED: {
       title: "Войдите снова",
@@ -202,6 +212,11 @@ const COPY: Record<string, Record<string, RecoveryCopy>> = {
       title: "VoiceLab временно недоступен",
       description: "Запись сохранена на устройстве. Повторяйте отправку только по своему решению.",
     },
+    PASTE_ACCESSIBILITY_REQUIRED: {
+      title: "Нужно разрешение для автоматической вставки",
+      description:
+        "Текст скопирован в буфер обмена. Включите VoiceLab в Системных настройках → Конфиденциальность и безопасность → Универсальный доступ, затем вставьте снова.",
+    },
   },
 };
 
@@ -213,6 +228,7 @@ function getCopy(code?: string): RecoveryCopy | null {
 
 export function getRecordingRecoveryAction(code?: string): RecordingRecoveryAction {
   if (!code) return null;
+  if (code === "PASTE_ACCESSIBILITY_REQUIRED") return "permission";
   if (code === "AUTH_EXPIRED" || code === "AUTH_REQUIRED") return "auth";
   if (
     code === "INSUFFICIENT_CREDITS" ||
@@ -236,15 +252,22 @@ export function getRecordingRecoveryAction(code?: string): RecordingRecoveryActi
 export function getRecordingRecoveryActionLabel(action: RecordingRecoveryAction): string {
   const language = i18next.resolvedLanguage?.split("-")[0] || "en";
   const labels = {
-    en: { auth: "Sign in", billing: "Manage account", retry: "Try again" },
+    en: {
+      auth: "Sign in",
+      billing: "Manage account",
+      permission: "Open Settings",
+      retry: "Try again",
+    },
     uz: {
       auth: "Kirish",
       billing: "Hisobni boshqarish",
+      permission: "Sozlamalarni ochish",
       retry: "Qayta urinish",
     },
     ru: {
       auth: "Войти",
       billing: "Управление аккаунтом",
+      permission: "Открыть настройки",
       retry: "Повторить",
     },
   };
@@ -279,9 +302,7 @@ export function getRecordingErrorDescription(error: RecordingError, t: TFunction
     ) {
       const language = i18next.resolvedLanguage?.split("-")[0] || "en";
       if (language === "uz")
-        return withDiagnostics(
-          `${error.retryAfterSeconds} soniyadan keyin qayta urinib ko‘ring.`
-        );
+        return withDiagnostics(`${error.retryAfterSeconds} soniyadan keyin qayta urinib ko‘ring.`);
       if (language === "ru")
         return withDiagnostics(`Повторите попытку через ${error.retryAfterSeconds} сек.`);
       return withDiagnostics(`Try again in ${error.retryAfterSeconds} seconds.`);
@@ -289,10 +310,8 @@ export function getRecordingErrorDescription(error: RecordingError, t: TFunction
     if (error.code === "AUDIO_LIMIT_EXCEEDED" && error.max_duration_seconds) {
       const minutes = Math.max(1, Math.floor(error.max_duration_seconds / 60));
       const language = i18next.resolvedLanguage?.split("-")[0] || "en";
-      if (language === "uz")
-        return withDiagnostics(`Yozuvni ${minutes} daqiqadan qisqa qiling.`);
-      if (language === "ru")
-        return withDiagnostics(`Сократите запись до ${minutes} мин.`);
+      if (language === "uz") return withDiagnostics(`Yozuvni ${minutes} daqiqadan qisqa qiling.`);
+      if (language === "ru") return withDiagnostics(`Сократите запись до ${minutes} мин.`);
       return withDiagnostics(`Keep the recording under ${minutes} minutes.`);
     }
     return withDiagnostics(copy.description);

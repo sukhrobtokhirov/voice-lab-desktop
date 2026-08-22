@@ -35,7 +35,7 @@ interface ControlPanelSidebarProps {
 }
 
 const navButton =
-  "group flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[15px] font-normal outline-none transition-colors focus-visible:ring-2 focus-visible:ring-foreground/20";
+  "group flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-base font-normal outline-none transition-colors focus-visible:ring-2 focus-visible:ring-foreground/20";
 
 export default function ControlPanelSidebar({
   activeView,
@@ -119,13 +119,13 @@ export default function ControlPanelSidebar({
           <button
             type="button"
             onClick={onOpenSearch}
-            className="flex h-8 w-full items-center gap-2 rounded-[10px] border border-black/10 bg-white px-2.5 text-[13px] text-foreground/50 outline-none transition-colors hover:bg-black/[0.025] hover:text-foreground/70 focus-visible:ring-2 focus-visible:ring-foreground/15 dark:border-white/15 dark:bg-transparent dark:text-foreground/60 dark:hover:bg-white/[0.06] dark:hover:text-foreground/85"
+            className="flex h-8 w-full items-center gap-2 rounded-[10px] border border-black/10 bg-white px-2.5 text-sm text-foreground/50 outline-none transition-colors hover:bg-black/[0.025] hover:text-foreground/70 focus-visible:ring-2 focus-visible:ring-foreground/15 dark:border-white/15 dark:bg-transparent dark:text-foreground/60 dark:hover:bg-white/[0.06] dark:hover:text-foreground/85"
           >
             <Search className="h-3.5 w-3.5" />
             <span className="flex-1 text-left">
               {t("commandSearch.shortPlaceholder", { defaultValue: "Search" })}
             </span>
-            <kbd className="rounded-[5px] border border-current/15 px-1.5 py-0.5 text-[10px] font-medium opacity-65">
+            <kbd className="rounded-[5px] border border-current/15 px-1.5 py-0.5 text-xs font-medium leading-4 opacity-65">
               {platform === "darwin" ? "⌘K" : "Ctrl K"}
             </kbd>
           </button>
@@ -166,13 +166,13 @@ export default function ControlPanelSidebar({
           <div className="min-w-0 flex-1">
             {isSignedIn ? (
               <>
-                <p className="truncate text-[13px] font-medium">
+                <p className="truncate text-sm font-medium leading-5">
                   {userName || t("sidebar.defaultUser", { defaultValue: "VoiceLab user" })}
                 </p>
                 {userEmail && <p className="truncate text-xs text-muted-foreground">{userEmail}</p>}
               </>
             ) : authLoaded ? (
-              <p className="text-[13px] text-muted-foreground">
+              <p className="text-sm leading-5 text-muted-foreground">
                 {t("sidebar.notSignedIn", { defaultValue: "Not signed in" })}
               </p>
             ) : (

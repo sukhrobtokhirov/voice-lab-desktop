@@ -168,9 +168,7 @@ export default function WorkspaceDeveloperTab({ workspace }: Props) {
           <div key={k.id} className="flex items-center gap-3 px-4 h-14">
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-foreground truncate">{k.name}</p>
-              <p className="text-[11px] font-mono text-muted-foreground truncate">
-                {k.key_prefix}…
-              </p>
+              <p className="text-2xs font-mono text-muted-foreground truncate">{k.key_prefix}…</p>
             </div>
             <span className="text-xs text-muted-foreground hidden md:inline">
               {k.last_used_at
@@ -218,7 +216,7 @@ export default function WorkspaceDeveloperTab({ workspace }: Props) {
             <div className="space-y-2 max-h-72 overflow-y-auto">
               {SCOPE_GROUPS.map((group) => (
                 <div key={group.title} className="space-y-1.5">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                  <p className="text-2xs uppercase tracking-wide text-muted-foreground font-medium">
                     {group.title}
                   </p>
                   <div className="flex flex-wrap gap-1.5">

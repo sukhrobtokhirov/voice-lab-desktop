@@ -56,6 +56,7 @@ export type TranscriptionErrorCode =
   | "CANCELLED"
   | "IDEMPOTENCY_CONFLICT"
   | "SERVICE_UNAVAILABLE"
+  | "PASTE_ACCESSIBILITY_REQUIRED"
   | "VOICELAB_STREAMING_DISABLED"
   | "PROVIDER_RATE_LIMITED"
   | "API_KEY_MISSING"
@@ -1056,9 +1057,7 @@ declare global {
       authRefreshSession?: () => Promise<DesktopAuthStatus>;
       authLogout?: () => Promise<{ success: boolean; revoked: boolean }>;
       authDeleteAccount?: () => Promise<{ success: boolean }>;
-      onAuthStateChanged?: (
-        callback: (status: DesktopAuthStatus) => void
-      ) => () => void;
+      onAuthStateChanged?: (callback: (status: DesktopAuthStatus) => void) => () => void;
       onDesktopProtocolError?: (
         callback: (event: unknown, payload: { errorCode?: string }) => void
       ) => () => void;
@@ -1095,8 +1094,9 @@ declare global {
         language?: string | null;
         usage?: {
           used_seconds: number;
-          daily_limit_seconds: number;
+          limit_seconds: number;
           remaining_seconds: number;
+          usage_window: "hour" | "day";
         } | null;
         requestId?: string | null;
         serverCode?: string | null;
@@ -1181,20 +1181,25 @@ declare global {
         success: boolean;
         entitlement?: {
           active: boolean;
-          packageCode: string | null;
-          packageName: string | null;
-          status: string | null;
-          dailySeconds: number;
+          planId: string | null;
+          planName: string | null;
+          usageWindow: "hour" | "day" | null;
+          usageLimitSeconds: number;
+          usedSeconds: number;
+          reservedSeconds: number;
+          remainingSeconds: number;
           maxRequestSeconds: number;
-          periodStartsAt: string | null;
-          periodEndsAt: string | null;
-          cancelAtPeriodEnd: boolean;
+          windowStartsAt: string | null;
+          resetsAt: string | null;
         };
         error?: string;
         code?: string;
         status?: number | null;
         requestId?: string | null;
       }>;
+      onDesktopUsageRefresh?: (
+        callback: (payload: { reason: "billing-complete" | "app-active" }) => void
+      ) => () => void;
       openVoiceLabBilling?: (
         source?: "dictate" | "desktop"
       ) => Promise<{ success: boolean; error?: string }>;

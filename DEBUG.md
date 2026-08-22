@@ -40,7 +40,7 @@ OPENWHISPR_LOG_LEVEL=debug
 | --------------------- | ---------------------------------------------------------------- |
 | FFmpeg                | Path resolution, permissions, ASAR unpacking                     |
 | Audio Recording       | Permission requests, chunk sizes, audio levels                   |
-| Audio Processing      | Audio preparation and VoiceLab Dictate request timing            |
+| Audio Processing      | Audio preparation and VoiceLab Flow request timing               |
 | IPC                   | Messages between renderer and main process                       |
 | Agent Mode            | Streaming responses, conversation management, model selection    |
 | Meeting Detection     | Process monitoring, audio activity, calendar event matching      |

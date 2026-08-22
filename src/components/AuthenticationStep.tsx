@@ -167,13 +167,13 @@ export default function AuthenticationStep({ onAuthComplete }: AuthenticationSte
           alt="VoiceLab"
           className="mx-auto mb-5 h-8 w-auto max-w-44 dark:invert"
         />
-        <h2 className="text-2xl font-medium tracking-[-0.03em]">{t("auth.desktopTitle")}</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">{t("auth.desktopTitle")}</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           {waiting ? t("auth.desktopWaiting") : t("auth.desktopBrowserHint")}
         </p>
       </div>
 
-      <div className="rounded-[10px] border border-border bg-muted/40 px-4 py-3 text-xs leading-5 text-muted-foreground">
+      <div className="rounded-[10px] border border-border bg-muted/40 px-4 py-3 text-sm leading-5 text-muted-foreground">
         <div className="flex gap-2.5">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-foreground/70" />
           {t("auth.desktopSecurity")}
@@ -204,12 +204,12 @@ export default function AuthenticationStep({ onAuthComplete }: AuthenticationSte
               </ul>
             )}
             {authErrorCode && (
-              <code className="mt-1 block break-all font-mono text-[11px] opacity-70">
+              <code className="mt-1 block break-all font-mono text-xs leading-5 opacity-70">
                 {authErrorCode}
               </code>
             )}
             {authErrorRequestId && (
-              <code className="mt-1 block break-all font-mono text-[11px] opacity-70">
+              <code className="mt-1 block break-all font-mono text-xs leading-5 opacity-70">
                 {authErrorRequestId}
               </code>
             )}

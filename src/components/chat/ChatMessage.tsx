@@ -74,19 +74,17 @@ function ToolCallStep({ toolCall }: { toolCall: ToolCallInfo }) {
         />
 
         {isExecuting ? (
-          <span className="text-[11px] text-muted-foreground/80">
+          <span className="text-2xs text-muted-foreground/80">
             {t(`agentMode.tools.${toolCall.name}Status`, { defaultValue: toolCall.name })}
           </span>
         ) : isError ? (
           <div className="flex items-center gap-1">
             <CircleAlert size={10} className="text-destructive/60 shrink-0" />
-            <span className="text-[11px] text-destructive/70">
-              {toolCall.result || toolCall.name}
-            </span>
+            <span className="text-2xs text-destructive/70">{toolCall.result || toolCall.name}</span>
           </div>
         ) : isClipboard ? (
           <div className="flex items-center gap-1">
-            <span className="text-[11px] text-emerald-600 dark:text-emerald-400/80">
+            <span className="text-2xs text-emerald-600 dark:text-emerald-400/80">
               {t("agentMode.tools.copiedToClipboard")}
             </span>
             <Check
@@ -96,7 +94,7 @@ function ToolCallStep({ toolCall }: { toolCall: ToolCallInfo }) {
             />
           </div>
         ) : (
-          <span className="text-[11px] text-muted-foreground/70">
+          <span className="text-2xs text-muted-foreground/70">
             {toolCall.result || toolCall.name}
           </span>
         )}
@@ -117,7 +115,7 @@ function ToolCallStep({ toolCall }: { toolCall: ToolCallInfo }) {
           className="overflow-hidden transition-all duration-200"
           style={{ maxHeight: expanded ? `${resultLines.length * 16 + 12}px` : "0px" }}
         >
-          <pre className="text-[10px] text-muted-foreground/60 px-2.5 pb-1.5 whitespace-pre-wrap leading-tight">
+          <pre className="text-2xs text-muted-foreground/60 px-2.5 pb-1.5 whitespace-pre-wrap leading-tight">
             {toolCall.result}
           </pre>
         </div>
@@ -155,8 +153,8 @@ function NoteCard({
         <FileText size={12} className="text-primary/70" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[12px] font-medium text-foreground truncate">{title}</p>
-        <p className="text-[10px] text-muted-foreground/50">{t("agentMode.tools.openNote")}</p>
+        <p className="text-xs font-medium text-foreground truncate">{title}</p>
+        <p className="text-2xs text-muted-foreground/50">{t("agentMode.tools.openNote")}</p>
       </div>
       <ChevronRight
         size={12}
@@ -216,7 +214,7 @@ export function ChatMessage({
           className={cn(
             "max-w-[80%] px-3 py-2 rounded-lg rounded-br-sm",
             "bg-primary/90 text-primary-foreground",
-            "text-[13px] leading-relaxed"
+            "text-sm leading-relaxed"
           )}
         >
           {content}
@@ -239,7 +237,7 @@ export function ChatMessage({
         className={cn(
           "max-w-[85%] px-3 py-2 rounded-lg rounded-bl-sm",
           "bg-surface-1 border border-border/30 text-foreground",
-          "text-[13px] leading-relaxed"
+          "text-sm leading-relaxed"
         )}
       >
         {hasToolCalls && (
@@ -257,7 +255,7 @@ export function ChatMessage({
         {hasContent && (
           <MarkdownRenderer
             content={content}
-            className="text-[13px] leading-relaxed [&_p]:text-[13px] [&_li]:text-[13px]"
+            className="text-sm leading-relaxed [&_p]:text-sm [&_li]:text-sm"
           />
         )}
 
@@ -269,7 +267,7 @@ export function ChatMessage({
         )}
 
         {isStreaming && !hasContent && !hasToolCalls && (
-          <span className="text-[13px] font-medium select-none thinking-shimmer-text">
+          <span className="text-sm font-medium select-none thinking-shimmer-text">
             {t("agentMode.input.thinking")}...
           </span>
         )}

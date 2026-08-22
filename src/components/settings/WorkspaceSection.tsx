@@ -119,7 +119,7 @@ export default function WorkspaceSection({ initialSubTab }: Props) {
                 <span className="text-xs text-muted-foreground">▾</span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
-                <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground/70 font-medium">
+                <DropdownMenuLabel className="text-2xs uppercase tracking-wide text-muted-foreground/70 font-medium">
                   {t("workspaces.switcher.workspaces")}
                 </DropdownMenuLabel>
                 {workspaces.map((w) => (
@@ -260,7 +260,7 @@ function GeneralTab({ workspace }: { workspace: Workspace }) {
             maxLength={48}
             pattern="[a-z0-9-]+"
           />
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-2xs text-muted-foreground">
             {t("settingsPage.workspace.general.slugHint")}
           </p>
         </div>

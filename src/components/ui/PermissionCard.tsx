@@ -50,15 +50,15 @@ export default function PermissionCard({
         </div>
 
         <div className="flex-1 min-w-0">
-          <h3 className="text-xs font-medium text-foreground">
+          <h3 className="text-sm font-medium leading-5 text-foreground">
             {title}
             {badge && (
-              <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-muted text-muted-foreground">
+              <span className="ml-1.5 inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-xs font-medium leading-4 text-muted-foreground">
                 {badge}
               </span>
             )}
           </h3>
-          <p className="text-xs text-muted-foreground leading-snug mt-0.5">{description}</p>
+          <p className="mt-0.5 text-sm leading-5 text-muted-foreground">{description}</p>
         </div>
 
         {!granted && (
@@ -69,7 +69,7 @@ export default function PermissionCard({
       </div>
 
       {hint && !granted && (
-        <p className="text-[11px] text-warning/80 leading-snug mt-2 pl-11">{hint}</p>
+        <p className="mt-2 pl-11 text-xs leading-5 text-warning/80">{hint}</p>
       )}
     </div>
   );

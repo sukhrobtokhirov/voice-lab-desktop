@@ -66,7 +66,8 @@ export default function LanguageSelector({
   }, [items, query]);
 
   const selectableIndexes = useMemo(
-    () => filtered.map((item, index) => (!item.disabled ? index : -1)).filter((index) => index >= 0),
+    () =>
+      filtered.map((item, index) => (!item.disabled ? index : -1)).filter((index) => index >= 0),
     [filtered]
   );
 
@@ -131,7 +132,10 @@ export default function LanguageSelector({
       className="fixed z-[10000] w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-popover shadow-2xl"
       style={(() => {
         const rect = triggerRef.current?.getBoundingClientRect();
-        return { top: (rect?.bottom ?? 0) + 6, left: Math.min(rect?.left ?? 16, window.innerWidth - 368) };
+        return {
+          top: (rect?.bottom ?? 0) + 6,
+          left: Math.min(rect?.left ?? 16, window.innerWidth - 368),
+        };
       })()}
       onKeyDown={onKeyDown}
     >
@@ -170,7 +174,7 @@ export default function LanguageSelector({
           return (
             <React.Fragment key={item.value}>
               {showGroup && (
-                <div className="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                <div className="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                   {GROUP_LABEL_KEYS[group] ? t(GROUP_LABEL_KEYS[group]) : group}
                 </div>
               )}
@@ -200,11 +204,15 @@ export default function LanguageSelector({
                       : "hover:bg-accent/70"
                 }`}
               >
-                <span className="text-base" aria-hidden="true">{item.flag}</span>
+                <span className="text-base" aria-hidden="true">
+                  {item.flag}
+                </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline gap-2 text-sm font-medium">
                     {item.localizedName || item.label}
-                    <span className="font-mono text-xs uppercase text-muted-foreground">{item.value}</span>
+                    <span className="font-mono text-xs uppercase text-muted-foreground">
+                      {item.value}
+                    </span>
                   </span>
                   {item.disabled && (
                     <span className="block truncate text-xs text-muted-foreground">
@@ -247,7 +255,11 @@ export default function LanguageSelector({
             selected?.label ||
             (placeholder === "Choose language" ? t("desktop.languages.choose") : placeholder)}
         </span>
-        {selected && <span className="font-mono text-xs uppercase text-muted-foreground">{selected.value}</span>}
+        {selected && (
+          <span className="font-mono text-xs uppercase text-muted-foreground">
+            {selected.value}
+          </span>
+        )}
         <ChevronDown className="h-4 w-4 text-muted-foreground" />
       </button>
       {menu && createPortal(menu, document.body)}

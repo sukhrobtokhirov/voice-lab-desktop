@@ -73,7 +73,7 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         description: t("settingsModal.sections.general.description", {
           defaultValue: "Appearance, language and app behavior",
         }),
-        group: t("settingsModal.groups.app", { defaultValue: "Dictate" }),
+        group: t("settingsModal.groups.app", { defaultValue: "Flow" }),
       },
       {
         id: "speechToText",
@@ -82,7 +82,7 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         description: t("desktop.settings.dictationDescription", {
           defaultValue: "Language, microphone and paste behavior",
         }),
-        group: t("settingsModal.groups.app", { defaultValue: "Dictate" }),
+        group: t("settingsModal.groups.app", { defaultValue: "Flow" }),
       },
       {
         id: "hotkeys",
@@ -91,7 +91,7 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         description: t("desktop.settings.shortcutsDescription", {
           defaultValue: "Dictation and VoiceLab AI shortcuts",
         }),
-        group: t("settingsModal.groups.app", { defaultValue: "Dictate" }),
+        group: t("settingsModal.groups.app", { defaultValue: "Flow" }),
       },
       {
         id: "privacyData",

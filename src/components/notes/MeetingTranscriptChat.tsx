@@ -104,9 +104,9 @@ function PartialBubble({
       <div className="max-w-[80%] flex flex-col">
         {speakerLabel && (
           <div className="mb-0.5 flex items-center gap-1 px-1">
-            <span className="text-[11px] font-medium text-muted-foreground/70">{speakerLabel}</span>
+            <span className="text-2xs font-medium text-muted-foreground/70">{speakerLabel}</span>
             {speakerState === "provisional" && (
-              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-muted-foreground/40">
+              <span className="inline-flex items-center gap-0.5 text-2xs font-medium text-muted-foreground/40">
                 <Sparkles size={9} />
                 {getSpeakerStateLabel("provisional", t)}
               </span>
@@ -114,12 +114,7 @@ function PartialBubble({
           </div>
         )}
         <div
-          className={cn(
-            "px-3 py-1.5 rounded-lg",
-            s.radius,
-            s.bg,
-            "text-[13px] leading-relaxed italic"
-          )}
+          className={cn("px-3 py-1.5 rounded-lg", s.radius, s.bg, "text-sm leading-relaxed italic")}
         >
           {text}
           <span
@@ -180,7 +175,7 @@ function AddContactButton({
       <PopoverTrigger asChild>
         <button
           className={cn(
-            "inline-flex items-center mb-0.5 px-1.5 py-0.5 rounded-md text-[11px] outline-none cursor-pointer",
+            "inline-flex items-center mb-0.5 px-1.5 py-0.5 rounded-md text-2xs outline-none cursor-pointer",
             "border border-dashed border-border/60 dark:border-white/15",
             "text-foreground/50 hover:text-foreground hover:border-border/90 dark:hover:border-white/30",
             "transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-ring"
@@ -216,7 +211,7 @@ function AddContactButton({
         <div className="flex justify-end gap-1 mt-2">
           <button
             onClick={() => setOpen(false)}
-            className="px-2 py-1 rounded text-[11px] text-foreground/50 hover:text-foreground hover:bg-foreground/5 transition-colors cursor-pointer"
+            className="px-2 py-1 rounded text-2xs text-foreground/50 hover:text-foreground hover:bg-foreground/5 transition-colors cursor-pointer"
           >
             {t("notes.speaker.cancel")}
           </button>
@@ -224,7 +219,7 @@ function AddContactButton({
             onClick={submit}
             disabled={!canSave}
             className={cn(
-              "px-2 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer",
+              "px-2 py-1 rounded text-2xs font-medium transition-colors cursor-pointer",
               "bg-primary text-primary-foreground hover:bg-primary/90",
               "disabled:bg-primary/20 disabled:text-primary-foreground/40 disabled:pointer-events-none"
             )}
@@ -305,7 +300,7 @@ function SpeakerPicker({ speakerProfiles, participants, onSelectName, t }: Speak
       <div className="max-h-52 overflow-y-auto">
         {filteredParticipants.length > 0 && (
           <div className="p-1 border-b border-border/30">
-            <div className="px-2 py-1 text-[11px] font-medium text-muted-foreground">
+            <div className="px-2 py-1 text-2xs font-medium text-muted-foreground">
               {t("notes.speaker.meetingAttendees")}
             </div>
             {filteredParticipants.slice(0, 5).map((p) => (
@@ -316,7 +311,7 @@ function SpeakerPicker({ speakerProfiles, participants, onSelectName, t }: Speak
               >
                 <span className="truncate flex-1 text-left">{p.displayName || p.email}</span>
                 {p.displayName && (
-                  <span className="text-foreground/30 truncate text-[11px]">{p.email}</span>
+                  <span className="text-foreground/30 truncate text-2xs">{p.email}</span>
                 )}
               </button>
             ))}
@@ -324,7 +319,7 @@ function SpeakerPicker({ speakerProfiles, participants, onSelectName, t }: Speak
         )}
         {filteredProfiles.length > 0 && (
           <div className="p-1 border-b border-border/30">
-            <div className="px-2 py-1 text-[11px] font-medium text-muted-foreground">
+            <div className="px-2 py-1 text-2xs font-medium text-muted-foreground">
               {t("notes.speaker.knownSpeakers")}
             </div>
             {filteredProfiles.slice(0, 5).map((p) => (
@@ -334,9 +329,7 @@ function SpeakerPicker({ speakerProfiles, participants, onSelectName, t }: Speak
                 className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs text-foreground/70 hover:bg-foreground/5 transition-colors cursor-pointer"
               >
                 <span className="truncate flex-1 text-left">{p.display_name}</span>
-                {p.email && (
-                  <span className="text-foreground/30 truncate text-[11px]">{p.email}</span>
-                )}
+                {p.email && <span className="text-foreground/30 truncate text-2xs">{p.email}</span>}
               </button>
             ))}
           </div>
@@ -353,7 +346,7 @@ function SpeakerPicker({ speakerProfiles, participants, onSelectName, t }: Speak
               {inputIsEmail ? (
                 <>
                   <span className="text-foreground truncate">{nameFromEmail(trimmed)}</span>
-                  <span className="text-foreground/30 truncate text-[11px]">
+                  <span className="text-foreground/30 truncate text-2xs">
                     {trimmed.toLowerCase()}
                   </span>
                 </>
@@ -364,7 +357,7 @@ function SpeakerPicker({ speakerProfiles, participants, onSelectName, t }: Speak
           </div>
         )}
         {isEmpty && (
-          <div className="px-3 py-4 text-center text-[11px] text-foreground/30">
+          <div className="px-3 py-4 text-center text-2xs text-foreground/30">
             {t("notes.speaker.nameOrEmailPlaceholder")}
           </div>
         )}
@@ -416,7 +409,7 @@ function SpeakerLabel({
   if (hasSuggestion) {
     return (
       <span className="group inline-flex items-center gap-1 mb-0.5 px-1">
-        <span className="text-[11px] font-medium italic text-muted-foreground/60">
+        <span className="text-2xs font-medium italic text-muted-foreground/60">
           {segment.suggestedName}
         </span>
         <button
@@ -450,7 +443,7 @@ function SpeakerLabel({
       <PopoverTrigger asChild>
         <button
           className={cn(
-            "inline-flex items-center text-[11px] font-medium mb-0.5 px-1.5 py-0.5 rounded-md outline-none cursor-pointer",
+            "inline-flex items-center text-2xs font-medium mb-0.5 px-1.5 py-0.5 rounded-md outline-none cursor-pointer",
             "border border-border/60 dark:border-white/20",
             "hover:bg-foreground/5 hover:border-border/90 dark:hover:border-white/30",
             "transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-ring",
@@ -830,7 +823,7 @@ export function MeetingTranscriptChat({
                 <div
                   className={cn(
                     "px-3 py-1.5 cursor-default transition-colors",
-                    "text-[13px] leading-relaxed",
+                    "text-sm leading-relaxed",
                     selfSide
                       ? cn(
                           "bg-primary/90 text-primary-foreground",

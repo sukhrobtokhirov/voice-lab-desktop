@@ -127,7 +127,7 @@ export default function WorkspaceMembersTab({ workspace }: Props) {
                 className="w-7 h-7 rounded-full object-cover shrink-0"
               />
             ) : (
-              <span className="w-7 h-7 rounded-full bg-primary/10 text-primary text-[10px] font-semibold flex items-center justify-center shrink-0">
+              <span className="w-7 h-7 rounded-full bg-primary/10 text-primary text-2xs font-semibold flex items-center justify-center shrink-0">
                 {(member.name || member.email).slice(0, 2).toUpperCase()}
               </span>
             )}
@@ -141,7 +141,7 @@ export default function WorkspaceMembersTab({ workspace }: Props) {
             </div>
             <span
               className={cn(
-                "text-[10px] font-medium px-2 py-0.5 rounded-md uppercase tracking-wide",
+                "text-2xs font-medium px-2 py-0.5 rounded-md uppercase tracking-wide",
                 member.role === "owner"
                   ? "bg-primary/10 text-primary"
                   : "bg-foreground/6 text-foreground/65"
@@ -204,7 +204,7 @@ export default function WorkspaceMembersTab({ workspace }: Props) {
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-foreground truncate">{inv.email}</p>
                 </div>
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                <span className="text-2xs uppercase tracking-wide text-muted-foreground">
                   {t(`settingsPage.workspace.role.${inv.workspace_role}`)}
                 </span>
                 <Button

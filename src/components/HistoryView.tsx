@@ -10,6 +10,7 @@ import { cn } from "./lib/utils";
 import { useUpcomingEvents } from "../hooks/useUpcomingEvents";
 import UpcomingMeetings from "./UpcomingMeetings";
 import { useSettingsStore } from "../stores/settingsStore";
+import { VOICELAB_AI_ENABLED } from "../lib/features";
 
 interface HistoryViewProps {
   history: TranscriptionItemType[];
@@ -75,7 +76,7 @@ export default function HistoryView({
   const discardedToggle = (
     <button
       onClick={onToggleDiscarded}
-      className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground/60 hover:!text-foreground hover:!bg-black/5 dark:hover:!bg-white/5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/30 transition-all duration-200"
+      className="flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs text-muted-foreground/60 hover:!text-foreground hover:!bg-black/5 dark:hover:!bg-white/5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/30 transition-all duration-200"
     >
       <Archive size={11} />
       <span>
@@ -130,7 +131,7 @@ export default function HistoryView({
           </div>
         )}
 
-        {!useCleanupModel && !aiCTADismissed && (
+        {VOICELAB_AI_ENABLED && !useCleanupModel && !aiCTADismissed && (
           <div className="mb-3 relative rounded-lg border border-primary/20 bg-primary/5 dark:bg-primary/10 p-3">
             <button
               onClick={() => {
@@ -171,7 +172,7 @@ export default function HistoryView({
             {isConnected && (
               <div className="flex items-center gap-1.5 pb-2.5">
                 <Mic size={12} className="text-muted-foreground" />
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide">
                   {t("upcoming.transcriptions")}
                 </span>
               </div>
@@ -278,10 +279,10 @@ export default function HistoryView({
                       strokeLinecap="round"
                     />
                   </svg>
-                  <h3 className="text-xs font-semibold text-foreground/70 dark:text-foreground/60 mb-2">
+                  <h3 className="mb-2 text-sm font-semibold text-foreground/80 dark:text-foreground/80">
                     {t("controlPanel.history.empty")}
                   </h3>
-                  <div className="flex items-center gap-2 text-xs text-foreground/50 dark:text-foreground/25">
+                  <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-foreground/65 dark:text-foreground/65">
                     <span>{t("controlPanel.history.press")}</span>
                     {parseHotkeyList(hotkey).map((hk, index) => (
                       <Fragment key={hk}>
@@ -300,7 +301,7 @@ export default function HistoryView({
                 {groupedHistory.map((group, index) => (
                   <div key={group.label} className={index > 0 ? "mt-4" : ""}>
                     <div className="sticky -top-1 z-10 -mx-4 px-5 pt-2 pb-2 bg-background flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-muted-foreground dark:text-muted-foreground uppercase tracking-wide">
+                      <span className="text-2xs font-semibold text-muted-foreground dark:text-muted-foreground uppercase tracking-wide">
                         {group.label}
                       </span>
                       {index === 0 && (
@@ -308,7 +309,7 @@ export default function HistoryView({
                           {discardedToggle}
                           <button
                             onClick={clearAllTranscriptions}
-                            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground/60 hover:!text-destructive hover:!bg-destructive/8 dark:hover:!bg-destructive/10 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/30 transition-all duration-200"
+                            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs text-muted-foreground/60 hover:!text-destructive hover:!bg-destructive/8 dark:hover:!bg-destructive/10 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/30 transition-all duration-200"
                           >
                             <Trash2 size={11} />
                             <span>{t("controlPanel.history.clearAll")}</span>

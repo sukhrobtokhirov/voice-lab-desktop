@@ -19,7 +19,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
   return (
     <div className={`space-y-4 ${className}`}>
       <div>
-        <h3 className="text-sm font-semibold tracking-[-0.015em] text-foreground">{title}</h3>
+        <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
         {description && (
           <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
         )}
@@ -119,7 +119,7 @@ export function SettingsPanelRow({
 export function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
     <div className="mb-4">
-      <h3 className="text-sm font-semibold tracking-[-0.015em] text-foreground">{title}</h3>
+      <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
       {description && <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>}
     </div>
   );

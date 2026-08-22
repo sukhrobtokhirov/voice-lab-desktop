@@ -169,6 +169,8 @@ export const useAudioRecording = (toast, options = {}) => {
                     void signInWithSocial("google");
                   } else if (recovery === "billing") {
                     void window.electronAPI?.openVoiceLabBilling?.("dictate");
+                  } else if (recovery === "permission") {
+                    void window.electronAPI?.openAccessibilitySettings?.();
                   } else if (recovery === "retry") {
                     void audioManagerRef.current?.retryLastCloudTranscription();
                   }
@@ -220,10 +222,11 @@ export const useAudioRecording = (toast, options = {}) => {
 
           const isStreaming = result.source?.includes("streaming");
           const { autoPasteEnabled, keepTranscriptionInClipboard } = getSettings();
+          let textWasPlaced = false;
 
           if (autoPasteEnabled) {
             const pasteStart = performance.now();
-            await audioManagerRef.current.safePaste(result.text, {
+            textWasPlaced = await audioManagerRef.current.safePaste(result.text, {
               ...(isStreaming ? { fromStreaming: true } : {}),
               restoreClipboard: !keepTranscriptionInClipboard,
               allowClipboardFallback: isAccessibilitySkipped(),
@@ -244,9 +247,11 @@ export const useAudioRecording = (toast, options = {}) => {
           audioManagerRef.current.saveTranscription(result.text, result.rawText ?? result.text, {
             clientTranscriptionId: result.clientTranscriptionId,
           });
-          setWasPlaced(true);
-          if (placedTimerRef.current) clearTimeout(placedTimerRef.current);
-          placedTimerRef.current = setTimeout(() => setWasPlaced(false), 1400);
+          if (textWasPlaced) {
+            setWasPlaced(true);
+            if (placedTimerRef.current) clearTimeout(placedTimerRef.current);
+            placedTimerRef.current = setTimeout(() => setWasPlaced(false), 1400);
+          }
         }
       },
       onTranslationFallback: ({ reason }) => {

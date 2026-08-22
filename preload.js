@@ -458,6 +458,11 @@ const fullElectronAPI = {
     ipcRenderer.invoke("cloud-streaming-usage", text, audioDurationSeconds, opts),
   desktopPricing: () => ipcRenderer.invoke("desktop-pricing"),
   desktopSubscription: () => ipcRenderer.invoke("desktop-subscription"),
+  onDesktopUsageRefresh: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("desktop-usage-refresh", listener);
+    return () => ipcRenderer.removeListener("desktop-usage-refresh", listener);
+  },
   openVoiceLabBilling: (source = "dictate") => ipcRenderer.invoke("open-voicelab-billing", source),
   cloudCheckout: (opts) => ipcRenderer.invoke("cloud-checkout", opts),
   cloudBillingPortal: () => ipcRenderer.invoke("cloud-billing-portal"),

@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const Module = require("node:module");
 const { EventEmitter } = require("node:events");
 const childProcess = require("node:child_process");
+const fs = require("node:fs");
 
 const fakeClipboard = {
   text: "",
@@ -63,6 +64,19 @@ const clipboardModulePath = require.resolve("../../src/helpers/clipboard");
 
 const originalLoad = Module._load;
 
+test("macOS prompts once on an explicit paste and never attempts an untrusted paste", () => {
+  const source = fs.readFileSync(clipboardModulePath, "utf8");
+  const permissionCheck = source.indexOf("const hasPermissions");
+  const nativePrompt = source.indexOf("isTrustedAccessibilityClient(true)", permissionCheck);
+  const permissionError = source.indexOf('error.code = "PASTE_ACCESSIBILITY_REQUIRED"', nativePrompt);
+  const pasteCall = source.indexOf("pasteResult = await this.pasteMacOS", permissionError);
+
+  assert.ok(permissionCheck > -1 && nativePrompt > permissionCheck);
+  assert.ok(permissionError > nativePrompt && pasteCall > permissionError);
+  assert.match(source, /if \(!this\.accessibilityPastePromptAttempted\)/);
+  assert.match(source.slice(permissionError, pasteCall), /throw error/);
+});
+
 function loadClipboardManager({ spawn } = {}) {
   delete require.cache[clipboardModulePath];
 
@@ -97,6 +111,18 @@ function createSuccessfulSpawn(calls) {
     pasteProcess.stderr = new EventEmitter();
     pasteProcess.stdout = new EventEmitter();
     process.nextTick(() => pasteProcess.emit("close", 0));
+    return pasteProcess;
+  };
+}
+
+function createSpawnWithExitCodes(calls, exitCodes) {
+  return function spawnWithExitCodes(command, args = []) {
+    calls.push({ command, args });
+    const pasteProcess = new EventEmitter();
+    pasteProcess.stderr = new EventEmitter();
+    pasteProcess.stdout = new EventEmitter();
+    const code = exitCodes.shift();
+    process.nextTick(() => pasteProcess.emit("close", code));
     return pasteProcess;
   };
 }
@@ -187,7 +213,9 @@ test("pasteText waits for prior clipboard restoration before starting the next p
     return { restoreComplete: Promise.resolve() };
   };
 
-  await manager.pasteText("first");
+  const firstResult = await manager.pasteText("first");
+  assert.deepEqual(firstResult, { pasted: true, copied: true });
+  assert.deepEqual(structuredClone(firstResult), firstResult);
   const secondPaste = manager.pasteText("second");
   await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -198,12 +226,20 @@ test("pasteText waits for prior clipboard restoration before starting the next p
   assert.deepEqual(events, ["start:first", "end:first", "start:second", "end:second"]);
 });
 
-test("pasteMacOS uses one AppleScript paste and restores the clipboard", async () => {
+test("pasteMacOS sends one in-process CGEvent and restores the clipboard", async () => {
   const spawnCalls = [];
   const TestClipboardManager = loadClipboardManager({
     spawn: createSuccessfulSpawn(spawnCalls),
   });
   const manager = new TestClipboardManager();
+  let pasteCalls = 0;
+  manager.resolveMacOSPasteAddon = () => ({
+    isTrusted: () => true,
+    paste: () => {
+      pasteCalls += 1;
+      return true;
+    },
+  });
   const originalClipboard = { type: "text", data: "previous clipboard" };
   let restoreCall;
 
@@ -218,17 +254,69 @@ test("pasteMacOS uses one AppleScript paste and restores the clipboard", async (
   });
   await result.restoreComplete;
 
+  assert.equal(pasteCalls, 1);
+  assert.equal(spawnCalls.length, 0);
+  assert.equal(restoreCall.original, originalClipboard);
+  assert.deepEqual(restoreCall.options, {
+    delayMs: 450,
+    expectedText: "dictated text",
+  });
+});
+
+test("pasteMacOS falls back to one AppleScript paste when native helper is unavailable", async () => {
+  const spawnCalls = [];
+  const TestClipboardManager = loadClipboardManager({
+    spawn: createSuccessfulSpawn(spawnCalls),
+  });
+  const manager = new TestClipboardManager();
+  manager.resolveMacOSPasteAddon = () => null;
+  manager.resolveFastPasteBinary = () => null;
+  manager._restoreClipboardAfterDelay = () => Promise.resolve();
+
+  const result = await manager.pasteMacOS(
+    { type: "text", data: "previous clipboard" },
+    { expectedClipboardText: "dictated text", fromStreaming: true }
+  );
+  await result.restoreComplete;
+
+  assert.equal(result.pasted, true);
   assert.equal(spawnCalls.length, 1);
   assert.equal(spawnCalls[0].command, "osascript");
   assert.deepEqual(spawnCalls[0].args, [
     "-e",
     'tell application "System Events" to key code 9 using command down',
   ]);
-  assert.equal(restoreCall.original, originalClipboard);
-  assert.deepEqual(restoreCall.options, {
-    delayMs: 450,
-    expectedText: "dictated text",
+});
+
+test("native helper trust denial safely falls back to the captured target PID", async () => {
+  const spawnCalls = [];
+  const TestClipboardManager = loadClipboardManager({
+    spawn: createSpawnWithExitCodes(spawnCalls, [2, 0]),
   });
+  const manager = new TestClipboardManager();
+  manager.resolveMacOSPasteAddon = () => null;
+  manager.resolveFastPasteBinary = () => "/bundled/macos-fast-paste";
+  manager._restoreClipboardAfterDelay = () => Promise.resolve();
+
+  const result = await manager.pasteMacOS(
+    { type: "text", data: "previous clipboard" },
+    {
+      expectedClipboardText: "dictated text",
+      fromStreaming: true,
+      targetPid: 4242,
+    }
+  );
+  await result.restoreComplete;
+
+  assert.equal(result.pasted, true);
+  assert.equal(spawnCalls.length, 2);
+  assert.deepEqual(spawnCalls[0], {
+    command: "/bundled/macos-fast-paste",
+    args: [],
+  });
+  assert.equal(spawnCalls[1].command, "osascript");
+  assert.match(spawnCalls[1].args[1], /unix id is 4242/);
+  assert.match(spawnCalls[1].args[1], /tell targetProcess to keystroke "v" using command down/);
 });
 
 test("pasteMacOSWithOsascript fallback uses the short macOS restore delay", async () => {

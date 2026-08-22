@@ -137,6 +137,8 @@
     "refresh": "Refresh",
     "download": "Download",
     "cancel": "Cancel",
+    "confirm": "Confirm",
+    "ok": "OK",
     "recommended": "Recommended",
     "active": "Active",
     "freeAccountRequired": "Free account required",
@@ -161,6 +163,7 @@
     "error": "Something went wrong",
     "unknownError": "An unknown error occurred",
     "copy": "Copy",
+    "copyError": "Copy error",
     "copied": "Copied",
     "done": "Done",
     "skip": "Skip"
@@ -355,7 +358,7 @@
     },
     "accessibilityMissing": {
       "title": "Accessibility permissions needed",
-      "description": "We've detected that VoiceLab needs accessibility permissions to work properly. Please enable them below."
+      "description": "In the opened settings, select Grant access on the Accessibility card."
     },
     "billing": {
       "pastDueTitle": "We couldn't process your payment",
@@ -741,9 +744,9 @@
   },
   "auth": {
     "cloudNotConfigured": "Cloud Not Configured",
-    "desktopTitle": "Sign in to VoiceLab Desktop",
+    "desktopTitle": "Sign in to VoiceLab Flow",
     "desktopBrowserHint": "Secure sign-in opens in your browser and returns here when complete.",
-    "desktopWaiting": "Complete sign-in in your browser. VoiceLab Desktop will continue automatically.",
+    "desktopWaiting": "Complete sign-in in your browser. VoiceLab Flow will continue automatically.",
     "desktopSecurity": "Your password never enters the desktop app. The refresh token is encrypted in a private local credential store.",
     "desktopOpenBrowser": "Continue in browser",
     "desktopOpening": "Opening secure sign-in…",
@@ -759,10 +762,10 @@
     "desktopSecurityError": "The sign-in link failed VoiceLab’s security checks. Start sign-in again.",
     "desktopReplayDetected": "This sign-in link has already been used. Start a new sign-in request.",
     "desktopUnauthorized": "Your VoiceLab session is no longer valid. Sign in again.",
-    "desktopUnavailable": "Desktop authentication is unavailable in this app session. Restart VoiceLab Desktop.",
+    "desktopUnavailable": "Desktop authentication is unavailable in this app session. Restart VoiceLab Flow.",
     "desktopServerRejected": "The authentication server rejected the request. Try again or contact support with the error code below.",
     "desktopReopenFailed": "The browser could not be reopened. Cancel and start sign-in again.",
-    "desktopProtocolUnavailable": "The secure return link is not registered. Restart or reinstall VoiceLab Desktop.",
+    "desktopProtocolUnavailable": "The secure return link is not registered. Restart or reinstall VoiceLab Flow.",
     "common": {
       "back": "Back",
       "continue": "Continue",
@@ -1138,7 +1141,7 @@
       "reset": "Reset",
       "save": "Save"
     },
-    "defaultTestInput": "Hey Whispr, what's the weather like today?",
+    "defaultTestInput": "Hey VoiceLab, what's the weather like today?",
     "defaultTestInputTranslate": "The weather is beautiful today, want to go for a walk?",
     "dialogs": {
       "reset": {
@@ -3085,7 +3088,7 @@
     "join": "Join & transcribe"
   },
   "desktop": {
-    "offline": "Offline. Local dictation still works.",
+    "offline": "You're offline. Voice dictation requires an internet connection.",
     "nav": {
       "history": "History",
       "vocabulary": "Vocabulary",
@@ -3103,6 +3106,7 @@
       "updated": "Updated {{time}}",
       "live": "Usage appears after your next dictation.",
       "manage": "Manage billing",
+      "upgradePlan": "Upgrade plan",
       "activeDescription": "Your desktop plan is active and ready to use.",
       "inactiveDescription": "Choose a desktop plan on the VoiceLab website.",
       "active": "Active",
@@ -3110,15 +3114,21 @@
       "activePlan": "Active plan",
       "noActivePlan": "No active plan",
       "checking": "Checking subscription…",
-      "remainingCompact": "{{duration}} remaining today",
+      "remainingCompact": "{{duration}} left · daily limit",
+      "remainingHourCompact": "{{duration}} left · hourly limit",
       "dailyCompact": "{{duration}} per day",
+      "hourlyCompact": "{{duration}} per hour",
       "billingDisabled": "Desktop plans are temporarily unavailable.",
       "priceCompact": "{{price}} / {{interval}}",
       "choosePlan": "Choose plan",
       "dailyLimit": "Daily allowance",
+      "hourlyLimit": "Hourly allowance",
+      "usedThisHour": "Used this hour",
+      "remainingThisHour": "Remaining this hour",
       "maxRecording": "Maximum recording",
       "endsOn": "Access ends on {{date}}",
       "renewsOn": "Renews on {{date}}",
+      "resetsOn": "Usage resets on {{date}}",
       "dailyMinutes": "{{count}} minutes per day",
       "maxRecordingSeconds": "Up to {{count}} seconds per recording",
       "refreshHint": "Refresh after returning from payment.",
@@ -3134,7 +3144,7 @@
     },
     "subscriptionPrompt": {
       "title": "Desktop plan required",
-      "description": "Choose a VoiceLab Desktop plan on the website, then return here to refresh your access.",
+      "description": "Choose a VoiceLab Flow plan on the website, then return here to refresh your access.",
       "limitTitle": "Daily allowance reached",
       "limitDescription": "Your desktop plan is active, but today’s dictation allowance has been used. Manage the plan on VoiceLab or try again after the allowance resets."
     },
@@ -3164,7 +3174,7 @@
         "ready": "Ready"
       },
       "welcome": {
-        "title": "VoiceLab Dictate",
+        "title": "VoiceLab Flow",
         "description": "Speak naturally. Your text appears where you need it."
       },
       "advanced": {
@@ -3246,12 +3256,12 @@
       "advanced": "Advanced",
       "advancedDescription": "VoiceLab Cloud and developer tools",
       "advancedSetup": "Cloud transcription",
-      "advancedSetupDescription": "VoiceLab Dictate uses your signed-in account automatically."
+      "advancedSetupDescription": "VoiceLab Flow uses your signed-in account automatically."
     },
     "session": {
       "active": "Signed in",
       "device": "Device",
-      "thisDevice": "This VoiceLab Dictate desktop",
+      "thisDevice": "This VoiceLab Flow desktop",
       "status": "Session",
       "protected": "Active and protected",
       "signedOut": "Not signed in",

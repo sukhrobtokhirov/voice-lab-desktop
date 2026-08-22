@@ -117,10 +117,7 @@ export default function DictionaryView() {
     (error: unknown) => {
       toast({
         title: t("desktop.dictionary.actionFailed"),
-        description:
-          error instanceof Error
-            ? error.message
-            : t("desktop.dictionary.tryAgain"),
+        description: error instanceof Error ? error.message : t("desktop.dictionary.tryAgain"),
         variant: "destructive",
       });
     },
@@ -232,9 +229,7 @@ export default function DictionaryView() {
       <div className="w-10 h-10 rounded-[10px] bg-primary/6 flex items-center justify-center mb-3.5">
         <BookOpen size={17} strokeWidth={1.5} className="text-primary/55" />
       </div>
-      <h4 className="text-sm font-semibold text-foreground mb-1">
-        {t("dictionary.emptyTitle")}
-      </h4>
+      <h4 className="text-sm font-semibold text-foreground mb-1">{t("dictionary.emptyTitle")}</h4>
       <p className="text-xs text-foreground/45 leading-relaxed max-w-[260px] mb-4">
         {t("dictionary.emptyDescription", { agentName })}
       </p>
@@ -297,9 +292,7 @@ export default function DictionaryView() {
                       size="sm"
                       variant="outline"
                       disabled={dictionarySaving}
-                      onClick={() =>
-                        void decideLegacyDictionary("keep_local").catch(reportFailure)
-                      }
+                      onClick={() => void decideLegacyDictionary("keep_local").catch(reportFailure)}
                     >
                       {t("dictionary.keepOnDevice", { defaultValue: "Qurilmada qoldirish" })}
                     </Button>
@@ -451,7 +444,7 @@ export default function DictionaryView() {
                       ) : (
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm text-foreground/80">{entry.displayForm}</p>
-                          <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-foreground/40">
+                          <div className="mt-0.5 flex items-center gap-1.5 text-2xs text-foreground/40">
                             <StatusIcon
                               size={10}
                               className={entry.syncStatus === "syncing" ? "animate-spin" : ""}

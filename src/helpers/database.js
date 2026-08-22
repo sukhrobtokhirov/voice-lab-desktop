@@ -3281,11 +3281,29 @@ class DatabaseManager {
         client_note_id: cloudNote.client_note_id,
         privacy_scope_id: privacyScopeId,
       };
+      const hasValue = (value) => value !== null && value !== undefined && value !== "";
       const choose = (key) =>
-        (cloudNote[key] === null || cloudNote[key] === undefined || cloudNote[key] === "")
-        && existingClear?.[key]
+        !hasValue(cloudNote[key]) && hasValue(existingClear?.[key])
           ? existingClear[key]
           : cloudNote[key] ?? null;
+      const cloudHasEnhancedContent = hasValue(cloudNote.enhanced_content);
+      const existingHasEnhancedContent = hasValue(existingClear?.enhanced_content);
+      const enhancedContent = cloudHasEnhancedContent
+        ? cloudNote.enhanced_content
+        : existingHasEnhancedContent
+          ? existingClear.enhanced_content
+          : cloudNote.enhanced_content ?? null;
+      const enhancementPrompt = cloudHasEnhancedContent
+        ? cloudNote.enhancement_prompt ?? null
+        : existingHasEnhancedContent
+          ? existingClear.enhancement_prompt ?? null
+          : cloudNote.enhancement_prompt ?? null;
+      const enhancedAtContentHash = cloudHasEnhancedContent
+        ? cloudNote.enhanced_at_content_hash ?? null
+        : existingHasEnhancedContent
+          ? existingClear.enhanced_at_content_hash ?? null
+          : cloudNote.enhanced_at_content_hash ?? null;
+      const transcript = choose("transcript");
       const stmt = this.db.prepare(`
         INSERT INTO notes (client_note_id, cloud_id, title, content, enhanced_content,
           enhancement_prompt, enhanced_at_content_hash, note_type, source_file,
@@ -3314,21 +3332,15 @@ class DatabaseManager {
         cloudNote.id,
         this._protectNoteField(identity, "title", choose("title") || "Untitled Note"),
         this._protectNoteField(identity, "content", choose("content") || ""),
-        this._protectNoteField(identity, "enhanced_content", choose("enhanced_content")),
-        this._protectNoteField(identity, "enhancement_prompt", choose("enhancement_prompt")),
-        this._protectNoteField(
-          identity,
-          "enhanced_at_content_hash",
-          choose("enhanced_at_content_hash")
-        ),
+        this._protectNoteField(identity, "enhanced_content", enhancedContent),
+        this._protectNoteField(identity, "enhancement_prompt", enhancementPrompt),
+        this._protectNoteField(identity, "enhanced_at_content_hash", enhancedAtContentHash),
         cloudNote.note_type || "personal",
         cloudNote.source_file
           ? this._protectNoteField(identity, "source_file", cloudNote.source_file)
           : null,
         cloudNote.audio_duration_seconds || null,
-        cloudNote.transcript
-          ? this._protectNoteField(identity, "transcript", choose("transcript"))
-          : null,
+        this._protectNoteField(identity, "transcript", transcript),
         localFolderId,
         cloudNote.participants
           ? this._protectNoteField(identity, "participants", cloudNote.participants)

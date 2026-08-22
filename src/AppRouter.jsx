@@ -10,7 +10,6 @@ import { Card, CardContent } from "./components/ui/card.tsx";
 import { useAuth } from "./hooks/useAuth";
 import { useTheme } from "./hooks/useTheme";
 import ConnectionStatus from "./components/ConnectionStatus";
-import SubscriptionAccessGate from "./components/SubscriptionAccessGate";
 import { hasOnboardingProgress } from "./constants/onboarding";
 
 const ControlPanel = React.lazy(() => import("./components/ControlPanel.tsx"));
@@ -137,10 +136,7 @@ function MainApp() {
           <div className="w-full max-w-sm mx-auto">
             <Card className="bg-card/90 backdrop-blur-2xl border border-border/50 dark:border-white/5 shadow-lg rounded-xl overflow-hidden">
               <CardContent className="p-6">
-                <AuthenticationStep
-                  onAuthComplete={() => {}}
-                  onNeedsVerification={() => {}}
-                />
+                <AuthenticationStep onAuthComplete={() => {}} onNeedsVerification={() => {}} />
               </CardContent>
             </Card>
           </div>
@@ -158,11 +154,9 @@ function MainApp() {
   }
 
   return isControlPanel ? (
-    <SubscriptionAccessGate>
-      <Suspense fallback={<LoadingFallback />}>
-        <ControlPanel initialSettingsSection={postOnboardingSettingsSection} />
-      </Suspense>
-    </SubscriptionAccessGate>
+    <Suspense fallback={<LoadingFallback />}>
+      <ControlPanel initialSettingsSection={postOnboardingSettingsSection} />
+    </Suspense>
   ) : (
     <App />
   );
@@ -189,7 +183,7 @@ function LoadingFallback({ message }) {
         </svg>
         <div className="w-7 h-7 rounded-full border-[2.5px] border-transparent border-t-primary animate-[spinner-rotate_0.8s_cubic-bezier(0.4,0,0.2,1)_infinite] motion-reduce:animate-none motion-reduce:border-t-muted-foreground motion-reduce:opacity-50" />
         {fallbackMessage && (
-          <p className="text-[13px] font-medium text-muted-foreground dark:text-foreground/60 tracking-[-0.01em]">
+          <p className="text-sm font-medium text-muted-foreground dark:text-foreground/60 tracking-tight">
             {fallbackMessage}
           </p>
         )}

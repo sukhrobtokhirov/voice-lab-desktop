@@ -121,6 +121,7 @@
         "macos-audio-tap",
         "macos-globe-listener",
         "macos-fast-paste",
+        "macos-paste-addon.node",
         "macos-mic-listener",
         "macos-text-monitor",
         "macos-media-remote",

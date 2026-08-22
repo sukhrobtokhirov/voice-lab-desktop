@@ -69,7 +69,7 @@ test("cloud health is a local auth check and billing remains an explicit link", 
   assert.match(source, /this\._handle\("desktop-pricing"/);
   assert.match(source, /this\._handle\("desktop-subscription"/);
   assert.match(source, /getDesktopPricing/);
-  assert.match(source, /getDesktopSubscription/);
+  assert.match(source, /getDesktopUsage/);
   assert.match(source, /shell\.openExternal\(this\.voiceLabApiClient\.getBillingUrl\(source\)\)/);
 });
 
@@ -100,10 +100,12 @@ test("VoiceLab AI remains hidden behind its disabled product flag", () => {
   const features = read("src/lib/features.ts");
   const sidebar = read("src/components/ControlPanelSidebar.tsx");
   const controlPanel = read("src/components/ControlPanel.tsx");
+  const history = read("src/components/HistoryView.tsx");
 
   assert.match(features, /export const VOICELAB_AI_ENABLED = false/);
   assert.match(sidebar, /VOICELAB_AI_ENABLED[\s\S]*label: "VoiceLab AI"/);
   assert.match(controlPanel, /VOICELAB_AI_ENABLED && activeView === "chat"/);
+  assert.match(history, /VOICELAB_AI_ENABLED && !useCleanupModel/);
 });
 
 test("usage UI uses the desktop entitlement and keeps website billing reachable", () => {
@@ -114,7 +116,10 @@ test("usage UI uses the desktop entitlement and keeps website billing reachable"
   assert.match(hook, /availableCredits: null/);
   assert.doesNotMatch(hook, /plan: "free"|balanceCredits: "0"|availableCredits: "0"/);
   assert.match(hook, /result\.entitlement\.active/);
-  assert.match(hook, /entitlement\?\.active \? entitlement\.status \|\| "active" : "inactive"/);
+  assert.match(
+    hook,
+    /status: entitlement \? \(entitlement\.active \? "active" : "inactive"\) : "unknown"/
+  );
   assert.match(hook, /\[isSignedIn, user\?\.id, loadPricing, loadSubscription\]/);
   assert.match(display, /if \(!usage\) return null/);
   assert.match(display, /usage\.plans\.map/);

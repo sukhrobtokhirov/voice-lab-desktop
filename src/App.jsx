@@ -64,7 +64,7 @@ const Tooltip = ({ children, content, emoji, align = "center" }) => {
       </div>
       {isVisible && (
         <div
-          className={`absolute bottom-full ${alignClass} mb-2 px-1.5 py-1 text-[10px] text-popover-foreground bg-popover border border-border rounded-md z-10 shadow-lg transition-opacity duration-150 whitespace-nowrap`}
+          className={`absolute bottom-full ${alignClass} mb-2 px-1.5 py-1 text-2xs text-popover-foreground bg-popover border border-border rounded-md z-10 shadow-lg transition-opacity duration-150 whitespace-nowrap`}
         >
           {emoji && <span className="mr-1">{emoji}</span>}
           {content}
@@ -157,7 +157,7 @@ export default function App() {
                   // silently fail — word stays in dictionary
                 }
               }}
-              className="text-[10px] font-medium px-2.5 py-1 rounded-sm whitespace-nowrap
+              className="text-2xs font-medium px-2.5 py-1 rounded-sm whitespace-nowrap
                 text-emerald-100/90 hover:text-white
                 bg-emerald-500/15 hover:bg-emerald-500/25
                 border border-emerald-400/20 hover:border-emerald-400/35

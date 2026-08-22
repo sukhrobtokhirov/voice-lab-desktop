@@ -176,7 +176,7 @@ function SectionHeader({
 }) {
   return (
     <div className="mb-4">
-      <h3 className="text-sm font-semibold tracking-[-0.015em] text-foreground">{title}</h3>
+      <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
       {description && <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>}
       {note && <p className="mt-1 text-sm leading-6 text-muted-foreground">{note}</p>}
     </div>
@@ -1338,7 +1338,7 @@ export default function SettingsPage({
                         </p>
                         <p className="mt-1 text-sm font-medium">
                           {t("desktop.session.thisDevice", {
-                            defaultValue: "This VoiceLab Dictate desktop",
+                            defaultValue: "This VoiceLab Flow desktop",
                           })}
                         </p>
                       </div>
@@ -2145,7 +2145,7 @@ EOF`,
                                         {item.desc}
                                       </span>
                                       {item.note && (
-                                        <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">
+                                        <p className="mt-0.5 text-xs leading-5 text-amber-600 dark:text-amber-400">
                                           {item.note}
                                         </p>
                                       )}
@@ -2212,12 +2212,12 @@ EOF`,
                                             {step.cmds.map((c, j) => (
                                               <div key={j}>
                                                 {c.label && (
-                                                  <p className="text-[11px] text-muted-foreground mb-1">
+                                                  <p className="mb-1 text-xs leading-5 text-muted-foreground">
                                                     {c.label}
                                                   </p>
                                                 )}
                                                 <div className="flex items-start gap-1.5">
-                                                  <pre className="flex-1 text-[11px] bg-muted/60 rounded-md px-3 py-2 font-mono whitespace-pre-wrap break-all select-all overflow-x-auto">
+                                                  <pre className="flex-1 overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-muted/60 px-3 py-2 font-mono text-xs leading-5 select-all">
                                                     {c.cmd}
                                                   </pre>
                                                   <button
@@ -2441,6 +2441,28 @@ EOF`,
       case "privacyData":
         return (
           <div className="space-y-6">
+            {platform === "darwin" && !permissionsHook.accessibilityPermissionGranted && (
+              <div>
+                <SectionHeader
+                  title={t("settingsPage.permissions.accessibilityTitle")}
+                  description={t("settingsPage.permissions.accessibilityDescription")}
+                />
+                <PermissionCard
+                  icon={Shield}
+                  title={t("settingsPage.permissions.accessibilityTitle")}
+                  description={t("settingsPage.permissions.accessibilityDescription")}
+                  granted={false}
+                  onRequest={permissionsHook.requestAccessibilityPermission}
+                  buttonText={t("settingsPage.permissions.grantAccess")}
+                  hint={
+                    permissionsHook.accessibilityTroubleshooting
+                      ? t("onboarding.permissions.accessibilityTroubleshooting")
+                      : undefined
+                  }
+                />
+              </div>
+            )}
+
             {/* Privacy */}
             <div>
               <SectionHeader
@@ -2597,6 +2619,11 @@ EOF`,
                         granted={permissionsHook.accessibilityPermissionGranted}
                         onRequest={permissionsHook.requestAccessibilityPermission}
                         buttonText={t("settingsPage.permissions.grantAccess")}
+                        hint={
+                          permissionsHook.accessibilityTroubleshooting
+                            ? t("onboarding.permissions.accessibilityTroubleshooting")
+                            : undefined
+                        }
                       />
                     )}
                     {canManageSystemAudioInApp(systemAudio) && (
@@ -2671,7 +2698,7 @@ EOF`,
                   defaultValue: "Cloud transcription",
                 })}
                 description={t("desktop.settings.cloudTranscriptionDescription", {
-                  defaultValue: "VoiceLab Dictate uses your signed-in account automatically.",
+                  defaultValue: "VoiceLab Flow uses your signed-in account automatically.",
                 })}
               />
               <SettingsPanel>

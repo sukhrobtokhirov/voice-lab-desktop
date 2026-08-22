@@ -305,7 +305,7 @@ export default function CommandSearch({
             {query && (
               <button
                 onClick={() => setQuery("")}
-                className="text-[11px] text-muted-foreground/40 hover:text-muted-foreground transition-colors outline-none"
+                className="text-2xs text-muted-foreground/40 hover:text-muted-foreground transition-colors outline-none"
               >
                 ✕
               </button>
@@ -349,12 +349,12 @@ export default function CommandSearch({
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-foreground truncate">{conv.title}</p>
                     {conv.last_message && (
-                      <p className="text-[11px] text-muted-foreground/55 truncate mt-px">
+                      <p className="text-2xs text-muted-foreground/55 truncate mt-px">
                         {conv.last_message.slice(0, 90)}
                       </p>
                     )}
                   </div>
-                  <span className="text-[10px] text-muted-foreground/35 tabular-nums shrink-0">
+                  <span className="text-2xs text-muted-foreground/35 tabular-nums shrink-0">
                     {relativeTime(conv.updated_at, t)}
                   </span>
                 </button>
@@ -435,7 +435,7 @@ function SectionHeader({ icon, label }: { icon: React.ReactNode; label: string }
   return (
     <div className="flex items-center gap-1.5 px-2.5 pt-2 pb-1">
       <span className="text-muted-foreground/45">{icon}</span>
-      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/50">
+      <span className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground/50">
         {label}
       </span>
     </div>
@@ -489,11 +489,9 @@ function NoteRow({
         >
           {note.title || t("notes.list.untitled")}
         </p>
-        {preview && (
-          <p className="text-[11px] text-muted-foreground/55 truncate mt-px">{preview}</p>
-        )}
+        {preview && <p className="text-2xs text-muted-foreground/55 truncate mt-px">{preview}</p>}
       </div>
-      <span className="text-[10px] text-muted-foreground/35 tabular-nums shrink-0">
+      <span className="text-2xs text-muted-foreground/35 tabular-nums shrink-0">
         {relativeTime(note.updated_at, t)}
       </span>
     </button>
@@ -536,7 +534,7 @@ function TranscriptRow({
         )}
       />
       <p className="flex-1 text-xs text-foreground/75 truncate min-w-0">{transcript.text}</p>
-      <span className="text-[10px] text-muted-foreground/35 tabular-nums shrink-0">
+      <span className="text-2xs text-muted-foreground/35 tabular-nums shrink-0">
         {relativeTime(transcript.created_at, t)}
       </span>
     </button>
@@ -549,12 +547,12 @@ function FooterHint({ keys, label }: { keys: string[]; label: string }) {
       {keys.map((k) => (
         <kbd
           key={k}
-          className="text-[10px] px-1 py-px rounded border border-border/40 bg-muted/50 text-muted-foreground/55 font-mono leading-tight"
+          className="text-2xs px-1 py-px rounded border border-border/40 bg-muted/50 text-muted-foreground/55 font-mono leading-tight"
         >
           {k}
         </kbd>
       ))}
-      <span className="text-[10px] text-muted-foreground/40 ml-0.5">{label}</span>
+      <span className="text-2xs text-muted-foreground/40 ml-0.5">{label}</span>
     </div>
   );
 }

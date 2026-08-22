@@ -11,7 +11,6 @@ import {
   PanelLeftOpen,
   PanelLeftClose,
 } from "lucide-react";
-import UpgradePrompt, { type CreditShortage } from "./UpgradePrompt";
 import PostMigrationOnboarding from "./PostMigrationOnboarding";
 import { ConfirmDialog, AlertDialog } from "./ui/dialog";
 import { useDialogs } from "../hooks/useDialogs";
@@ -46,7 +45,6 @@ import WindowControls from "./WindowControls";
 import ConnectionStatus from "./ConnectionStatus";
 
 import { getCachedPlatform } from "../utils/platform";
-import { isAccessibilitySkipped } from "../utils/permissions";
 import {
   setActiveNoteId,
   setActiveFolderId,
@@ -81,15 +79,18 @@ const ChatView = React.lazy(() => import("./chat/ChatView"));
 const CommandSearch = React.lazy(() => import("./CommandSearch"));
 
 function PanelLoadingFallback() {
+  const { t } = useTranslation();
+  const loadingLabel = t("common.loading");
+
   return (
     <div
       className="flex min-h-48 w-full items-center justify-center"
       role="status"
-      aria-label="Loading"
+      aria-label={loadingLabel}
     >
       <div className="flex items-center gap-3 rounded-full border border-border/60 bg-card/80 px-4 py-2 text-sm text-muted-foreground shadow-sm">
         <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#e55347]" />
-        Loading…
+        <span className="break-words">{loadingLabel}</span>
       </div>
     </div>
   );
@@ -105,9 +106,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   const history = useTranscriptions();
   const [isLoading, setIsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(!!initialSettingsSection);
-  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [showPostMigration, setShowPostMigration] = useState(false);
-  const [creditShortage, setCreditShortage] = useState<CreditShortage | null>(null);
   const [settingsSection, setSettingsSection] = useState<string | undefined>(
     initialSettingsSection
   );
@@ -258,23 +257,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   }, [updateError, toast, t]);
 
   useEffect(() => {
-    const dispose = window.electronAPI?.onLimitReached?.((data: unknown) => {
-      const shortage = (data ?? {}) as {
-        availableCredits?: string | number | null;
-        requiredCredits?: string | number | null;
-        available_credits?: string | number | null;
-        required_credits?: string | number | null;
-      };
-      setCreditShortage({
-        availableCredits: shortage.availableCredits ?? shortage.available_credits,
-        requiredCredits: shortage.requiredCredits ?? shortage.required_credits,
-      });
-      setShowUpgradePrompt(true);
-    });
-    return () => dispose?.();
-  }, []);
-
-  useEffect(() => {
     if (!WORKSPACES_ENABLED) return;
     const unsubscribe = window.electronAPI?.onWorkspaceInvitationToken?.((token) => {
       setInvitationToken(token);
@@ -369,23 +351,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     });
     return () => cleanup?.();
   }, []);
-
-  // When accessibility is missing on macOS, open the permissions settings page
-  useEffect(() => {
-    const cleanup = window.electronAPI?.onAccessibilityMissing?.(async () => {
-      if (isAccessibilitySkipped()) return;
-      const migration = await window.electronAPI?.getPostMigrationState?.();
-      if (migration?.justMigrated) return;
-      setSettingsSection("privacyData");
-      setShowSettings(true);
-      toast({
-        title: t("controlPanel.accessibilityMissing.title"),
-        description: t("controlPanel.accessibilityMissing.description"),
-        duration: 10000,
-      });
-    });
-    return () => cleanup?.();
-  }, [toast, t]);
 
   useEffect(() => {
     fetchStreamingProviders();
@@ -738,12 +703,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
         onOk={() => {}}
       />
 
-      <UpgradePrompt
-        open={showUpgradePrompt}
-        onOpenChange={setShowUpgradePrompt}
-        shortage={creditShortage}
-      />
-
       <PostMigrationOnboarding
         open={showPostMigration}
         onOpenChange={setShowPostMigration}
@@ -844,7 +803,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
                   size="sm"
                   onClick={handleUpdateClick}
                   disabled={isInstalling || isDownloading}
-                  className="gap-1.5 text-xs w-full h-7"
+                  className="h-7 w-full gap-1.5 text-2xs"
                 >
                   {getUpdateButtonContent()}
                 </Button>

@@ -77,6 +77,7 @@ export default function UpdateNotificationOverlay() {
       >
         <button
           onClick={() => respond("dismiss")}
+          aria-label={t("common.dismiss")}
           className={[
             "absolute -left-2.5 -top-2.5 z-10 size-6 rounded-full",
             "flex items-center justify-center",
@@ -101,17 +102,17 @@ export default function UpdateNotificationOverlay() {
           </div>
 
           <div className="flex-1 min-w-0">
-            <p className="text-[12px] font-semibold text-foreground leading-tight truncate">
+            <p className="text-xs font-semibold leading-snug text-foreground break-words">
               {t("updateNotification.title")}
             </p>
-            <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+            <p className="mt-0.5 text-xs leading-snug text-muted-foreground break-words">
               {t("updateNotification.body", { version: data?.version ?? "" })}
             </p>
           </div>
 
           <button
             onClick={() => respond("update")}
-            className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 text-[11px] font-medium px-2.5 py-1 rounded-md transition-colors"
+            className="shrink-0 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 active:bg-primary/80"
           >
             {t("updateNotification.cta")}
           </button>

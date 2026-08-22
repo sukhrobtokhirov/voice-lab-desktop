@@ -107,7 +107,7 @@ export default function TranscriptionItem({
     >
       <div className="flex items-start gap-3">
         {formattedTime && (
-          <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums pt-0.5">
+          <span className="shrink-0 text-2xs text-muted-foreground tabular-nums pt-0.5">
             {formattedTime}
           </span>
         )}
@@ -160,7 +160,7 @@ export default function TranscriptionItem({
           </div>
         ) : isDiscarded ? (
           <div className="flex-1 min-w-0 flex items-center gap-2">
-            <span className="shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
               {t("controlPanel.history.discarded.badge")}
             </span>
             <span className="text-sm text-muted-foreground truncate">
@@ -310,7 +310,7 @@ export default function TranscriptionItem({
           <div className="min-h-0 overflow-hidden">
             <div className="border-t border-border/20 mt-2 pt-2">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">
                   {t("controlPanel.history.rawTranscript")}
                 </span>
                 <Tooltip content={t("controlPanel.history.copyRawTranscript")}>
@@ -326,7 +326,7 @@ export default function TranscriptionItem({
               </div>
               <p className="text-xs text-muted-foreground/80 leading-relaxed mt-1">{rawText}</p>
               {rawText === item.text && (
-                <p className="text-[10px] text-muted-foreground/50 italic mt-1">
+                <p className="text-2xs text-muted-foreground/50 italic mt-1">
                   {t("controlPanel.history.noAiProcessing")}
                 </p>
               )}

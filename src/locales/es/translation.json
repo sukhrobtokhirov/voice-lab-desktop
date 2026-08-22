@@ -137,6 +137,8 @@
     "refresh": "Actualizar",
     "download": "Descargar",
     "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "ok": "Aceptar",
     "recommended": "Recomendado",
     "active": "Activo",
     "freeAccountRequired": "Cuenta gratuita requerida",
@@ -161,6 +163,7 @@
     "error": "Algo salió mal",
     "unknownError": "Ocurrió un error desconocido",
     "copy": "Copiar",
+    "copyError": "Copiar error",
     "copied": "Copiado",
     "done": "Listo",
     "skip": "Omitir"
@@ -740,9 +743,9 @@
     }
   },
   "auth": {
-    "desktopTitle": "Inicia sesión en VoiceLab Desktop",
+    "desktopTitle": "Inicia sesión en VoiceLab Flow",
     "desktopBrowserHint": "El inicio de sesión seguro se abrirá en tu navegador y volverá automáticamente a la aplicación.",
-    "desktopWaiting": "Completa el inicio de sesión en el navegador. VoiceLab Desktop continuará automáticamente.",
+    "desktopWaiting": "Completa el inicio de sesión en el navegador. VoiceLab Flow continuará automáticamente.",
     "desktopSecurity": "Tu contraseña nunca entra en la aplicación. El token de actualización se cifra en un almacén local privado.",
     "desktopOpenBrowser": "Continuar en el navegador",
     "desktopOpening": "Abriendo el inicio de sesión seguro…",
@@ -758,10 +761,10 @@
     "desktopSecurityError": "El enlace de inicio de sesión no superó las comprobaciones de seguridad de VoiceLab. Inicia sesión de nuevo.",
     "desktopReplayDetected": "Este enlace de inicio de sesión ya se utilizó. Crea una nueva solicitud.",
     "desktopUnauthorized": "Tu sesión de VoiceLab ya no es válida. Inicia sesión de nuevo.",
-    "desktopUnavailable": "La autenticación de escritorio no está disponible en esta sesión. Reinicia VoiceLab Desktop.",
+    "desktopUnavailable": "La autenticación de escritorio no está disponible en esta sesión. Reinicia VoiceLab Flow.",
     "desktopServerRejected": "El servidor de autenticación rechazó la solicitud. Inténtalo de nuevo o contacta con soporte indicando el código de error de abajo.",
     "desktopReopenFailed": "No se pudo volver a abrir el navegador. Cancela e inicia sesión de nuevo.",
-    "desktopProtocolUnavailable": "El enlace de retorno seguro no está registrado. Reinicia o reinstala VoiceLab Desktop.",
+    "desktopProtocolUnavailable": "El enlace de retorno seguro no está registrado. Reinicia o reinstala VoiceLab Flow.",
     "cloudNotConfigured": "Nube no configurada",
     "common": {
       "back": "Atrás",
@@ -1098,7 +1101,7 @@
       "reset": "Restablecer",
       "save": "Guardar"
     },
-    "defaultTestInput": "Hola Whispr, ¿cómo está el clima hoy?",
+    "defaultTestInput": "Hola VoiceLab, ¿cómo está el clima hoy?",
     "defaultTestInputTranslate": "Hace un día precioso hoy, ¿te apetece dar un paseo?",
     "dialogs": {
       "reset": {
@@ -3085,7 +3088,7 @@
     "join": "Unirse y transcribir"
   },
   "desktop": {
-    "offline": "Desconectado. El dictado local todavía funciona.",
+    "offline": "Estás sin conexión. El dictado por voz requiere Internet.",
     "nav": {
       "history": "Historia",
       "vocabulary": "Vocabulario",
@@ -3103,6 +3106,7 @@
       "updated": "Actualizado {{time}}",
       "live": "El uso aparecerá después del próximo dictado.",
       "manage": "Administrar facturación",
+      "upgradePlan": "Mejorar plan",
       "activeDescription": "Tu plan de escritorio está activo y listo para usar.",
       "inactiveDescription": "Elige un plan de escritorio en el sitio web de VoiceLab.",
       "active": "Activo",
@@ -3110,15 +3114,21 @@
       "activePlan": "Plan activo",
       "noActivePlan": "Sin plan activo",
       "checking": "Comprobando suscripción…",
-      "remainingCompact": "Quedan {{duration}} hoy",
+      "remainingCompact": "Quedan {{duration}} · límite diario",
+      "remainingHourCompact": "Quedan {{duration}} · límite por hora",
       "dailyCompact": "{{duration}} al día",
+      "hourlyCompact": "{{duration}} por hora",
       "billingDisabled": "Los planes de escritorio no están disponibles temporalmente.",
       "priceCompact": "{{price}} / {{interval}}",
       "choosePlan": "Elegir plan",
       "dailyLimit": "Límite diario",
+      "hourlyLimit": "Límite por hora",
+      "usedThisHour": "Usado esta hora",
+      "remainingThisHour": "Restante esta hora",
       "maxRecording": "Grabación máxima",
       "endsOn": "El acceso termina el {{date}}",
       "renewsOn": "Se renueva el {{date}}",
+      "resetsOn": "El uso se restablece el {{date}}",
       "dailyMinutes": "{{count}} minutos al día",
       "maxRecordingSeconds": "Hasta {{count}} segundos por grabación",
       "refreshHint": "Actualiza al volver del pago.",
@@ -3134,7 +3144,7 @@
     },
     "subscriptionPrompt": {
       "title": "Se necesita un plan de escritorio",
-      "description": "Elige un plan VoiceLab Desktop en el sitio web y vuelve aquí para actualizar el acceso.",
+      "description": "Elige un plan VoiceLab Flow en el sitio web y vuelve aquí para actualizar el acceso.",
       "limitTitle": "Límite diario alcanzado",
       "limitDescription": "Tu plan de escritorio está activo, pero ya usaste el límite de dictado de hoy. Administra el plan en VoiceLab o inténtalo tras el reinicio del límite."
     },
@@ -3246,12 +3256,12 @@
       "advanced": "Avanzado",
       "advancedDescription": "VoiceLab Cloud y herramientas para desarrolladores",
       "advancedSetup": "Transcripción en la nube",
-      "advancedSetupDescription": "VoiceLab Dictate utiliza automáticamente su cuenta iniciada."
+      "advancedSetupDescription": "VoiceLab Flow utiliza automáticamente su cuenta iniciada."
     },
     "session": {
       "active": "Iniciado sesión",
       "device": "Dispositivo",
-      "thisDevice": "Este escritorio VoiceLab Dictate",
+      "thisDevice": "Este escritorio VoiceLab Flow",
       "status": "Sesión",
       "protected": "Activo y protegido",
       "signedOut": "No iniciado sesión",

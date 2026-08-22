@@ -273,7 +273,7 @@ export default function TranscriptionPreviewOverlay() {
                 ].join(" ")}
               />
             )}
-            <span className="text-[12px] font-medium tracking-tight text-muted-foreground/70 truncate">
+            <span className="break-words text-xs font-medium leading-snug tracking-tight text-muted-foreground/80">
               {statusLabel}
             </span>
           </div>
@@ -283,7 +283,7 @@ export default function TranscriptionPreviewOverlay() {
               <button
                 onClick={handleCopy}
                 className={[
-                  "inline-flex h-6 items-center gap-1 rounded-md border px-1.5 text-[11px] font-medium transition-colors",
+                  "inline-flex min-h-7 items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors",
                   copied
                     ? "border-emerald-500/15 text-emerald-500/70"
                     : "border-border/30 text-muted-foreground/60 hover:border-border/50 hover:bg-background/40 hover:text-foreground/80",
@@ -298,7 +298,8 @@ export default function TranscriptionPreviewOverlay() {
 
             <button
               onClick={handleDismiss}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/40 transition-colors hover:bg-background/40 hover:text-muted-foreground/70"
+              aria-label={t("common.close")}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-background/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <X className="h-3 w-3" />
             </button>
@@ -322,7 +323,7 @@ export default function TranscriptionPreviewOverlay() {
                     : "border-border/25 bg-background/30",
               ].join(" ")}
             >
-              <p className="select-text text-[13px] leading-[1.52] text-foreground whitespace-pre-wrap break-words [text-wrap:pretty]">
+              <p className="select-text text-sm leading-normal text-foreground whitespace-pre-wrap break-words [text-wrap:pretty]">
                 {activeText}
               </p>
             </div>
@@ -344,7 +345,7 @@ export default function TranscriptionPreviewOverlay() {
                 />
               ))}
             </div>
-            <span className="text-[11px] text-muted-foreground/45">
+            <span className="text-xs leading-snug text-muted-foreground/70">
               {t("transcriptionPreview.waitingForInput", { defaultValue: "Say something..." })}
             </span>
           </div>

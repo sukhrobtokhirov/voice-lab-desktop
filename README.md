@@ -89,7 +89,8 @@ Useful scripts:
 | Command | Purpose |
 | ------- | ------- |
 | `npm run dev` | Electron + Vite development |
-| `npm run build:mac:arm64` | Local macOS arm64 package |
+| `npm run build:mac:arm64` | Signed macOS arm64 package (requires the VoiceLab Developer ID identity) |
+| `npm run build:mac:unsigned` | Unsigned local macOS package for UI-only QA; do not install over `/Applications/VoiceLab.app` |
 | `npm run build:win` | Local Windows x64 package |
 | `npm run build:linux` | Local Linux x64 packages |
 | `npm run build:mac:cloud` | Unsigned arm64 build (CI-style) |

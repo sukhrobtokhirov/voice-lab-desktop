@@ -42,7 +42,7 @@ test("onboarding returns to account authorization when its session is lost", () 
   assert.match(onboarding, /go\("mode"\)/);
 });
 
-test("macOS accessibility action registers the running build before opening settings", () => {
+test("macOS accessibility action performs one explicit native request", () => {
   const permissions = read("src/hooks/usePermissions.ts");
   const prompt = permissions.indexOf("promptAccessibilityPermission");
   const settings = permissions.indexOf(
@@ -51,7 +51,22 @@ test("macOS accessibility action registers the running build before opening sett
   );
 
   assert.ok(prompt > -1, "macOS TCC prompt must be requested");
-  assert.ok(settings > prompt, "System Settings fallback must follow the TCC prompt");
+  assert.equal(settings, -1, "the native prompt must not race a second Settings action");
+  assert.match(permissions, /if \(accessibilityRequestInFlight\.current\) return/);
+});
+
+test("macOS accessibility prompt is only reachable from the explicit permissions action", () => {
+  const controlPanel = read("src/components/ControlPanel.tsx");
+  const permissions = read("src/hooks/usePermissions.ts");
+  const main = read("main.js");
+
+  assert.doesNotMatch(controlPanel, /promptAccessibilityPermission/);
+  assert.doesNotMatch(controlPanel, /requestAccessibilityAfterSignIn/);
+  assert.doesNotMatch(main, /setTimeout\(checkAndNotifyAccessibility/);
+  assert.match(
+    permissions,
+    /const requestAccessibilityPermission = useCallback[\s\S]*promptAccessibilityPermission/
+  );
 });
 
 test("macOS activation cannot start a duplicate packaged main-window load", () => {

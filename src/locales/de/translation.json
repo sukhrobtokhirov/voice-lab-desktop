@@ -137,6 +137,8 @@
     "refresh": "Aktualisieren",
     "download": "Herunterladen",
     "cancel": "Abbrechen",
+    "confirm": "Bestätigen",
+    "ok": "OK",
     "recommended": "Empfohlen",
     "active": "Aktiv",
     "freeAccountRequired": "Kostenloses Konto erforderlich",
@@ -161,6 +163,7 @@
     "error": "Etwas ist schiefgelaufen",
     "unknownError": "Ein unbekannter Fehler ist aufgetreten",
     "copy": "Kopieren",
+    "copyError": "Fehlermeldung kopieren",
     "copied": "Kopiert",
     "done": "Fertig",
     "skip": "Überspringen"
@@ -740,9 +743,9 @@
     }
   },
   "auth": {
-    "desktopTitle": "Bei VoiceLab Desktop anmelden",
+    "desktopTitle": "Bei VoiceLab Flow anmelden",
     "desktopBrowserHint": "Die sichere Anmeldung wird im Browser geöffnet und kehrt danach automatisch zur App zurück.",
-    "desktopWaiting": "Schließen Sie die Anmeldung im Browser ab. VoiceLab Desktop fährt automatisch fort.",
+    "desktopWaiting": "Schließen Sie die Anmeldung im Browser ab. VoiceLab Flow fährt automatisch fort.",
     "desktopSecurity": "Ihr Passwort gelangt nie in die Desktop-App. Das Aktualisierungstoken wird in einem privaten lokalen Anmeldespeicher verschlüsselt.",
     "desktopOpenBrowser": "Im Browser fortfahren",
     "desktopOpening": "Sichere Anmeldung wird geöffnet…",
@@ -758,10 +761,10 @@
     "desktopSecurityError": "Der Anmeldelink hat die VoiceLab-Sicherheitsprüfung nicht bestanden. Starten Sie die Anmeldung erneut.",
     "desktopReplayDetected": "Dieser Anmeldelink wurde bereits verwendet. Starten Sie eine neue Anmeldeanfrage.",
     "desktopUnauthorized": "Ihre VoiceLab-Sitzung ist nicht mehr gültig. Melden Sie sich erneut an.",
-    "desktopUnavailable": "Die Desktop-Authentifizierung ist in dieser App-Sitzung nicht verfügbar. Starten Sie VoiceLab Desktop neu.",
+    "desktopUnavailable": "Die Desktop-Authentifizierung ist in dieser App-Sitzung nicht verfügbar. Starten Sie VoiceLab Flow neu.",
     "desktopServerRejected": "Der Authentifizierungsserver hat die Anfrage abgelehnt. Versuchen Sie es erneut oder wenden Sie sich mit dem Fehlercode unten an den Support.",
     "desktopReopenFailed": "Der Browser konnte nicht erneut geöffnet werden. Brechen Sie ab und starten Sie die Anmeldung erneut.",
-    "desktopProtocolUnavailable": "Der sichere Rückkehrlink ist nicht registriert. Starten Sie VoiceLab Desktop neu oder installieren Sie die App erneut.",
+    "desktopProtocolUnavailable": "Der sichere Rückkehrlink ist nicht registriert. Starten Sie VoiceLab Flow neu oder installieren Sie die App erneut.",
     "cloudNotConfigured": "Cloud nicht konfiguriert",
     "common": {
       "back": "Zurück",
@@ -1050,7 +1053,7 @@
       "reset": "Zurücksetzen",
       "save": "Speichern"
     },
-    "defaultTestInput": "Hey Whispr, wie ist das Wetter heute?",
+    "defaultTestInput": "Hey VoiceLab, wie ist das Wetter heute?",
     "defaultTestInputTranslate": "Das Wetter ist heute wunderschön, hast du Lust auf einen Spaziergang?",
     "dialogs": {
       "reset": {
@@ -3085,7 +3088,7 @@
     "join": "Beitreten & transkribieren"
   },
   "desktop": {
-    "offline": "Offline. Das lokale Diktieren funktioniert weiterhin.",
+    "offline": "Sie sind offline. Sprachdiktat erfordert eine Internetverbindung.",
     "nav": {
       "history": "Geschichte",
       "vocabulary": "Vokabular",
@@ -3103,6 +3106,7 @@
       "updated": "Aktualisiert {{time}}",
       "live": "Die Nutzung erscheint nach dem nächsten Diktat.",
       "manage": "Abrechnung verwalten",
+      "upgradePlan": "Tarif upgraden",
       "activeDescription": "Ihr Desktop-Tarif ist aktiv und einsatzbereit.",
       "inactiveDescription": "Wählen Sie einen Desktop-Tarif auf der VoiceLab-Website.",
       "active": "Aktiv",
@@ -3110,15 +3114,21 @@
       "activePlan": "Aktiver Tarif",
       "noActivePlan": "Kein aktiver Tarif",
       "checking": "Abonnement wird geprüft…",
-      "remainingCompact": "Heute noch {{duration}}",
+      "remainingCompact": "{{duration}} übrig · Tageslimit",
+      "remainingHourCompact": "{{duration}} übrig · Stundenlimit",
       "dailyCompact": "{{duration}} pro Tag",
+      "hourlyCompact": "{{duration}} pro Stunde",
       "billingDisabled": "Desktop-Tarife sind vorübergehend nicht verfügbar.",
       "priceCompact": "{{price}} / {{interval}}",
       "choosePlan": "Tarif wählen",
       "dailyLimit": "Tageskontingent",
+      "hourlyLimit": "Stündliches Kontingent",
+      "usedThisHour": "Diese Stunde verwendet",
+      "remainingThisHour": "Diese Stunde verbleibend",
       "maxRecording": "Maximale Aufnahme",
       "endsOn": "Zugriff endet am {{date}}",
       "renewsOn": "Verlängerung am {{date}}",
+      "resetsOn": "Nutzung wird am {{date}} zurückgesetzt",
       "dailyMinutes": "{{count}} Minuten pro Tag",
       "maxRecordingSeconds": "Bis zu {{count}} Sekunden pro Aufnahme",
       "refreshHint": "Nach der Rückkehr von der Zahlung aktualisieren.",
@@ -3164,7 +3174,7 @@
         "ready": "Bereit"
       },
       "welcome": {
-        "title": "VoiceLab Dictate",
+        "title": "VoiceLab Flow",
         "description": "Sprechen Sie natürlich. Ihr Text erscheint dort, wo Sie ihn benötigen."
       },
       "advanced": {
@@ -3246,12 +3256,12 @@
       "advanced": "Fortschrittlich",
       "advancedDescription": "VoiceLab Cloud und Entwicklertools",
       "advancedSetup": "Cloud-Transkription",
-      "advancedSetupDescription": "VoiceLab Dictate verwendet automatisch Ihr angemeldetes Konto."
+      "advancedSetupDescription": "VoiceLab Flow verwendet automatisch Ihr angemeldetes Konto."
     },
     "session": {
       "active": "Angemeldet",
       "device": "Gerät",
-      "thisDevice": "Dieser VoiceLab Dictate-Desktop",
+      "thisDevice": "Dieser VoiceLab Flow-Desktop",
       "status": "Sitzung",
       "protected": "Aktiv und geschützt",
       "signedOut": "Nicht angemeldet",

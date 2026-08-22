@@ -137,6 +137,8 @@
     "refresh": "Yangilash",
     "download": "Yuklab olish",
     "cancel": "Bekor qilish",
+    "confirm": "Tasdiqlash",
+    "ok": "OK",
     "recommended": "Tavsiya etiladi",
     "active": "Faol",
     "freeAccountRequired": "Bepul hisob kerak",
@@ -161,6 +163,7 @@
     "error": "Xatolik yuz berdi",
     "unknownError": "Noma’lum xato yuz berdi",
     "copy": "Nusxa olish",
+    "copyError": "Xatoni nusxalash",
     "copied": "Nusxa olindi",
     "done": "Tayyor",
     "skip": "O‘tkazib yuborish"
@@ -357,7 +360,7 @@
     },
     "accessibilityMissing": {
       "title": "Qulayliklar ruxsati kerak",
-      "description": "VoiceLab to‘g‘ri ishlashi uchun qulayliklar ruxsati kerakligini aniqladik. Pastda yoqing."
+      "description": "Ochilgan sozlamalarda «Qulayliklar» kartasidagi «Ruxsat berish» tugmasini bosing."
     },
     "billing": {
       "pastDueTitle": "We couldn't process your payment",
@@ -743,9 +746,9 @@
   },
   "auth": {
     "cloudNotConfigured": "Cloud Not Configured",
-    "desktopTitle": "VoiceLab Desktop hisobiga kiring",
+    "desktopTitle": "VoiceLab Flow hisobiga kiring",
     "desktopBrowserHint": "Xavfsiz kirish brauzerda ochiladi va tugagach ilovaga avtomatik qaytadi.",
-    "desktopWaiting": "Brauzerda kirishni yakunlang. VoiceLab Desktop avtomatik davom etadi.",
+    "desktopWaiting": "Brauzerda kirishni yakunlang. VoiceLab Flow avtomatik davom etadi.",
     "desktopSecurity": "Parolingiz desktop ilovasiga kiritilmaydi. Refresh token shaxsiy lokal credential omborida shifrlanadi.",
     "desktopOpenBrowser": "Brauzerda davom etish",
     "desktopOpening": "Xavfsiz kirish ochilmoqda…",
@@ -761,10 +764,10 @@
     "desktopSecurityError": "Kirish havolasi VoiceLab xavfsizlik tekshiruvidan o‘tmadi. Kirishni qayta boshlang.",
     "desktopReplayDetected": "Bu kirish havolasi avval ishlatilgan. Yangi kirish so‘rovini boshlang.",
     "desktopUnauthorized": "VoiceLab sessiyangiz endi yaroqsiz. Qayta kiring.",
-    "desktopUnavailable": "Bu ilova sessiyasida desktop autentifikatsiya ishlamayapti. VoiceLab Desktop’ni qayta ishga tushiring.",
+    "desktopUnavailable": "Bu ilova sessiyasida desktop autentifikatsiya ishlamayapti. VoiceLab Flow’ni qayta ishga tushiring.",
     "desktopServerRejected": "Autentifikatsiya serveri so‘rovni rad etdi. Qayta urining yoki quyidagi xato kodi bilan yordam xizmatiga murojaat qiling.",
     "desktopReopenFailed": "Brauzerni qayta ochib bo‘lmadi. Bekor qilib, kirishni qayta boshlang.",
-    "desktopProtocolUnavailable": "Xavfsiz qaytish havolasi ro‘yxatdan o‘tmagan. VoiceLab Desktop’ni qayta ishga tushiring yoki o‘rnating.",
+    "desktopProtocolUnavailable": "Xavfsiz qaytish havolasi ro‘yxatdan o‘tmagan. VoiceLab Flow’ni qayta ishga tushiring yoki o‘rnating.",
     "common": {
       "back": "Orqaga",
       "continue": "Davom etish",
@@ -1140,7 +1143,7 @@
       "reset": "Reset",
       "save": "Save"
     },
-    "defaultTestInput": "Hey Whispr, what's the weather like today?",
+    "defaultTestInput": "Salom VoiceLab, bugun ob-havo qanday?",
     "defaultTestInputTranslate": "The weather is beautiful today, want to go for a walk?",
     "dialogs": {
       "reset": {
@@ -1199,47 +1202,47 @@
   },
   "settingsModal": {
     "groups": {
-      "account": "Account",
-      "app": "App",
-      "aiModels": "AI Models",
-      "system": "System"
+      "account": "Hisob",
+      "app": "Ilova",
+      "aiModels": "AI modellari",
+      "system": "Tizim"
     },
     "sections": {
       "account": {
-        "description": "Profile & sign in",
-        "label": "Account"
+        "description": "Profil va kirish",
+        "label": "Hisob"
       },
       "plansBilling": {
-        "description": "Plans, usage & billing",
-        "label": "Plans & Billing"
+        "description": "Tariflar, foydalanish va to‘lovlar",
+        "label": "Tariflar va to‘lovlar"
       },
       "workspace": {
-        "description": "Members, teams, billing & API keys",
-        "label": "Workspace"
+        "description": "A’zolar, jamoalar, to‘lovlar va API kalitlari",
+        "label": "Ish maydoni"
       },
       "general": {
-        "description": "Appearance, sounds & startup",
-        "label": "Preferences"
+        "description": "Ko‘rinish, tovushlar va ishga tushirish",
+        "label": "Afzalliklar"
       },
       "hotkeys": {
-        "description": "Dictation hotkey & activation",
-        "label": "Hotkeys"
+        "description": "Diktant tugmasi va faollashtirish",
+        "label": "Tezkor tugmalar"
       },
       "speechToText": {
-        "description": "Engines for dictation & note recording",
-        "label": "Speech-to-Text"
+        "description": "Diktant va qayd yozish tizimlari",
+        "label": "Nutqdan matnga"
       },
       "llms": {
-        "description": "Models for chat, cleanup & summaries",
-        "label": "Language Models"
+        "description": "Chat, matnni tozalash va xulosalar uchun modellar",
+        "label": "Til modellari"
       },
       "privacyData": {
-        "description": "Privacy, permissions & analytics",
-        "label": "Privacy & Data"
+        "description": "Maxfiylik, ruxsatlar va analitika",
+        "label": "Maxfiylik va ma’lumotlar"
       },
       "system": {
-        "description": "Updates, storage & developer tools",
-        "label": "System"
+        "description": "Yangilanishlar, xotira va dasturchi vositalari",
+        "label": "Tizim"
       }
     },
     "title": "Sozlamalar"
@@ -1883,32 +1886,32 @@
       "troubleshootingTitle": "Muammolarni bartaraf etish"
     },
     "privacy": {
-      "cloudBackup": "Cloud backup",
-      "cloudBackupDescription": "Back up your transcriptions and notes to the cloud for seamless access across devices.",
-      "cloudNotesMigration": "Backing up notes… {{done}} / {{total}}",
-      "cloudNotesMigrationDone": "All notes backed up",
+      "cloudBackup": "Bulutga nusxalash",
+      "cloudBackupDescription": "Transkript va qaydlaringizni qurilmalar o‘rtasida ishlatish uchun bulutga nusxalang.",
+      "cloudNotesMigration": "Qaydlar nusxalanmoqda… {{done}} / {{total}}",
+      "cloudNotesMigrationDone": "Barcha qaydlar nusxalandi",
       "description": "Qaysi ma’lumotlar qurilmadan chiqishini boshqaring. Standart holatda hammasi o‘chirilgan.",
       "title": "Maxfiylik",
       "usageAnalytics": "Foydalanish analitikasi",
       "usageAnalyticsDescription": "Anonim unumdorlik ko‘rsatkichlarini ulashib VoiceLab-ni yaxshilashga yordam bering. Transkriptlarni hech qachon yubormaymiz — faqat vaqt va xato ma’lumotlari.",
-      "audioRetention": "Audio Retention",
-      "audioRetentionDescription": "Store audio recordings locally for re-transcription and download. Files are automatically deleted after the retention period.",
-      "audioRetentionDisabled": "Disabled",
-      "audioRetentionDays": "{{count}} days",
-      "audioStorageUsage": "Storage Usage",
-      "audioStorageUsageDescription": "Audio files stored on this device",
-      "audioStorageFiles": "{{count}} files, {{size}}",
-      "audioStorageEmpty": "No audio files stored",
-      "clearAllAudio": "Clear All Audio",
-      "clearAllAudioConfirm": "Delete all stored audio files? This cannot be undone.",
-      "dataRetention": "Data Retention",
-      "dataRetentionDescription": "Store transcriptions and audio locally in your history. When disabled, transcriptions are pasted but not saved.",
-      "hoursAgo": "{{count}}h ago",
-      "justNow": "just now",
-      "lastSynced": "Last synced {{time}}",
-      "minutesAgo": "{{count}}m ago",
-      "saveDiscarded": "Save discarded dictations",
-      "saveDiscardedDescription": "When you cancel a dictation with Escape, keep its audio in history so you can recover it. Requires data and audio retention to be on."
+      "audioRetention": "Audioni saqlash muddati",
+      "audioRetentionDescription": "Qayta transkripsiya qilish va yuklab olish uchun yozuvlarni qurilmada saqlang. Muddat tugagach fayllar avtomatik o‘chiriladi.",
+      "audioRetentionDisabled": "O‘chirilgan",
+      "audioRetentionDays": "{{count}} kun",
+      "audioStorageUsage": "Xotiradan foydalanish",
+      "audioStorageUsageDescription": "Ushbu qurilmada saqlangan audio fayllar",
+      "audioStorageFiles": "{{count}} ta fayl, {{size}}",
+      "audioStorageEmpty": "Audio fayllar saqlanmagan",
+      "clearAllAudio": "Barcha audiolarni o‘chirish",
+      "clearAllAudioConfirm": "Saqlangan barcha audio fayllar o‘chirilsinmi? Bu amalni bekor qilib bo‘lmaydi.",
+      "dataRetention": "Ma’lumotlarni saqlash",
+      "dataRetentionDescription": "Transkript va audioni tarixda qurilmada saqlang. O‘chirilsa, transkript joylanadi, ammo saqlanmaydi.",
+      "hoursAgo": "{{count}} soat oldin",
+      "justNow": "hozirgina",
+      "lastSynced": "Oxirgi sinxronlash: {{time}}",
+      "minutesAgo": "{{count}} daqiqa oldin",
+      "saveDiscarded": "Bekor qilingan diktantlarni saqlash",
+      "saveDiscardedDescription": "Diktantni Escape bilan bekor qilganingizda, tiklash uchun audiosini tarixda saqlang. Ma’lumot va audio saqlash yoqilgan bo‘lishi kerak."
     },
     "prompts": {
       "description": "Matn tozalash va buyruqlarni boshqaruvchi yagona tizim promptini ko‘ring, sozlang va sinang",
@@ -3041,9 +3044,9 @@
     }
   },
   "updateNotification": {
-    "title": "VoiceLab Update Available",
-    "body": "Version {{version}} is ready to download",
-    "cta": "Update Now"
+    "title": "VoiceLab yangilanishi mavjud",
+    "body": "{{version}} versiyasi yuklab olishga tayyor",
+    "cta": "Hozir yangilash"
   },
   "permissionsGate": {
     "title": "Ruxsatlar kerak",
@@ -3062,13 +3065,13 @@
     "conversationSelector": "Switch conversation"
   },
   "transcriptionPreview": {
-    "label": "Preview",
-    "listening": "Listening...",
-    "polishing": "Polishing...",
-    "ready": "Ready",
-    "copy": "Copy",
-    "copied": "Copied",
-    "waitingForInput": "Say something..."
+    "label": "Ko‘rib chiqish",
+    "listening": "Tinglanmoqda...",
+    "polishing": "Sayqallanmoqda...",
+    "ready": "Tayyor",
+    "copy": "Nusxa olish",
+    "copied": "Nusxa olindi",
+    "waitingForInput": "Gapiring..."
   },
   "transcript": {
     "speaker": {
@@ -3077,17 +3080,17 @@
     }
   },
   "meetingNotification": {
-    "title": "Meeting detected",
+    "title": "Uchrashuv aniqlandi",
     "body": {
-      "detected": "It sounds like you're in a meeting. Want to take notes?",
-      "starting": "Your meeting is starting. Want to take notes?",
-      "underway": "It sounds like your meeting is underway. Want to take notes?"
+      "detected": "Uchrashuvda ekansiz. Eslatma yozib boraymi?",
+      "starting": "Uchrashuvingiz boshlanmoqda. Eslatma yozib boraymi?",
+      "underway": "Uchrashuvingiz davom etmoqda. Eslatma yozib boraymi?"
     },
-    "start": "Take notes",
-    "join": "Join & transcribe"
+    "start": "Eslatma yozish",
+    "join": "Qo‘shilish va transkripsiya"
   },
   "desktop": {
-    "offline": "Internet yo‘q. Lokal diktant ishlashda davom etadi.",
+    "offline": "Internet yo‘q. Ovozli diktant uchun internet aloqasi kerak.",
     "nav": {
       "history": "Tarix",
       "vocabulary": "Lug‘at",
@@ -3104,7 +3107,8 @@
       "unavailable": "Foydalanish maʼlumoti hali yoʻq.",
       "updated": "{{time}} da yangilandi",
       "live": "Foydalanish keyingi diktovkadan soʻng ko‘rinadi.",
-      "manage": "Billingni boshqarish",
+      "manage": "Tarifni boshqarish",
+      "upgradePlan": "Tarifni yaxshilash",
       "activeDescription": "Desktop tarifingiz faol va foydalanishga tayyor.",
       "inactiveDescription": "VoiceLab saytida desktop tarifini tanlang.",
       "active": "Faol",
@@ -3112,15 +3116,21 @@
       "activePlan": "Faol tarif",
       "noActivePlan": "Faol tarif yo‘q",
       "checking": "Tarif holati tekshirilmoqda…",
-      "remainingCompact": "Bugun {{duration}} qoldi",
+      "remainingCompact": "{{duration}} qoldi · kunlik limit",
+      "remainingHourCompact": "{{duration}} qoldi · soatlik limit",
       "dailyCompact": "Kuniga {{duration}}",
+      "hourlyCompact": "Soatiga {{duration}}",
       "billingDisabled": "Desktop tariflari vaqtincha mavjud emas.",
       "priceCompact": "{{price}} / {{interval}}",
       "choosePlan": "Tarifni tanlash",
       "dailyLimit": "Kunlik limit",
+      "hourlyLimit": "Soatlik limit",
+      "usedThisHour": "Bu soatda ishlatilgan",
+      "remainingThisHour": "Bu soatda qolgan",
       "maxRecording": "Eng uzun yozuv",
       "endsOn": "Foydalanish {{date}} kuni tugaydi",
       "renewsOn": "{{date}} kuni yangilanadi",
+      "resetsOn": "Foydalanish limiti {{date}} kuni yangilanadi",
       "dailyMinutes": "Kuniga {{count}} daqiqa",
       "maxRecordingSeconds": "Har yozuv {{count}} soniyagacha",
       "refreshHint": "To‘lovdan qaytgach yangilang.",
@@ -3166,7 +3176,7 @@
         "ready": "Tayyor"
       },
       "welcome": {
-        "title": "VoiceLab Dictate",
+        "title": "VoiceLab Flow",
         "description": "Tabiiy gapiring. Matn kerakli joyda paydo bo‘ladi."
       },
       "advanced": {
@@ -3237,23 +3247,23 @@
       "localAudioDescription": "Yozuvlar ushbu qurilmada qancha saqlanishini tanlang."
     },
     "settings": {
-      "account": "Hisob va creditlar",
-      "accountDescription": "Profil, xavfsiz sessiya va billing",
+      "account": "Hisob va kreditlar",
+      "accountDescription": "Profil, xavfsiz sessiya va to‘lovlar",
       "dictation": "Diktant",
       "dictationDescription": "Til, mikrofon va matn joylash",
       "shortcuts": "Tugmalar",
       "shortcutsDescription": "Diktant va VoiceLab tugmalari",
       "privacy": "Ma’lumot va maxfiylik",
-      "privacyDescription": "Cloud backup, lokal audio va saqlash muddati",
-      "advanced": "Advanced",
-      "advancedDescription": "VoiceLab Cloud va developer vositalari",
+      "privacyDescription": "Bulut nusxasi, lokal audio va saqlash muddati",
+      "advanced": "Qo‘shimcha",
+      "advancedDescription": "VoiceLab Cloud va dasturchi vositalari",
       "advancedSetup": "Cloud transkripsiya",
-      "advancedSetupDescription": "VoiceLab Dictate kirilgan hisobingizdan avtomatik foydalanadi."
+      "advancedSetupDescription": "VoiceLab Flow kirilgan hisobingizdan avtomatik foydalanadi."
     },
     "session": {
       "active": "Kirilgan",
       "device": "Qurilma",
-      "thisDevice": "Ushbu VoiceLab Dictate qurilmasi",
+      "thisDevice": "Ushbu VoiceLab Flow qurilmasi",
       "status": "Sessiya",
       "protected": "Faol va himoyalangan",
       "signedOut": "Hisobga kirilmagan",

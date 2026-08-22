@@ -4,13 +4,27 @@ import { useUsage, type DesktopPricingPlan } from "../hooks/useUsage";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 
-function formatDuration(seconds: number) {
+function formatDuration(seconds: number, language: string) {
   const safeSeconds = Math.max(0, Math.round(seconds));
   const hours = Math.floor(safeSeconds / 3600);
   const minutes = Math.floor((safeSeconds % 3600) / 60);
   const remainder = safeSeconds % 60;
-  if (hours) return `${hours}h ${minutes}m`;
-  if (minutes) return `${minutes}m ${remainder}s`;
+  const duration = hours
+    ? { hours, ...(minutes ? { minutes } : {}) }
+    : minutes
+      ? { minutes, ...(remainder ? { seconds: remainder } : {}) }
+      : { seconds: remainder };
+  const DurationFormat = (
+    Intl as unknown as {
+      DurationFormat?: new (
+        locale: string,
+        options: { style: "short" }
+      ) => { format: (value: Partial<Record<"hours" | "minutes" | "seconds", number>>) => string };
+    }
+  ).DurationFormat;
+  if (DurationFormat) return new DurationFormat(language, { style: "short" }).format(duration);
+  if (hours) return `${hours}h${minutes ? ` ${minutes}m` : ""}`;
+  if (minutes) return `${minutes}m${remainder ? ` ${remainder}s` : ""}`;
   return `${remainder}s`;
 }
 
@@ -24,7 +38,7 @@ function formatUpdatedAt(value: string | null, language: string) {
   }).format(date);
 }
 
-function formatDate(value: string | null, language: string) {
+function formatResetAt(value: string | null, language: string, usageWindow: "hour" | "day") {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
@@ -32,6 +46,7 @@ function formatDate(value: string | null, language: string) {
     year: "numeric",
     month: "short",
     day: "numeric",
+    ...(usageWindow === "hour" ? { hour: "2-digit", minute: "2-digit" } : {}),
   }).format(date);
 }
 
@@ -69,56 +84,78 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
   if (!usage) return null;
 
   const entitlement = usage.entitlement;
+  const hasAuthoritativeEntitlement = usage.hasSubscriptionData && entitlement !== null;
   const active = entitlement?.active === true;
+  const isFreePlan = entitlement?.planId === "plan_free";
+  const planActionLabel = isFreePlan ? t("desktop.wallet.upgradePlan") : t("desktop.wallet.manage");
+  const billingActionLabel = hasAuthoritativeEntitlement
+    ? active
+      ? planActionLabel
+      : t("desktop.wallet.choosePlan")
+    : t("desktop.wallet.manage");
   const stt = usage.sttUsage;
-  const offer = usage.plans[0] || null;
-  const offerPrice = offer ? formatPrice(offer, i18n.language) : null;
   const updatedAt = formatUpdatedAt(usage.updatedAt, i18n.language);
-  const periodEnd = formatDate(entitlement?.periodEndsAt || null, i18n.language);
-  const percentage = stt?.daily_limit_seconds
-    ? Math.min(100, Math.max(0, (stt.remaining_seconds / stt.daily_limit_seconds) * 100))
+  const usageWindow = entitlement?.usageWindow || stt?.usage_window || "day";
+  const resetsAt = formatResetAt(entitlement?.resetsAt || null, i18n.language, usageWindow);
+  const usageLimitLabel =
+    usageWindow === "hour" ? t("desktop.wallet.hourlyLimit") : t("desktop.wallet.dailyLimit");
+  const percentage = stt?.limit_seconds
+    ? Math.min(100, Math.max(0, (stt.remaining_seconds / stt.limit_seconds) * 100))
     : active
       ? 100
       : null;
-  const interval = offer
-    ? formatInterval(offer.billingInterval, offer.billingIntervalCount, t)
-    : null;
 
   if (compact) {
-    const secondary = usage.checkoutLoading
+    const needsEntitlementRefresh = !hasAuthoritativeEntitlement;
+    const compactLoading = usage.checkoutLoading || usage.isLoading || usage.isRefreshing;
+    const secondary = compactLoading
       ? t("desktop.wallet.checking")
       : active && stt
-        ? t("desktop.wallet.remainingCompact", {
-            duration: formatDuration(stt.remaining_seconds),
-          })
+        ? t(
+            usageWindow === "hour"
+              ? "desktop.wallet.remainingHourCompact"
+              : "desktop.wallet.remainingCompact",
+            {
+              duration: formatDuration(stt.remaining_seconds, i18n.language),
+            }
+          )
         : active && entitlement
-          ? t("desktop.wallet.dailyCompact", {
-              duration: formatDuration(entitlement.dailySeconds),
-            })
-          : usage.pricingEnabled === false
-            ? t("desktop.wallet.billingDisabled")
-            : offerPrice
-              ? t("desktop.wallet.priceCompact", {
-                  price: offerPrice,
-                  interval: interval || "",
-                })
-              : usage.isLoading
-                ? t("desktop.wallet.checking")
-                : t("desktop.wallet.noActivePlan");
+          ? t(
+              usageWindow === "hour"
+                ? "desktop.wallet.hourlyCompact"
+                : "desktop.wallet.dailyCompact",
+              {
+                duration: formatDuration(entitlement.usageLimitSeconds, i18n.language),
+              }
+            )
+        : t("desktop.wallet.unavailable");
+    const handleCompactClick = () => {
+      if (needsEntitlementRefresh) {
+        void usage.refetch();
+        return;
+      }
+      void usage.openBillingPortal();
+    };
     return (
       <button
         type="button"
-        onClick={() => void usage.openBillingPortal()}
-        disabled={!usage.billingAvailable || usage.checkoutLoading}
+        onClick={handleCompactClick}
+        disabled={compactLoading || (!needsEntitlementRefresh && !usage.billingAvailable)}
         className="group flex min-h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left outline-none transition-colors hover:bg-black/[0.035] focus-visible:ring-2 focus-visible:ring-foreground/20 disabled:cursor-default disabled:opacity-65 dark:hover:bg-white/[0.06]"
-        title={active ? t("desktop.wallet.manage") : t("desktop.wallet.choosePlan")}
+        title={
+          needsEntitlementRefresh
+            ? t("desktop.wallet.refresh")
+            : active
+              ? planActionLabel
+              : t("desktop.wallet.choosePlan")
+        }
       >
-        <span className="relative grid h-8 w-8 shrink-0 place-items-center" aria-hidden="true">
-          <svg className="absolute inset-0 h-8 w-8 -rotate-90" viewBox="0 0 32 32">
+        <span className="relative grid h-9 w-9 shrink-0 place-items-center" aria-hidden="true">
+          <svg className="absolute inset-0 h-9 w-9 -rotate-90" viewBox="0 0 36 36">
             <circle
-              cx="16"
-              cy="16"
-              r="13"
+              cx="18"
+              cy="18"
+              r="15"
               fill="none"
               pathLength="100"
               stroke="currentColor"
@@ -127,9 +164,9 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
             />
             {percentage !== null && (
               <circle
-                cx="16"
-                cy="16"
-                r="13"
+                cx="18"
+                cy="18"
+                r="15"
                 fill="none"
                 pathLength="100"
                 stroke="currentColor"
@@ -141,9 +178,11 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
               />
             )}
           </svg>
-          <span className="text-[9px] font-semibold tabular-nums text-foreground/75">
-            {usage.checkoutLoading ? (
+          <span className="text-2xs font-semibold leading-none tabular-nums text-foreground/75">
+            {compactLoading ? (
               <RefreshCw className="h-3 w-3 animate-spin" />
+            ) : needsEntitlementRefresh ? (
+              <RefreshCw className="h-3 w-3" />
             ) : percentage === null ? (
               "VL"
             ) : (
@@ -152,10 +191,10 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
           </span>
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium text-foreground">
+          <span className="block truncate text-sm font-medium leading-5 text-foreground">
             {active
-              ? entitlement.packageName || usage.plan || t("desktop.wallet.activePlan")
-              : t("desktop.wallet.noActivePlan")}
+              ? entitlement.planName || usage.plan || t("desktop.wallet.activePlan")
+              : t("desktop.wallet.title")}
           </span>
           <span className="block truncate text-xs text-muted-foreground">{secondary}</span>
         </span>
@@ -169,13 +208,23 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
         <div>
           <p className="text-sm font-semibold text-foreground">{t("desktop.wallet.title")}</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {active
+            {!hasAuthoritativeEntitlement
+              ? usage.isLoading || usage.isRefreshing || !usage.hasLoaded
+                ? t("desktop.wallet.checking")
+                : t("desktop.wallet.unavailable")
+              : active
               ? t("desktop.wallet.activeDescription")
               : t("desktop.wallet.inactiveDescription")}
           </p>
         </div>
-        <Badge variant={active ? "success" : "outline"}>
-          {active ? t("desktop.wallet.active") : t("desktop.wallet.inactive")}
+        <Badge variant={hasAuthoritativeEntitlement && active ? "success" : "outline"}>
+          {!hasAuthoritativeEntitlement
+            ? usage.isLoading || usage.isRefreshing || !usage.hasLoaded
+              ? t("desktop.wallet.checking")
+              : t("desktop.wallet.unavailable")
+            : active
+              ? t("desktop.wallet.active")
+              : t("desktop.wallet.inactive")}
         </Badge>
       </div>
 
@@ -183,7 +232,7 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
         <div className="space-y-3 rounded-xl border border-border/60 p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="font-medium text-foreground">
-              {entitlement.packageName || usage.plan || t("desktop.wallet.activePlan")}
+              {entitlement.planName || usage.plan || t("desktop.wallet.activePlan")}
             </p>
             {usage.planPrice && (
               <span className="text-sm text-muted-foreground">
@@ -193,19 +242,17 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
           </div>
           <div className="grid grid-cols-2 gap-3">
             <UsageValue
-              label={t("desktop.wallet.dailyLimit")}
-              value={formatDuration(entitlement.dailySeconds)}
+              label={usageLimitLabel}
+              value={formatDuration(entitlement.usageLimitSeconds, i18n.language)}
             />
             <UsageValue
               label={t("desktop.wallet.maxRecording")}
-              value={formatDuration(entitlement.maxRequestSeconds)}
+              value={formatDuration(entitlement.maxRequestSeconds, i18n.language)}
             />
           </div>
-          {periodEnd && (
+          {resetsAt && (
             <p className="text-xs text-muted-foreground">
-              {entitlement.cancelAtPeriodEnd
-                ? t("desktop.wallet.endsOn", { date: periodEnd })
-                : t("desktop.wallet.renewsOn", { date: periodEnd })}
+              {t("desktop.wallet.resetsOn", { date: resetsAt })}
             </p>
           )}
         </div>
@@ -214,21 +261,30 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
       {stt && (
         <div className="grid grid-cols-3 gap-3">
           <UsageValue
-            label={t("desktop.wallet.balance")}
-            value={formatDuration(stt.used_seconds)}
+            label={t(
+              usageWindow === "hour" ? "desktop.wallet.usedThisHour" : "desktop.wallet.balance"
+            )}
+            value={formatDuration(stt.used_seconds, i18n.language)}
           />
           <UsageValue
-            label={t("desktop.wallet.available")}
-            value={formatDuration(stt.remaining_seconds)}
+            label={t(
+              usageWindow === "hour"
+                ? "desktop.wallet.remainingThisHour"
+                : "desktop.wallet.available"
+            )}
+            value={formatDuration(stt.remaining_seconds, i18n.language)}
           />
           <UsageValue
-            label={t("desktop.wallet.reserved")}
-            value={formatDuration(stt.daily_limit_seconds)}
+            label={usageLimitLabel}
+            value={formatDuration(stt.limit_seconds, i18n.language)}
           />
         </div>
       )}
 
-      {!active && usage.pricingEnabled === true && usage.plans.length > 0 && (
+      {hasAuthoritativeEntitlement &&
+        !active &&
+        usage.pricingEnabled === true &&
+        usage.plans.length > 0 && (
         <div className="space-y-2">
           {usage.plans.map((plan) => {
             const price = formatPrice(plan, i18n.language);
@@ -264,7 +320,7 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
         </div>
       )}
 
-      {usage.pricingEnabled === false && !active && (
+      {hasAuthoritativeEntitlement && usage.pricingEnabled === false && !active && (
         <p className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
           {t("desktop.wallet.billingDisabled")}
         </p>
@@ -292,12 +348,12 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
             size="sm"
             variant="outline"
             onClick={() => void usage.refetch()}
-            disabled={usage.isLoading || usage.checkoutLoading}
+            disabled={usage.isLoading || usage.isRefreshing || usage.checkoutLoading}
           >
             <RefreshCw
-              className={`mr-1.5 h-3.5 w-3.5 ${usage.isLoading || usage.checkoutLoading ? "animate-spin" : ""}`}
+              className={`mr-1.5 h-3.5 w-3.5 ${usage.isLoading || usage.isRefreshing || usage.checkoutLoading ? "animate-spin" : ""}`}
             />
-            {usage.isLoading || usage.checkoutLoading
+            {usage.isLoading || usage.isRefreshing || usage.checkoutLoading
               ? t("desktop.wallet.refreshing")
               : t("desktop.wallet.refresh")}
           </Button>
@@ -307,7 +363,7 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
             onClick={() => void usage.openBillingPortal()}
             disabled={!usage.billingAvailable || usage.checkoutLoading}
           >
-            {active ? t("desktop.wallet.manage") : t("desktop.wallet.choosePlan")}
+            {billingActionLabel}
           </Button>
         </div>
       </div>

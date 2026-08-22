@@ -55,11 +55,7 @@ import { evaluateFinishedRecording } from "./recordingValidation";
 import { isEmptyRecording } from "./recordingGuard";
 import { matchesDictionaryPrompt } from "../utils/dictionaryEchoFilter.js";
 import { getDictionaryHintWords } from "../utils/snippets";
-import {
-  mergePcm16WavBuffers,
-  PCM_WAV_RECORDING_FORMAT,
-  PcmWavRecorder,
-} from "./pcmWavRecorder";
+import { mergePcm16WavBuffers, PCM_WAV_RECORDING_FORMAT, PcmWavRecorder } from "./pcmWavRecorder";
 
 const REASONING_CACHE_TTL = 30000; // 30 seconds
 // Failure detector only: fires when the worklet or audio graph is dead and never flushes.
@@ -1747,9 +1743,9 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     const cleanupCloudMode = settings.cleanupCloudMode || "openwhispr";
     if (
       this.translationRequested &&
-        !this.skipReasoning &&
-        translationChainReachable(settings) &&
-        isCloudTranslationMode()
+      !this.skipReasoning &&
+      translationChainReachable(settings) &&
+      isCloudTranslationMode()
     ) {
       opts.sendLogs = "false";
     }
@@ -2050,15 +2046,16 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
   async safePaste(text, options = {}) {
     try {
-      await window.electronAPI.pasteText(text, options);
-      return true;
+      const result = await window.electronAPI.pasteText(text, options);
+      return result?.pasted !== false;
     } catch (error) {
       const message =
         error?.message ??
         (typeof error?.toString === "function" ? error.toString() : String(error));
       this.onError?.({
         title: "Paste Error",
-        description: `Failed to paste text. Please check accessibility permissions. ${message}`,
+        code: "PASTE_ACCESSIBILITY_REQUIRED",
+        description: message,
       });
       return false;
     }
@@ -2095,11 +2092,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       if (provider !== VOICELAB_PROVIDER && result?.id && capturedAudioBlob) {
         try {
           const arrayBuffer = await capturedAudioBlob.arrayBuffer();
-          await window.electronAPI.saveWavRecording(
-            result.id,
-            arrayBuffer,
-            capturedAudioMetadata
-          );
+          await window.electronAPI.saveWavRecording(result.id, arrayBuffer, capturedAudioMetadata);
         } catch (audioErr) {
           // Non-blocking: transcription is saved even if audio save fails
           logger.warn("Failed to save transcription audio", { error: audioErr.message }, "audio");

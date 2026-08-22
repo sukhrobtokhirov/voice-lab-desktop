@@ -197,7 +197,7 @@ export default function ShareNoteDialog({ open, onOpenChange, note }: ShareNoteD
             primary={ownerName || ownerEmail}
             secondary={ownerEmail}
             trailing={
-              <span className="text-[11px] text-foreground/40">
+              <span className="text-2xs text-foreground/40">
                 {t("noteEditor.share.dialog.owner")}
               </span>
             }
@@ -246,7 +246,7 @@ export default function ShareNoteDialog({ open, onOpenChange, note }: ShareNoteD
         </div>
 
         {!isOwner && (
-          <p className="text-[11px] text-foreground/40 -mt-1">
+          <p className="text-2xs text-foreground/40 -mt-1">
             {t("noteEditor.share.dialog.permissionRequired")}
           </p>
         )}
@@ -266,7 +266,7 @@ function MemberRow({ primary, secondary, trailing }: MemberRowProps) {
     <div className="flex items-center gap-2 py-1.5 px-1">
       <div className="flex-1 min-w-0">
         <p className="text-xs text-foreground truncate">{primary}</p>
-        <p className="text-[11px] text-foreground/40 truncate">{secondary}</p>
+        <p className="text-2xs text-foreground/40 truncate">{secondary}</p>
       </div>
       {trailing}
     </div>

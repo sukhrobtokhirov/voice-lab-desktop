@@ -1615,6 +1615,7 @@ class IPCHandlers {
 
       const result = await this.clipboardManager.pasteText(textToPaste, {
         ...options,
+        targetPid,
         webContents: event.sender,
       });
       debugLogger.debug("[AutoLearn] Paste completed", {
@@ -2879,7 +2880,7 @@ class IPCHandlers {
     this._handle("desktop-subscription", async () => {
       try {
         if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
-        const subscription = await this.voiceLabApiClient.getDesktopSubscription({ force: true });
+        const subscription = await this.voiceLabApiClient.getDesktopUsage();
         return { success: true, ...subscription };
       } catch (error) {
         return typeof error?.toPublic === "function"
@@ -3029,7 +3030,7 @@ class IPCHandlers {
           ? error.toPublic()
           : {
               success: false,
-              error: error.message || "VoiceLab Dictate failed",
+              error: error.message || "VoiceLab Flow failed",
               code: "BACKEND_FAILED",
             };
       } finally {

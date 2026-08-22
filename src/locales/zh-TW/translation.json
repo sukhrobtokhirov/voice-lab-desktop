@@ -137,6 +137,8 @@
     "refresh": "重新整理",
     "download": "下載",
     "cancel": "取消",
+    "confirm": "確認",
+    "ok": "確定",
     "recommended": "推薦",
     "active": "使用中",
     "freeAccountRequired": "需要免費帳戶",
@@ -153,16 +155,17 @@
     "tap": "點按",
     "close": "關閉",
     "dismiss": "忽略",
-    "save": "Guardar",
-    "saving": "Guardando…",
-    "create": "Crear",
-    "delete": "Eliminar",
-    "actions": "Acciones",
-    "error": "Algo salió mal",
-    "unknownError": "Ocurrió un error desconocido",
-    "copy": "Copiar",
-    "copied": "Copiado",
-    "done": "Listo",
+    "save": "儲存",
+    "saving": "儲存中…",
+    "create": "建立",
+    "delete": "刪除",
+    "actions": "操作",
+    "error": "發生問題",
+    "unknownError": "發生未知錯誤",
+    "copy": "複製",
+    "copyError": "複製錯誤訊息",
+    "copied": "已複製",
+    "done": "完成",
     "skip": "略過"
   },
   "onboarding": {
@@ -809,7 +812,7 @@
     "sessionExpired": "工作階段已過期，請重新登入。",
     "desktopTitle": "登入 VoiceLab 桌面版",
     "desktopBrowserHint": "安全登入將在您的瀏覽器中打開，並在完成後返回此處。",
-    "desktopWaiting": "在瀏覽器中完成登入。 VoiceLab Desktop 將會自動繼續。",
+    "desktopWaiting": "在瀏覽器中完成登入。VoiceLab Flow 將會自動繼續。",
     "desktopSecurity": "您的密碼永遠不會進入桌面應用程式。更新權杖會加密儲存在私有本機憑證儲存區。",
     "desktopOpenBrowser": "在瀏覽器中繼續",
     "desktopOpening": "正在開啟安全登入...",
@@ -828,7 +831,7 @@
     "desktopUnavailable": "桌面身份驗證在此應用程式會話中不可用。重新啟動 VoiceLab 桌面。",
     "desktopServerRejected": "身份驗證伺服器拒絕了該請求。請重試或聯絡支援人員並提供以下錯誤代碼。",
     "desktopReopenFailed": "無法重新開啟瀏覽器。取消並重新開始登入。",
-    "desktopProtocolUnavailable": "安全返回連結未註冊。重新啟動或重新安裝 VoiceLab Desktop。"
+    "desktopProtocolUnavailable": "安全返回連結未註冊。重新啟動或重新安裝 VoiceLab Flow。"
   },
   "cleanupPrompt": "文字整理",
   "developerSection": {
@@ -1050,7 +1053,7 @@
       "reset": "重設",
       "save": "儲存"
     },
-    "defaultTestInput": "嘿 Whispr，今天天氣怎麼樣？",
+    "defaultTestInput": "嘿 VoiceLab，今天天氣怎麼樣？",
     "defaultTestInputTranslate": "今天天氣真好，要不要出去走走？",
     "dialogs": {
       "reset": {
@@ -3080,7 +3083,7 @@
     "join": "加入並轉錄"
   },
   "desktop": {
-    "offline": "離線。本地聽寫仍然有效。",
+    "offline": "你目前離線。語音輸入需要網際網路連線。",
     "nav": {
       "history": "歷史",
       "vocabulary": "詞彙",
@@ -3098,6 +3101,7 @@
       "updated": "更新了{{time}}",
       "live": "下次聽寫後將顯示用量。",
       "manage": "管理帳單",
+      "upgradePlan": "升級方案",
       "activeDescription": "您的 Desktop 方案已生效，可以使用。",
       "inactiveDescription": "請在 VoiceLab 網站選擇 Desktop 方案。",
       "active": "已生效",
@@ -3105,15 +3109,21 @@
       "activePlan": "目前方案",
       "noActivePlan": "沒有生效的方案",
       "checking": "正在檢查訂閱…",
-      "remainingCompact": "今日剩餘 {{duration}}",
+      "remainingCompact": "剩餘 {{duration}} · 每日限額",
+      "remainingHourCompact": "剩餘 {{duration}} · 每小時限額",
       "dailyCompact": "每天 {{duration}}",
+      "hourlyCompact": "每小時 {{duration}}",
       "billingDisabled": "Desktop 方案暫時無法使用。",
       "priceCompact": "{{price}} / {{interval}}",
       "choosePlan": "選擇方案",
       "dailyLimit": "每日上限",
+      "hourlyLimit": "每小時上限",
+      "usedThisHour": "本小時已使用",
+      "remainingThisHour": "本小時剩餘",
       "maxRecording": "最長錄音",
       "endsOn": "存取權將於 {{date}} 結束",
       "renewsOn": "將於 {{date}} 續訂",
+      "resetsOn": "用量將於 {{date}} 重設",
       "dailyMinutes": "每天 {{count}} 分鐘",
       "maxRecordingSeconds": "每次錄音最長 {{count}} 秒",
       "refreshHint": "從付款頁面返回後請重新整理。",
@@ -3129,7 +3139,7 @@
     },
     "subscriptionPrompt": {
       "title": "需要 Desktop 方案",
-      "description": "請在網站選擇 VoiceLab Desktop 方案，然後返回此處重新整理存取權。",
+      "description": "請在網站選擇 VoiceLab Flow 方案，然後返回此處重新整理存取權。",
       "limitTitle": "已達每日上限",
       "limitDescription": "您的 Desktop 方案已生效，但今日聽寫額度已用完。請在 VoiceLab 管理方案，或在額度重設後重試。"
     },
@@ -3241,7 +3251,7 @@
       "advanced": "先進的",
       "advancedDescription": "VoiceLab Cloud 與開發者工具",
       "advancedSetup": "雲轉錄",
-      "advancedSetupDescription": "VoiceLab Dictate 會自動使用您的登入帳號。"
+      "advancedSetupDescription": "VoiceLab Flow 會自動使用您的登入帳號。"
     },
     "session": {
       "active": "已登入",

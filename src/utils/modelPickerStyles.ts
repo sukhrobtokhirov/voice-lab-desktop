@@ -20,12 +20,11 @@ export const MODEL_PICKER_COLORS: Record<ColorScheme, ModelPickerStyles> = {
         "border-border/70 bg-surface-1/50 dark:bg-white/[0.02] hover:border-border-hover hover:bg-surface-raised/60 dark:hover:border-white/20 dark:hover:bg-white/[0.05] hover:-translate-y-[1px] hover:shadow-(--shadow-card-hover-subtle) transition-[background-color,border-color,transform,box-shadow] duration-200 ease-out",
     },
     badges: {
-      selected:
-        "text-[10px] text-primary-foreground bg-primary px-1.5 py-0.5 rounded-sm font-medium",
+      selected: "text-2xs text-primary-foreground bg-primary px-1.5 py-0.5 rounded-sm font-medium",
       downloaded:
-        "text-[10px] text-success dark:text-success bg-success/10 dark:bg-success/12 px-1.5 py-0.5 rounded-sm",
+        "text-2xs text-success dark:text-success bg-success/10 dark:bg-success/12 px-1.5 py-0.5 rounded-sm",
       recommended:
-        "text-[10px] text-primary bg-primary/10 dark:bg-primary/12 px-1.5 py-0.5 rounded-sm font-medium",
+        "text-2xs text-primary bg-primary/10 dark:bg-primary/12 px-1.5 py-0.5 rounded-sm font-medium",
     },
     buttons: {
       download: "",
@@ -46,10 +45,9 @@ export const MODEL_PICKER_COLORS: Record<ColorScheme, ModelPickerStyles> = {
         "border-border/70 bg-surface-1/50 dark:bg-white/[0.02] hover:border-border-hover hover:bg-surface-raised/60 dark:hover:border-white/20 dark:hover:bg-white/[0.05] hover:-translate-y-[1px] hover:shadow-(--shadow-card-hover-subtle) transition-[background-color,border-color,transform,box-shadow] duration-200 ease-out",
     },
     badges: {
-      selected:
-        "text-[10px] text-primary-foreground bg-primary px-1.5 py-0.5 rounded-sm font-medium",
-      downloaded: "text-[10px] text-success bg-success/10 px-1.5 py-0.5 rounded-sm font-medium",
-      recommended: "text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm font-medium",
+      selected: "text-2xs text-primary-foreground bg-primary px-1.5 py-0.5 rounded-sm font-medium",
+      downloaded: "text-2xs text-success bg-success/10 px-1.5 py-0.5 rounded-sm font-medium",
+      recommended: "text-2xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-sm font-medium",
     },
     buttons: {
       download: "",

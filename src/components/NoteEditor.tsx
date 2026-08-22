@@ -111,7 +111,7 @@ export default function NoteEditor({ note, cloudEnabled, onDelete, onUpdate }: N
         <div className="flex items-center gap-2 min-w-0">
           <span
             className={cn(
-              "shrink-0 text-[10px] font-medium px-1.5 py-px rounded-sm",
+              "shrink-0 text-2xs font-medium px-1.5 py-px rounded-sm",
               NOTE_TYPE_COLORS[note.note_type]
             )}
           >
@@ -154,7 +154,7 @@ export default function NoteEditor({ note, cloudEnabled, onDelete, onUpdate }: N
           value={title}
           onChange={handleTitleChange}
           placeholder={t("notes.editor.untitled")}
-          className="w-full bg-transparent outline-none border-none text-lg font-medium text-foreground placeholder:text-foreground/20 tracking-[-0.01em]"
+          className="w-full bg-transparent outline-none border-none text-lg font-medium text-foreground placeholder:text-foreground/20 tracking-tight"
         />
       </div>
 

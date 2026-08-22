@@ -61,6 +61,25 @@ test("main-process user-visible labels and metadata use VoiceLab", () => {
   assert.match(read("src/helpers/menuManager.js"), /github\.com\/voicelab-uz\/desktop/);
 });
 
+test("user-facing desktop product copy calls the experience VoiceLab Flow", () => {
+  const files = [
+    "src/components/SettingsPage.tsx",
+    "src/helpers/ipcHandlers.js",
+    "src/helpers/voiceLabApiClient.js",
+    "src/utils/recordingErrors.ts",
+    ...fs
+      .readdirSync(path.join(root, "src", "locales"))
+      .map((locale) => `src/locales/${locale}/translation.json`)
+      .filter((file) => fs.existsSync(path.join(root, file))),
+  ];
+
+  for (const file of files) {
+    assert.doesNotMatch(read(file), /VoiceLab Dictate/, file);
+  }
+  assert.match(read("src/locales/en/translation.json"), /VoiceLab Flow/);
+  assert.match(read("src/locales/uz/translation.json"), /VoiceLab Flow/);
+});
+
 test("shortcut and native helper display names use VoiceLab", () => {
   const gnome = read("src/helpers/gnomeShortcut.js");
   const kde = read("src/helpers/kdeShortcut.js");

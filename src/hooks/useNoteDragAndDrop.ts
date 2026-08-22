@@ -43,7 +43,7 @@ export function useNoteDragAndDrop({ onMoveToFolder, currentFolderId }: UseNoteD
           padding: 4px 12px;
           background: color-mix(in oklch, var(--color-popover) 95%, transparent);
           color: var(--color-popover-foreground);
-          font-size: 11px;
+          font-size: 12px;
           font-weight: 500;
           border-radius: 6px;
           border: 1px solid var(--color-border);

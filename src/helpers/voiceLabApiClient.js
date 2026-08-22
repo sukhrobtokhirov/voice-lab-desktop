@@ -21,8 +21,8 @@ const CANONICAL_AUDIO_UPLOADS = new Map([
   ["audio/x-ms-wma", "wma"],
 ]);
 const DESKTOP_STT_PATH = ["", "v1", "desktop", "stt"].join("/");
+const DESKTOP_USAGE_PATH = ["", "v1", "desktop", "usage"].join("/");
 const DESKTOP_PRICING_PATH = ["", "api", "v1", "billing", "desktop", "pricing"].join("/");
-const DESKTOP_SUBSCRIPTION_PATH = ["", "api", "v1", "billing", "desktop", "subscription"].join("/");
 const MAX_JSON_RESPONSE_BYTES = 1024 * 1024;
 const REQUEST_ID_PATTERN = /^req_[A-Za-z0-9_-]{1,256}$/;
 const STATUS_CODE = {
@@ -59,6 +59,7 @@ function normalizeErrorCode(status, body) {
     INVALID_AUDIO: "AUDIO_INVALID",
     NO_SPEECH_DETECTED: "NO_SPEECH_DETECTED",
     CONCURRENT_DICTATION: "CONCURRENCY_LIMIT",
+    DESKTOP_USAGE_LIMIT_REACHED: "DAILY_CAP_REACHED",
     DAILY_DICTATION_LIMIT_REACHED: "DAILY_CAP_REACHED",
     RATE_LIMITED: "RATE_LIMITED",
     STT_OVERLOADED: "RATE_LIMITED",
@@ -208,22 +209,26 @@ function safeInteger(value, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
 function normalizeUsage(payload) {
   const usage = record(payload);
   const usedSeconds = usage.used_seconds;
-  const dailyLimitSeconds = usage.daily_limit_seconds;
+  const limitSeconds = usage.limit_seconds;
   const remainingSeconds = usage.remaining_seconds;
+  const usageWindow = usage.usage_window;
   if (
     !Number.isSafeInteger(usedSeconds) ||
     usedSeconds < 0 ||
-    !Number.isSafeInteger(dailyLimitSeconds) ||
-    dailyLimitSeconds < 0 ||
+    !Number.isSafeInteger(limitSeconds) ||
+    limitSeconds < 0 ||
     !Number.isSafeInteger(remainingSeconds) ||
-    remainingSeconds < 0
+    remainingSeconds < 0 ||
+    !["hour", "day"].includes(usageWindow) ||
+    remainingSeconds > limitSeconds
   ) {
     return null;
   }
   return {
     used_seconds: usedSeconds,
-    daily_limit_seconds: dailyLimitSeconds,
+    limit_seconds: limitSeconds,
     remaining_seconds: remainingSeconds,
+    usage_window: usageWindow,
   };
 }
 
@@ -317,57 +322,90 @@ function normalizeDesktopPricing(payload) {
   };
 }
 
-function normalizeDesktopSubscription(payload) {
+function normalizeDesktopUsage(payload) {
   const root = record(payload);
-  const rawEntitlement = record(root.entitlement);
+  const rawEntitlement = record(root.desktop_stt);
   const requestId = safeRequestId(root.request_id);
-  const dailySeconds = safeInteger(rawEntitlement.daily_seconds, { max: 24 * 60 * 60 });
+  if (!requestId || typeof rawEntitlement.enabled !== "boolean") {
+    return invalidResponse("desktop usage", requestId);
+  }
+
+  if (!rawEntitlement.enabled) {
+    return {
+      entitlement: {
+        active: false,
+        planId: null,
+        planName: null,
+        usageWindow: null,
+        usageLimitSeconds: 0,
+        usedSeconds: 0,
+        reservedSeconds: 0,
+        remainingSeconds: 0,
+        maxRequestSeconds: 0,
+        windowStartsAt: null,
+        resetsAt: null,
+      },
+      requestId,
+    };
+  }
+
+  const planId = safeString(rawEntitlement.plan_id);
+  const planName = safeString(rawEntitlement.plan_name);
+  const usageWindow = rawEntitlement.usage_window;
+  const usageLimitSeconds = safeInteger(rawEntitlement.usage_limit_seconds, {
+    min: 1,
+    max: 24 * 60 * 60,
+  });
+  // The Go API currently omits zero-valued counters. Treat an absent counter
+  // as zero, but continue rejecting every non-zero malformed value.
+  const usedSeconds =
+    rawEntitlement.used_seconds == null
+      ? 0
+      : safeInteger(rawEntitlement.used_seconds, { max: 365 * 24 * 60 * 60 });
+  const reservedSeconds =
+    rawEntitlement.reserved_seconds == null
+      ? 0
+      : safeInteger(rawEntitlement.reserved_seconds, { max: 24 * 60 * 60 });
+  const remainingSeconds = safeInteger(rawEntitlement.remaining_seconds, {
+    max: 24 * 60 * 60,
+  });
   const maxRequestSeconds = safeInteger(rawEntitlement.max_request_seconds, {
+    min: 1,
     max: 300,
   });
-  const periodStartsAt =
-    rawEntitlement.period_starts_at == null ? null : validRfc3339(rawEntitlement.period_starts_at);
-  const periodEndsAt =
-    rawEntitlement.period_ends_at == null ? null : validRfc3339(rawEntitlement.period_ends_at);
+  const windowStartsAt = validRfc3339(rawEntitlement.window_starts_at);
+  const resetsAt = validRfc3339(rawEntitlement.resets_at);
   if (
-    !requestId ||
-    typeof rawEntitlement.active !== "boolean" ||
-    dailySeconds === null ||
-    !Number.isSafeInteger(dailySeconds) ||
-    maxRequestSeconds === null ||
+    !planId ||
+    !planName ||
+    !["hour", "day"].includes(usageWindow) ||
+    !Number.isSafeInteger(usageLimitSeconds) ||
+    !Number.isSafeInteger(usedSeconds) ||
+    !Number.isSafeInteger(reservedSeconds) ||
+    !Number.isSafeInteger(remainingSeconds) ||
+    remainingSeconds > usageLimitSeconds ||
+    usedSeconds + reservedSeconds + remainingSeconds > usageLimitSeconds ||
     !Number.isSafeInteger(maxRequestSeconds) ||
-    typeof rawEntitlement.cancel_at_period_end !== "boolean" ||
-    (rawEntitlement.period_starts_at != null && !periodStartsAt) ||
-    (rawEntitlement.period_ends_at != null && !periodEndsAt)
+    !windowStartsAt ||
+    !resetsAt ||
+    Date.parse(resetsAt) <= Date.parse(windowStartsAt)
   ) {
-    return invalidResponse("subscription", requestId);
+    return invalidResponse("desktop usage", requestId);
   }
-  const packageCode = safeString(rawEntitlement.package_code);
-  const packageName = safeString(rawEntitlement.package_name);
-  const status = safeString(rawEntitlement.status);
-  if (
-    rawEntitlement.active &&
-    (!packageCode ||
-      !packageName ||
-      !status ||
-      !periodStartsAt ||
-      !periodEndsAt ||
-      dailySeconds <= 0 ||
-      maxRequestSeconds <= 0)
-  ) {
-    return invalidResponse("subscription", requestId);
-  }
+
   return {
     entitlement: {
-      active: rawEntitlement.active,
-      packageCode,
-      packageName,
-      status,
-      dailySeconds,
+      active: true,
+      planId,
+      planName,
+      usageWindow,
+      usageLimitSeconds,
+      usedSeconds,
+      reservedSeconds,
+      remainingSeconds,
       maxRequestSeconds,
-      periodStartsAt,
-      periodEndsAt,
-      cancelAtPeriodEnd: rawEntitlement.cancel_at_period_end,
+      windowStartsAt,
+      resetsAt,
     },
     requestId,
   };
@@ -400,21 +438,11 @@ class VoiceLabApiClient {
     this.appVersion = appVersion;
     this.channel = channel;
     this.billingOrigin = billingOrigin.replace(/\/+$/, "");
-    this.subscriptionCache = null;
-    this.subscriptionFetchedAt = 0;
-    this.subscriptionAuthContext = null;
     this.activeDictationOperations = new Map();
     this.sessionAccountId = null;
   }
 
-  resetSessionState() {
-    this.subscriptionCache = null;
-    this.subscriptionFetchedAt = 0;
-    this.subscriptionAuthContext = null;
-  }
-
   handleAuthStatus(status) {
-    this.resetSessionState();
     const nextAccountId =
       status?.status === "authenticated" ? this.authManager.getSessionMetadata().accountId : null;
     const accountChanged =
@@ -430,15 +458,16 @@ class VoiceLabApiClient {
 
   getBillingUrl(source = "dictate") {
     const url = new URL("/app/billing", this.billingOrigin);
-    url.searchParams.set("source", source === "dictate" ? source : "desktop");
+    void source;
+    url.searchParams.set("source", "desktop");
     return url.toString();
   }
 
   async authenticatedFetch(pathname, options = {}) {
     const method = String(options.method || "GET").toUpperCase();
     const isDesktopStt = method === "POST" && pathname === DESKTOP_STT_PATH;
-    const isDesktopSubscription = method === "GET" && pathname === DESKTOP_SUBSCRIPTION_PATH;
-    const isCanonicalDesktopBoundary = isDesktopStt || isDesktopSubscription;
+    const isDesktopUsage = method === "GET" && pathname === DESKTOP_USAGE_PATH;
+    const isCanonicalDesktopBoundary = isDesktopStt || isDesktopUsage;
     if (isDesktopStt && options.idempotencyKey) {
       throw new VoiceLabApiError({
         code: "INVALID_REQUEST",
@@ -489,6 +518,7 @@ class VoiceLabApiClient {
               : {}),
           },
           body: options.bodyFactory ? options.bodyFactory() : options.body,
+          ...(options.cache ? { cache: options.cache } : {}),
           signal: timed.signal,
         });
         const declaredLength = Number(response.headers.get("content-length"));
@@ -568,10 +598,7 @@ class VoiceLabApiClient {
 
       const serverAuthCode = body?.error?.code;
       const refreshableDesktopToken =
-        response.status === 401 &&
-        ((isDesktopStt && serverAuthCode === "invalid_desktop_token") ||
-          (isDesktopSubscription &&
-            ["session_expired", "invalid_desktop_token"].includes(serverAuthCode)));
+        response.status === 401 && isDesktopStt && serverAuthCode === "invalid_desktop_token";
       if (refreshableDesktopToken && !authRetried) {
         if (!sameAuthSessionContext(initialAuthContext, authSessionContext(this.authManager))) {
           throw new VoiceLabApiError({
@@ -627,6 +654,12 @@ class VoiceLabApiClient {
         authRetried &&
         sameAuthSessionContext(retryAuthContext, authSessionContext(this.authManager))
       ) {
+        this.authManager.invalidateSession?.({
+          code: serverAuthCode,
+          message: body?.message || "VoiceLab session expired. Sign in again.",
+        });
+      }
+      if (isDesktopUsage && response.status === 401 && serverAuthCode === "invalid_desktop_token") {
         this.authManager.invalidateSession?.({
           code: serverAuthCode,
           message: body?.message || "VoiceLab session expired. Sign in again.",
@@ -737,19 +770,12 @@ class VoiceLabApiClient {
     return normalizeDesktopPricing(body);
   }
 
-  async getDesktopSubscription({ force = false } = {}) {
+  async getDesktopUsage() {
     const requestContext = authSessionContext(this.authManager);
-    if (
-      !force &&
-      this.subscriptionCache &&
-      sameAuthSessionContext(this.subscriptionAuthContext, requestContext) &&
-      Date.now() - this.subscriptionFetchedAt < 30_000
-    ) {
-      return this.subscriptionCache;
-    }
-    const body = await this.authenticatedFetch(DESKTOP_SUBSCRIPTION_PATH, {
+    const body = await this.authenticatedFetch(DESKTOP_USAGE_PATH, {
       method: "GET",
       timeoutMs: 15_000,
+      cache: "no-store",
     });
     if (!sameAuthSessionContext(requestContext, authSessionContext(this.authManager))) {
       throw new VoiceLabApiError({
@@ -758,10 +784,7 @@ class VoiceLabApiClient {
         status: 409,
       });
     }
-    this.subscriptionCache = normalizeDesktopSubscription(body);
-    this.subscriptionFetchedAt = Date.now();
-    this.subscriptionAuthContext = requestContext;
-    return this.subscriptionCache;
+    return normalizeDesktopUsage(body);
   }
 
   async beginDictation({ audioBuffer, source = "dictate", durationMs = null, language = null }) {
@@ -808,7 +831,7 @@ class VoiceLabApiClient {
     if (this.activeDictationOperations.size >= 1)
       throw new VoiceLabApiError({
         code: "CONCURRENCY_LIMIT",
-        message: "Another VoiceLab Dictate operation is already running.",
+        message: "Another VoiceLab Flow operation is already running.",
         status: 429,
         details: { max_concurrent_operations: 1 },
       });
@@ -820,7 +843,7 @@ class VoiceLabApiClient {
         status: 401,
       });
     }
-    const { entitlement, requestId } = await this.getDesktopSubscription();
+    const { entitlement, requestId } = await this.getDesktopUsage();
     if (entitlement.active !== true) {
       throw new VoiceLabApiError({
         code: "ENTITLEMENT_REQUIRED",
@@ -947,7 +970,7 @@ class VoiceLabApiClient {
       language: result.language || null,
       usage,
       usedSeconds: usage?.used_seconds ?? null,
-      dailyLimitSeconds: usage?.daily_limit_seconds ?? null,
+      dailyLimitSeconds: usage?.limit_seconds ?? null,
       remainingSeconds: usage?.remaining_seconds ?? null,
       requestId: result.request_id || null,
       chargedCredits: null,

@@ -128,7 +128,7 @@ export default function NoteBottomBar({
                   />
                 ))}
               </div>
-              <span className="text-[11px] font-medium tabular-nums text-primary/60 dark:text-primary/70">
+              <span className="text-2xs font-medium tabular-nums text-primary/60 dark:text-primary/70">
                 {elapsedLabel}
               </span>
               <Square size={9} fill="currentColor" className="text-primary/50" />
@@ -188,7 +188,7 @@ export default function NoteBottomBar({
               placeholder={t("embeddedChat.askPlaceholder")}
               className={cn(
                 "input-inline flex-1 bg-transparent outline-none min-w-0 p-0",
-                "text-[13px] text-foreground",
+                "text-sm text-foreground",
                 "placeholder:text-foreground/25 dark:placeholder:text-foreground/15"
               )}
             />

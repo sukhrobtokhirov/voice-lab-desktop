@@ -137,6 +137,8 @@
     "refresh": "Обновить",
     "download": "Скачать",
     "cancel": "Отмена",
+    "confirm": "Подтвердить",
+    "ok": "OK",
     "recommended": "Рекомендуется",
     "active": "Активно",
     "freeAccountRequired": "Требуется бесплатный аккаунт",
@@ -153,16 +155,17 @@
     "tap": "Нажатие",
     "close": "Закрыть",
     "dismiss": "Скрыть",
-    "save": "Speichern",
-    "saving": "Speichern…",
-    "create": "Erstellen",
-    "delete": "Löschen",
-    "actions": "Aktionen",
-    "error": "Etwas ist schiefgelaufen",
-    "unknownError": "Ein unbekannter Fehler ist aufgetreten",
-    "copy": "Kopieren",
-    "copied": "Kopiert",
-    "done": "Fertig",
+    "save": "Сохранить",
+    "saving": "Сохранение…",
+    "create": "Создать",
+    "delete": "Удалить",
+    "actions": "Действия",
+    "error": "Что-то пошло не так",
+    "unknownError": "Произошла неизвестная ошибка",
+    "copy": "Копировать",
+    "copyError": "Копировать ошибку",
+    "copied": "Скопировано",
+    "done": "Готово",
     "skip": "Пропустить"
   },
   "onboarding": {
@@ -741,9 +744,9 @@
   },
   "auth": {
     "cloudNotConfigured": "Облако не настроено",
-    "desktopTitle": "Войдите в VoiceLab Desktop",
+    "desktopTitle": "Войдите в VoiceLab Flow",
     "desktopBrowserHint": "Безопасный вход откроется в браузере и автоматически вернёт вас в приложение.",
-    "desktopWaiting": "Завершите вход в браузере. VoiceLab Desktop продолжит автоматически.",
+    "desktopWaiting": "Завершите вход в браузере. VoiceLab Flow продолжит автоматически.",
     "desktopSecurity": "Пароль не передаётся приложению. Refresh-токен шифруется в закрытом локальном хранилище учётных данных.",
     "desktopOpenBrowser": "Продолжить в браузере",
     "desktopOpening": "Открываем безопасный вход…",
@@ -759,10 +762,10 @@
     "desktopSecurityError": "Ссылка входа не прошла проверку безопасности VoiceLab. Начните вход заново.",
     "desktopReplayDetected": "Эта ссылка входа уже использована. Создайте новый запрос на вход.",
     "desktopUnauthorized": "Сессия VoiceLab больше недействительна. Войдите снова.",
-    "desktopUnavailable": "Аутентификация Desktop недоступна в этой сессии приложения. Перезапустите VoiceLab Desktop.",
+    "desktopUnavailable": "Аутентификация Desktop недоступна в этой сессии приложения. Перезапустите VoiceLab Flow.",
     "desktopServerRejected": "Сервер аутентификации отклонил запрос. Повторите попытку или обратитесь в поддержку с кодом ошибки ниже.",
     "desktopReopenFailed": "Не удалось снова открыть браузер. Отмените и начните вход заново.",
-    "desktopProtocolUnavailable": "Ссылка безопасного возврата не зарегистрирована. Перезапустите или переустановите VoiceLab Desktop.",
+    "desktopProtocolUnavailable": "Ссылка безопасного возврата не зарегистрирована. Перезапустите или переустановите VoiceLab Flow.",
     "common": {
       "back": "Назад",
       "continue": "Продолжить",
@@ -1050,7 +1053,7 @@
       "reset": "Сбросить",
       "save": "Сохранить"
     },
-    "defaultTestInput": "Привет, Whispr, какая сегодня погода?",
+    "defaultTestInput": "Привет, VoiceLab, какая сегодня погода?",
     "defaultTestInputTranslate": "Сегодня прекрасная погода, хочешь прогуляться?",
     "dialogs": {
       "reset": {
@@ -3089,7 +3092,7 @@
     "join": "Присоединиться и вести заметки"
   },
   "desktop": {
-    "offline": "Нет интернета. Локальная диктовка продолжает работать.",
+    "offline": "Нет подключения к интернету. Для голосовой диктовки требуется интернет.",
     "nav": {
       "history": "История",
       "vocabulary": "Словарь",
@@ -3107,6 +3110,7 @@
       "updated": "Обновлено в {{time}}",
       "live": "Данные появятся после следующей диктовки.",
       "manage": "Управление оплатой",
+      "upgradePlan": "Улучшить тариф",
       "activeDescription": "Тариф Desktop активен и готов к использованию.",
       "inactiveDescription": "Выберите тариф Desktop на сайте VoiceLab.",
       "active": "Активен",
@@ -3114,15 +3118,21 @@
       "activePlan": "Активный тариф",
       "noActivePlan": "Нет активного тарифа",
       "checking": "Проверка подписки…",
-      "remainingCompact": "Сегодня осталось {{duration}}",
+      "remainingCompact": "Осталось {{duration}} · лимит на день",
+      "remainingHourCompact": "Осталось {{duration}} · лимит на час",
       "dailyCompact": "{{duration}} в день",
+      "hourlyCompact": "{{duration}} в час",
       "billingDisabled": "Тарифы Desktop временно недоступны.",
       "priceCompact": "{{price}} / {{interval}}",
       "choosePlan": "Выбрать тариф",
       "dailyLimit": "Дневной лимит",
+      "hourlyLimit": "Почасовой лимит",
+      "usedThisHour": "Использовано за этот час",
+      "remainingThisHour": "Осталось в этом часу",
       "maxRecording": "Максимальная запись",
       "endsOn": "Доступ завершится {{date}}",
       "renewsOn": "Продление {{date}}",
+      "resetsOn": "Лимит сбросится {{date}}",
       "dailyMinutes": "{{count}} минут в день",
       "maxRecordingSeconds": "До {{count}} секунд на запись",
       "refreshHint": "Обновите после возвращения со страницы оплаты.",
@@ -3138,7 +3148,7 @@
     },
     "subscriptionPrompt": {
       "title": "Нужен тариф Desktop",
-      "description": "Выберите тариф VoiceLab Desktop на сайте, затем вернитесь сюда и обновите доступ.",
+      "description": "Выберите тариф VoiceLab Flow на сайте, затем вернитесь сюда и обновите доступ.",
       "limitTitle": "Дневной лимит исчерпан",
       "limitDescription": "Тариф Desktop активен, но дневной лимит диктовки использован. Управляйте тарифом на VoiceLab или повторите попытку после сброса лимита."
     },
@@ -3168,7 +3178,7 @@
         "ready": "Готово"
       },
       "welcome": {
-        "title": "VoiceLab Dictate",
+        "title": "VoiceLab Flow",
         "description": "Говорите естественно. Текст появится там, где он нужен."
       },
       "advanced": {
@@ -3250,12 +3260,12 @@
       "advanced": "Дополнительно",
       "advancedDescription": "VoiceLab Cloud и инструменты разработчика",
       "advancedSetup": "Облачная транскрипция",
-      "advancedSetupDescription": "VoiceLab Dictate автоматически использует текущий аккаунт."
+      "advancedSetupDescription": "VoiceLab Flow автоматически использует текущий аккаунт."
     },
     "session": {
       "active": "Выполнен вход",
       "device": "Устройство",
-      "thisDevice": "Это устройство VoiceLab Dictate",
+      "thisDevice": "Это устройство VoiceLab Flow",
       "status": "Сессия",
       "protected": "Активна и защищена",
       "signedOut": "Вход не выполнен",

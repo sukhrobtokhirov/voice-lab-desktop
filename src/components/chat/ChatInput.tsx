@@ -94,7 +94,7 @@ export function ChatInput({
         {isListening && (
           <>
             <RecordingIndicator />
-            <span className="text-[12px] text-foreground/80 truncate flex-1">
+            <span className="text-xs text-foreground/80 truncate flex-1">
               {partialTranscript || t("agentMode.input.listening")}
             </span>
           </>
@@ -103,7 +103,7 @@ export function ChatInput({
         {isTranscribing && (
           <>
             <ProcessingIndicator />
-            <span className="text-[12px] text-muted-foreground select-none">
+            <span className="text-xs text-muted-foreground select-none">
               {t("agentMode.input.transcribing")}
             </span>
           </>
@@ -122,7 +122,7 @@ export function ChatInput({
               placeholder={t("agentMode.input.typeMessage")}
               className={cn(
                 "input-inline flex-1 outline-none bg-transparent",
-                "text-[13px] text-foreground placeholder:text-muted-foreground/40",
+                "text-sm text-foreground placeholder:text-muted-foreground/40",
                 "min-w-0 p-0",
                 isBusy && "text-muted-foreground/30 cursor-not-allowed"
               )}

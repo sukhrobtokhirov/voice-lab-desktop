@@ -77,7 +77,7 @@ export default function UpcomingMeetings({ events, isLoading }: UpcomingMeetings
       {/* Header */}
       <div className="flex items-center gap-1.5 pb-2.5">
         <Calendar size={12} className="text-muted-foreground" />
-        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+        <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide">
           {t("upcoming.title")}
         </span>
       </div>
@@ -136,7 +136,7 @@ export default function UpcomingMeetings({ events, isLoading }: UpcomingMeetings
           {groupedEvents.map((group, groupIndex) => (
             <div key={group.label} className={groupIndex > 0 ? "mt-4" : ""}>
               <div className="pt-2 pb-2">
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wide">
                   {group.label}
                 </span>
               </div>
@@ -162,12 +162,12 @@ export default function UpcomingMeetings({ events, isLoading }: UpcomingMeetings
                                 <span className="absolute inline-flex h-full w-full animate-pulse rounded-full bg-green-500 opacity-75" />
                                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
                               </span>
-                              <span className="text-[11px] font-medium text-green-600 dark:text-green-400 tabular-nums">
+                              <span className="text-2xs font-medium text-green-600 dark:text-green-400 tabular-nums">
                                 {t("upcoming.now")}
                               </span>
                             </div>
                           ) : (
-                            <span className="text-[11px] text-muted-foreground tabular-nums">
+                            <span className="text-2xs text-muted-foreground tabular-nums">
                               {formatTimeRange(event.start_time, event.end_time)}
                             </span>
                           )}
@@ -206,7 +206,7 @@ export default function UpcomingMeetings({ events, isLoading }: UpcomingMeetings
                           {event.summary || t("upcoming.untitledEvent")}
                         </p>
                         {event.attendees_count > 1 && (
-                          <span className="shrink-0 text-[11px] text-muted-foreground/70 tabular-nums">
+                          <span className="shrink-0 text-2xs text-muted-foreground/70 tabular-nums">
                             +{event.attendees_count - 1}
                           </span>
                         )}

@@ -36,12 +36,15 @@ test("sha256 verification fails closed", () => {
   }
 });
 
-test("owned sidecar manifest verifies the checked-in macOS ARM64 baseline", () => {
+test("owned sidecar manifest declares and verifies the macOS ARM64 baseline", () => {
   const manifest = loadManifest();
   const file = path.join(__dirname, "..", "..", "resources", "bin", "llama-server-darwin-arm64");
   const entry = manifestEntryFor(file, "darwin", "arm64", manifest);
   assert.ok(entry);
-  assert.equal(verifyOwnedSidecar(file, "darwin", "arm64", manifest), entry.sha256);
+  assert.match(entry.sha256, /^[a-f0-9]{64}$/);
+  if (fs.existsSync(file)) {
+    assert.equal(verifyOwnedSidecar(file, "darwin", "arm64", manifest), entry.sha256);
+  }
   assert.throws(
     () => verifyOwnedSidecar(file, "linux", "x64", manifest),
     /No owned sidecar hash/

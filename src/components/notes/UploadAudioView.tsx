@@ -681,7 +681,7 @@ export default function UploadAudioView({ onNoteCreated }: UploadAudioViewProps)
 
               <div className="flex items-center gap-3 my-3">
                 <div className="h-px flex-1 bg-foreground/5 dark:bg-white/5" />
-                <span className="text-[10px] text-foreground/20 uppercase tracking-wider">
+                <span className="text-2xs text-foreground/20 uppercase tracking-wider">
                   {t("notes.upload.orDivider")}
                 </span>
                 <div className="h-px flex-1 bg-foreground/5 dark:bg-white/5" />
@@ -785,7 +785,7 @@ export default function UploadAudioView({ onNoteCreated }: UploadAudioViewProps)
           )}
 
           {batchUrlNotice && (
-            <p className="text-[10px] text-amber-500/60 mt-2 text-center">{batchUrlNotice}</p>
+            <p className="text-2xs text-amber-500/60 mt-2 text-center">{batchUrlNotice}</p>
           )}
 
           {batch.hasQueue && (
@@ -947,7 +947,7 @@ export default function UploadAudioView({ onNoteCreated }: UploadAudioViewProps)
                 <p className="text-xs text-foreground/40 font-medium">
                   {t("notes.upload.speakerDetection")}
                 </p>
-                <p className="text-[10px] text-foreground/20 mt-0.5">
+                <p className="text-2xs text-foreground/20 mt-0.5">
                   {t("notes.upload.speakerDetectionDescription")}
                 </p>
               </div>
@@ -989,13 +989,13 @@ export default function UploadAudioView({ onNoteCreated }: UploadAudioViewProps)
             </div>
 
             {diarizationDownloading && (
-              <p className="text-[10px] text-primary/50 mt-1.5">
+              <p className="text-2xs text-primary/50 mt-1.5">
                 {t("notes.upload.downloadingModels")}
               </p>
             )}
 
             {diarizationEnabled && (
-              <p className="text-[10px] text-foreground/25 mt-1.5">
+              <p className="text-2xs text-foreground/25 mt-1.5">
                 {t("notes.upload.diarizationRunsLocally")}
               </p>
             )}
@@ -1446,7 +1446,7 @@ function FolderSelect({
                 <span className="flex items-center gap-1.5">
                   {f.name}
                   {isMeetings && (
-                    <span className="text-[8px] uppercase tracking-wider text-foreground/25 font-medium">
+                    <span className="text-2xs uppercase tracking-wider text-foreground/25 font-medium">
                       {t("notes.folders.soon")}
                     </span>
                   )}

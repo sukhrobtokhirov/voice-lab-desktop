@@ -137,6 +137,8 @@
     "refresh": "更新",
     "download": "ダウンロード",
     "cancel": "キャンセル",
+    "confirm": "確認",
+    "ok": "OK",
     "recommended": "推奨",
     "active": "有効",
     "freeAccountRequired": "無料アカウントが必要です",
@@ -153,16 +155,17 @@
     "tap": "タップ",
     "close": "閉じる",
     "dismiss": "閉じる",
-    "save": "Guardar",
-    "saving": "Guardando…",
-    "create": "Crear",
-    "delete": "Eliminar",
-    "actions": "Acciones",
-    "error": "Algo salió mal",
-    "unknownError": "Ocurrió un error desconocido",
-    "copy": "Copiar",
-    "copied": "Copiado",
-    "done": "Listo",
+    "save": "保存",
+    "saving": "保存中…",
+    "create": "作成",
+    "delete": "削除",
+    "actions": "操作",
+    "error": "問題が発生しました",
+    "unknownError": "不明なエラーが発生しました",
+    "copy": "コピー",
+    "copyError": "エラーをコピー",
+    "copied": "コピーしました",
+    "done": "完了",
     "skip": "スキップ"
   },
   "onboarding": {
@@ -809,7 +812,7 @@
     "welcomeTitle": "VoiceLab へようこそ",
     "desktopTitle": "VoiceLab デスクトップにサインインする",
     "desktopBrowserHint": "安全なサインインはブラウザで開き、完了するとここに戻ります。",
-    "desktopWaiting": "ブラウザでサインインを完了します。 VoiceLab Desktop は自動的に続行されます。",
+    "desktopWaiting": "ブラウザでサインインを完了します。VoiceLab Flow は自動的に続行されます。",
     "desktopSecurity": "パスワードがデスクトップアプリに入力されることはありません。更新トークンは非公開のローカル認証情報ストアで暗号化されます。",
     "desktopOpenBrowser": "ブラウザで続行",
     "desktopOpening": "安全なサインインを開いています…",
@@ -828,7 +831,7 @@
     "desktopUnavailable": "このアプリセッションではデスクトップ認証は利用できません。 VoiceLab デスクトップを再起動します。",
     "desktopServerRejected": "認証サーバーがリクエストを拒否しました。もう一度試すか、以下のエラー コードを添えてサポートにお問い合わせください。",
     "desktopReopenFailed": "ブラウザを再度開くことができませんでした。キャンセルして、再度サインインを開始してください。",
-    "desktopProtocolUnavailable": "安全なリターン リンクが登録されていません。 VoiceLab Desktop を再起動または再インストールします。"
+    "desktopProtocolUnavailable": "安全なリターン リンクが登録されていません。VoiceLab Flow を再起動または再インストールします。"
   },
   "cleanupPrompt": "クリーンアップ",
   "developerSection": {
@@ -1050,7 +1053,7 @@
       "reset": "リセット",
       "save": "保存"
     },
-    "defaultTestInput": "ねぇ Whispr、今日の天気はどう？",
+    "defaultTestInput": "ねぇ VoiceLab、今日の天気はどう？",
     "defaultTestInputTranslate": "今日はいい天気ですね、散歩に行きませんか？",
     "dialogs": {
       "reset": {
@@ -3085,7 +3088,7 @@
     "join": "参加して文字起こし"
   },
   "desktop": {
-    "offline": "オフライン。ローカルディクテーションはまだ機能します。",
+    "offline": "オフラインです。音声入力にはインターネット接続が必要です。",
     "nav": {
       "history": "歴史",
       "vocabulary": "語彙",
@@ -3103,6 +3106,7 @@
       "updated": "{{time}} を更新しました",
       "live": "次の音声入力後に使用量が表示されます。",
       "manage": "請求の管理",
+      "upgradePlan": "プランをアップグレード",
       "activeDescription": "Desktopプランは有効で、すぐに利用できます。",
       "inactiveDescription": "VoiceLabウェブサイトでDesktopプランを選択してください。",
       "active": "有効",
@@ -3110,15 +3114,21 @@
       "activePlan": "有効なプラン",
       "noActivePlan": "有効なプランなし",
       "checking": "サブスクリプションを確認中…",
-      "remainingCompact": "本日あと{{duration}}",
+      "remainingCompact": "残り{{duration}} · 1日の上限",
+      "remainingHourCompact": "残り{{duration}} · 1時間の上限",
       "dailyCompact": "1日{{duration}}",
+      "hourlyCompact": "1時間{{duration}}",
       "billingDisabled": "Desktopプランは一時的に利用できません。",
       "priceCompact": "{{price}} / {{interval}}",
       "choosePlan": "プランを選択",
       "dailyLimit": "1日の上限",
+      "hourlyLimit": "1時間の上限",
+      "usedThisHour": "この時間の使用量",
+      "remainingThisHour": "この時間の残り",
       "maxRecording": "最大録音時間",
       "endsOn": "{{date}}にアクセス終了",
       "renewsOn": "{{date}}に更新",
+      "resetsOn": "使用量は{{date}}にリセットされます",
       "dailyMinutes": "1日{{count}}分",
       "maxRecordingSeconds": "1回の録音は最大{{count}}秒",
       "refreshHint": "支払い画面から戻った後に更新してください。",
@@ -3134,7 +3144,7 @@
     },
     "subscriptionPrompt": {
       "title": "Desktopプランが必要です",
-      "description": "ウェブサイトでVoiceLab Desktopプランを選択し、ここに戻ってアクセスを更新してください。",
+      "description": "ウェブサイトで VoiceLab Flow プランを選択し、ここに戻ってアクセスを更新してください。",
       "limitTitle": "1日の上限に達しました",
       "limitDescription": "Desktopプランは有効ですが、本日の音声入力上限を使い切りました。VoiceLabでプランを管理するか、上限のリセット後に再試行してください。"
     },
@@ -3246,12 +3256,12 @@
       "advanced": "高度な",
       "advancedDescription": "VoiceLab Cloud と開発者ツール",
       "advancedSetup": "クラウド転写",
-      "advancedSetupDescription": "VoiceLab Dictate は、サインインしたアカウントを自動的に使用します。"
+      "advancedSetupDescription": "VoiceLab Flow は、サインインしたアカウントを自動的に使用します。"
     },
     "session": {
       "active": "サインインしました",
       "device": "デバイス",
-      "thisDevice": "この VoiceLab Dictate デスクトップ",
+      "thisDevice": "この VoiceLab Flow デスクトップ",
       "status": "セッション",
       "protected": "アクティブで保護されている",
       "signedOut": "サインインしていません",

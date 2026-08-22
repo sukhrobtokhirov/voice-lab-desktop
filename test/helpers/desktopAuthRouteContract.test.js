@@ -69,8 +69,8 @@ test("desktop VoiceLab data requests are limited to documented API routes", () =
 
   assert.deepEqual(endpointConstants.sort(), [
     "/api/v1/billing/desktop/pricing",
-    "/api/v1/billing/desktop/subscription",
     "/v1/desktop/stt",
+    "/v1/desktop/usage",
   ]);
   assert.doesNotMatch(source, /\/api\/v1\/desktop\/sync/);
   assert.doesNotMatch(source, /\/approve(?:["'/?]|$)/);

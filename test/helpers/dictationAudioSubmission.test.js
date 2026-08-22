@@ -69,3 +69,12 @@ test("desktop recovery UI has no local transcription fallback", () => {
   assert.doesNotMatch(source, /Use local|Lokal rejim|Локальный режим/);
   assert.doesNotMatch(hook, /recovery === "local"|setUseLocalWhisper/);
 });
+
+test("paste permission failures provide an explicit Settings recovery action", () => {
+  const source = read("src/utils/recordingErrors.ts");
+  const hook = read("src/hooks/useAudioRecording.js");
+
+  assert.match(source, /PASTE_ACCESSIBILITY_REQUIRED["']\) return "permission"/);
+  assert.match(source, /permission: "Sozlamalarni ochish"/);
+  assert.match(hook, /recovery === "permission"[\s\S]*openAccessibilitySettings/);
+});

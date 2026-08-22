@@ -66,14 +66,16 @@ export default function MicPermissionWarning({
         "bg-warning/8 border-warning/20 dark:bg-warning/10 dark:border-warning/20"
       )}
     >
-      <div className="flex items-center gap-2.5">
-        <div className="w-6 h-6 rounded-md bg-warning/15 flex items-center justify-center shrink-0">
-          <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-warning" />
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start">
+        <div className="flex min-w-0 flex-1 items-start gap-2.5">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-warning/15">
+            <AlertCircle className="h-3.5 w-3.5 text-amber-600 dark:text-warning" />
+          </div>
+          <p className="min-w-0 flex-1 text-sm leading-5 text-amber-700 dark:text-warning/90">
+            {error || config.message}
+          </p>
         </div>
-        <p className="flex-1 text-xs text-amber-700 dark:text-warning/90 leading-snug">
-          {error || config.message}
-        </p>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 sm:ml-auto">
           <Button
             variant="ghost"
             size="sm"

@@ -28,7 +28,7 @@ interface IntegrationsViewProps {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50 mb-2 pl-1">
+    <div className="text-2xs font-medium uppercase tracking-wider text-muted-foreground/50 mb-2 pl-1">
       {children}
     </div>
   );
@@ -129,7 +129,7 @@ export default function IntegrationsView({ isPaid, onUpgrade }: IntegrationsView
                   <p className="text-xs font-semibold text-foreground">
                     {t("integrations.googleCalendar.title")}
                   </p>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
+                  <Badge variant="outline" className="text-2xs px-1.5 py-0 font-normal">
                     {t("integrations.googleCalendar.optional")}
                   </Badge>
                 </div>

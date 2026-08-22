@@ -84,7 +84,7 @@ export default function FinishStep({
             {t("onboarding.finish.corti.createAccount")}
             <ExternalLink className="w-3 h-3" />
           </button>
-          <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded bg-success/10 text-success shrink-0">
+          <span className="inline-flex items-center px-2 py-0.5 text-2xs font-medium rounded bg-success/10 text-success shrink-0">
             {t("onboarding.finish.corti.creditBadge")}
           </span>
         </div>

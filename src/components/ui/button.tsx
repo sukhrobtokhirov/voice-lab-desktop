@@ -7,7 +7,7 @@ import { cn } from "../lib/utils";
 const buttonVariants = cva(
   [
     "group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap",
-    "rounded-lg border border-transparent bg-clip-padding text-sm font-medium cursor-pointer select-none",
+    "rounded-lg border border-transparent bg-clip-padding text-sm leading-5 font-medium cursor-pointer select-none",
     "transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-150 [transition-timing-function:cubic-bezier(0.23,1,0.32,1)]",
     "outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
     "active:not-aria-[haspopup]:translate-y-px",
@@ -67,7 +67,7 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-8 gap-1.5 px-2.5 has-[>svg]:px-2",
-        sm: "h-7 gap-1 rounded-lg px-2 text-[0.8rem] has-[>svg]:px-1.5",
+        sm: "h-7 gap-1 rounded-lg px-2 text-xs has-[>svg]:px-1.5",
         lg: "h-9 gap-1.5 rounded-lg px-3 has-[>svg]:px-2.5",
         icon: "size-8",
       },

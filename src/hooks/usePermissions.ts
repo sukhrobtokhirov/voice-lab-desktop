@@ -127,6 +127,7 @@ export const usePermissions = (
   const [isCheckingPasteTools, setIsCheckingPasteTools] = useState(false);
   const [accessibilityTroubleshooting, setAccessibilityTroubleshooting] = useState(false);
   const accessibilityPollCount = useRef(0);
+  const accessibilityRequestInFlight = useRef(false);
 
   const openSystemSettings = useCallback(
     async (
@@ -240,41 +241,46 @@ export const usePermissions = (
   }, [setAccessibilityPermissionGranted]);
 
   const requestAccessibilityPermission = useCallback(async () => {
+    if (accessibilityRequestInFlight.current) return;
+    accessibilityRequestInFlight.current = true;
+
     const platform = getPlatform();
 
-    if (platform === "darwin") {
-      // Check if already granted
-      const alreadyGranted = await window.electronAPI?.checkAccessibilityPermission?.(true);
-      if (alreadyGranted) {
+    try {
+      if (platform === "darwin") {
+        // This path is only reached from an explicit PermissionCard click. Keep
+        // it to one native action: macOS's prompt already contains its own
+        // "Open System Settings" action. Opening Settings immediately as a
+        // second action races that prompt and can make permission onboarding
+        // look like it is being requested twice.
+        const alreadyGranted = await window.electronAPI?.checkAccessibilityPermission?.(true);
+        if (alreadyGranted) {
+          setAccessibilityPermissionGranted(true);
+          return;
+        }
+
+        const promptedGranted = await window.electronAPI?.promptAccessibilityPermission?.();
+        if (promptedGranted) {
+          setAccessibilityPermissionGranted(true);
+        }
+        return;
+      }
+
+      // On Windows, PowerShell SendKeys is always available
+      if (platform === "win32") {
         setAccessibilityPermissionGranted(true);
         return;
       }
 
-      // Ask macOS to register this exact installed build with TCC first. Merely
-      // opening System Settings can leave an old ad-hoc-signed build selected,
-      // so toggling the visible VoiceLab row never grants the running binary.
-      const promptedGranted = await window.electronAPI?.promptAccessibilityPermission?.();
-      if (promptedGranted) {
+      // On Linux, auto-paste is optional — grant regardless of paste tool availability
+      if (platform === "linux") {
+        await checkPasteToolsAvailability();
         setAccessibilityPermissionGranted(true);
-        return;
       }
-
-      await openSystemSettings("accessibility", window.electronAPI?.openAccessibilitySettings);
-      return;
+    } finally {
+      accessibilityRequestInFlight.current = false;
     }
-
-    // On Windows, PowerShell SendKeys is always available
-    if (platform === "win32") {
-      setAccessibilityPermissionGranted(true);
-      return;
-    }
-
-    // On Linux, auto-paste is optional — grant regardless of paste tool availability
-    if (platform === "linux") {
-      await checkPasteToolsAvailability();
-      setAccessibilityPermissionGranted(true);
-    }
-  }, [openSystemSettings, checkPasteToolsAvailability, setAccessibilityPermissionGranted]);
+  }, [checkPasteToolsAvailability, setAccessibilityPermissionGranted]);
 
   // Check paste tools on mount
   useEffect(() => {

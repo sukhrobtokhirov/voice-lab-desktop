@@ -639,14 +639,14 @@ export default function NoteEditor({
             onKeyDown={handleTitleKeyDown}
             onPaste={handleTitlePaste}
             data-placeholder={t("notes.editor.untitled")}
-            className="text-base font-semibold text-foreground bg-transparent outline-none tracking-[-0.01em] empty:before:content-[attr(data-placeholder)] empty:before:text-foreground/15 empty:before:pointer-events-none"
+            className="text-base font-semibold text-foreground bg-transparent outline-none tracking-tight empty:before:content-[attr(data-placeholder)] empty:before:text-foreground/15 empty:before:pointer-events-none"
             role="textbox"
             aria-label={t("notes.editor.noteTitle")}
           />
           <div className="flex items-center gap-2 mt-1.5">
             {shortDate && (
               <span
-                className="inline-flex items-center gap-1.5 text-[11px] text-foreground/50 dark:text-foreground/35"
+                className="inline-flex items-center gap-1.5 text-2xs text-foreground/50 dark:text-foreground/35"
                 title={noteDate}
               >
                 <Calendar size={11} className="shrink-0" />
@@ -654,7 +654,7 @@ export default function NoteEditor({
               </span>
             )}
             {calendarEventName && (
-              <span className="inline-flex items-center gap-1.5 text-[11px] text-foreground/50 dark:text-foreground/35">
+              <span className="inline-flex items-center gap-1.5 text-2xs text-foreground/50 dark:text-foreground/35">
                 <LinkIcon size={11} className="shrink-0" />
                 <span className="truncate max-w-40">{calendarEventName}</span>
               </span>
@@ -671,7 +671,7 @@ export default function NoteEditor({
                 }}
               >
                 <DropdownMenuTrigger asChild>
-                  <button className="inline-flex items-center gap-1.5 text-[11px] px-1.5 py-0.5 rounded-md border border-border/70 dark:border-white/25 text-foreground/50 dark:text-foreground/35 hover:text-foreground/60 hover:border-border/60 hover:bg-foreground/3 dark:hover:text-foreground/40 dark:hover:border-white/10 dark:hover:bg-white/3 transition-all duration-150 cursor-pointer outline-none">
+                  <button className="inline-flex items-center gap-1.5 text-2xs px-1.5 py-0.5 rounded-md border border-border/70 dark:border-white/25 text-foreground/50 dark:text-foreground/35 hover:text-foreground/60 hover:border-border/60 hover:bg-foreground/3 dark:hover:text-foreground/40 dark:hover:border-white/10 dark:hover:bg-white/3 transition-all duration-150 cursor-pointer outline-none">
                     <FolderOpen size={11} className="shrink-0" />
                     {folderName ? displayFolderName(folderName, t) : t("notes.editor.noFolder")}
                   </button>
@@ -762,7 +762,7 @@ export default function NoteEditor({
               </DropdownMenu>
             )}
             {isSaving && (
-              <span className="inline-flex items-center gap-1 text-[11px] text-foreground/30 dark:text-foreground/15 tabular-nums">
+              <span className="inline-flex items-center gap-1 text-2xs text-foreground/30 dark:text-foreground/15 tabular-nums">
                 <Loader2 size={8} className="animate-spin" />
                 {t("notes.editor.saving")}
               </span>

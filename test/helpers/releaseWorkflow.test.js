@@ -43,6 +43,14 @@ test("all release architectures depend on the complete test gate", () => {
   );
 });
 
+test("release tests rebuild native modules for Node instead of Electron", () => {
+  const testGate = release.slice(release.indexOf("  test-gate:"), release.indexOf("  build-macos:"));
+
+  assert.match(testGate, /npm ci --ignore-scripts/);
+  assert.match(testGate, /npm rebuild better-sqlite3 ffmpeg-static/);
+  assert.match(testGate, /ELECTRON_OVERRIDE_DIST_PATH: \/tmp/);
+});
+
 test("manual and tag releases resolve immutable version provenance", () => {
   const contract = fs.readFileSync(path.join(root, "scripts", "release-contract.js"), "utf8");
   assert.match(release, /workflow_dispatch:[\s\S]*?tag:/);
@@ -71,4 +79,21 @@ test("package verification covers signing, notarization, sidecars, preloads, and
   assert.match(release, /VOICELAB_NOTARIZATION_VERIFIED/);
   assert.match(release, /stapler validate/);
   assert.match(release, /Get-AuthenticodeSignature/);
+});
+
+test("macOS release and local signed builds reject ad-hoc identities", () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+  const verifier = fs.readFileSync(path.join(root, "scripts", "verify-macos-signature.js"), "utf8");
+
+  assert.match(release, /-c\.mac\.forceCodeSigning=true/);
+  assert.match(packageJson.scripts["build:mac"], /forceCodeSigning=true/);
+  assert.match(packageJson.scripts["build:mac:arm64"], /forceCodeSigning=true/);
+  assert.match(packageJson.scripts["build:mac:x64"], /forceCodeSigning=true/);
+  assert.match(packageJson.scripts["build:mac:signed"], /forceCodeSigning=true/);
+  assert.match(packageJson.scripts["build:mac:unsigned"], /CSC_IDENTITY_AUTO_DISCOVERY=false/);
+  assert.match(packageJson.scripts["verify:mac-signature"], /verify-macos-signature\.js/);
+  assert.match(verifier, /Signature=adhoc/);
+  assert.match(verifier, /TeamIdentifier/);
+  assert.match(verifier, /--compare/);
+  assert.match(verifier, /codesign[\s\S]*-R/);
 });

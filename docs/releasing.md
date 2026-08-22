@@ -54,5 +54,7 @@ Paste each copied value into the matching GitHub secret.
 ## Notes
 
 - Packaged `.env` must not contain shared provider credentials. VoiceLab Cloud uses each user's desktop session and account wallet.
-- Local builds may be unsigned for QA; production macOS releases are signed and notarized, and Linux releases are packaged by GitHub Actions. Windows publishing is currently disabled.
+- Do not install an unsigned or ad-hoc-signed QA build over `/Applications/VoiceLab.app`. An ad-hoc signature identifies one exact build hash, so macOS treats the next rebuild as a different app and asks for Accessibility again. Run unsigned builds outside `/Applications` for UI-only QA.
+- For Accessibility/paste QA, build with `npm run build:mac:signed` using the same VoiceLab **Developer ID Application** certificate as production. Before installation, run `npm run verify:mac-signature -- /path/to/VoiceLab.app`. To verify update continuity too, append `--compare /Applications/VoiceLab.app`.
+- Production macOS releases are signed and notarized by GitHub Actions. The release workflow deliberately fails instead of publishing an ad-hoc build. Linux releases are packaged by GitHub Actions. Windows publishing is currently disabled.
 - Do not publish secrets (provider keys, Apple passwords) in release assets or commit history.

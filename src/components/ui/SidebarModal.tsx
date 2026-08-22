@@ -165,7 +165,7 @@ export default function SidebarModal<T extends string>({
                               </div>
                               {!isCompact && (
                                 <>
-                                  <span className="flex-1 truncate leading-tight">
+                                  <span className="flex-1 truncate leading-5">
                                     {item.label}
                                   </span>
                                   {renderBadge(item)}
@@ -209,7 +209,7 @@ export default function SidebarModal<T extends string>({
               {/* Main Content */}
               <div className="flex min-w-0 flex-1 flex-col bg-white dark:bg-[#0f0f0f]">
                 <div className="flex h-16 shrink-0 items-center border-b border-black/10 px-6 pr-16 dark:border-white/12">
-                  <DialogPrimitive.Title className="text-xl font-semibold tracking-[-0.03em] text-foreground">
+                  <DialogPrimitive.Title className="text-xl font-semibold tracking-tight text-foreground">
                     {title}
                   </DialogPrimitive.Title>
                 </div>

@@ -130,7 +130,7 @@ export default function EmbeddedChat({
                 )}
               >
                 <span className="truncate flex-1">{conv.title}</span>
-                <span className="text-[10px] text-foreground/30 shrink-0">
+                <span className="text-2xs text-foreground/30 shrink-0">
                   {formatConversationDate(conv.updated_at)}
                 </span>
               </DropdownMenuItem>

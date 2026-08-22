@@ -74,7 +74,7 @@ export default function WorkspaceBillingTab({ workspace }: Props) {
       <div className="rounded-lg border border-border/50 dark:border-border-subtle/70 bg-card/50 dark:bg-surface-2/50 p-4 space-y-3">
         <div className="flex items-baseline justify-between">
           <div>
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+            <p className="text-2xs uppercase tracking-wide text-muted-foreground font-medium">
               {t("settingsPage.workspace.billing.plan")}
             </p>
             <p className="text-base font-semibold text-foreground">
@@ -83,7 +83,7 @@ export default function WorkspaceBillingTab({ workspace }: Props) {
           </div>
           <span
             className={
-              "text-[10px] font-medium px-2 py-0.5 rounded-md uppercase tracking-wide " +
+              "text-2xs font-medium px-2 py-0.5 rounded-md uppercase tracking-wide " +
               (workspace.status === "active" || workspace.status === "trialing"
                 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                 : workspace.status === "past_due"

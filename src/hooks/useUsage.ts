@@ -3,8 +3,9 @@ import { useAuth } from "./useAuth";
 
 export type DesktopSttUsage = {
   used_seconds: number;
-  daily_limit_seconds: number;
+  limit_seconds: number;
   remaining_seconds: number;
+  usage_window: "hour" | "day";
 };
 
 export interface DesktopPricingPlan {
@@ -21,14 +22,16 @@ export interface DesktopPricingPlan {
 
 export interface DesktopEntitlement {
   active: boolean;
-  packageCode: string | null;
-  packageName: string | null;
-  status: string | null;
-  dailySeconds: number;
+  planId: string | null;
+  planName: string | null;
+  usageWindow: "hour" | "day" | null;
+  usageLimitSeconds: number;
+  usedSeconds: number;
+  reservedSeconds: number;
+  remainingSeconds: number;
   maxRequestSeconds: number;
-  periodStartsAt: string | null;
-  periodEndsAt: string | null;
-  cancelAtPeriodEnd: boolean;
+  windowStartsAt: string | null;
+  resetsAt: string | null;
 }
 
 export interface CreditWalletData {
@@ -62,6 +65,7 @@ interface UseUsageResult extends CreditWalletData {
   isSubscribed: boolean | null;
   isOverLimit: boolean | null;
   isLoading: boolean;
+  isRefreshing: boolean;
   hasLoaded: boolean;
   hasUsageData: boolean;
   hasSubscriptionData: boolean;
@@ -149,8 +153,9 @@ function isDesktopSttUsage(value: unknown): value is DesktopSttUsage {
   const usage = value as Partial<DesktopSttUsage>;
   return (
     Number.isFinite(usage.used_seconds) &&
-    Number.isFinite(usage.daily_limit_seconds) &&
-    Number.isFinite(usage.remaining_seconds)
+    Number.isFinite(usage.limit_seconds) &&
+    Number.isFinite(usage.remaining_seconds) &&
+    (usage.usage_window === "hour" || usage.usage_window === "day")
   );
 }
 
@@ -159,7 +164,10 @@ function isDesktopEntitlement(value: unknown): value is DesktopEntitlement {
   const entitlement = value as Partial<DesktopEntitlement>;
   return (
     typeof entitlement.active === "boolean" &&
-    Number.isFinite(entitlement.dailySeconds) &&
+    Number.isFinite(entitlement.usageLimitSeconds) &&
+    Number.isFinite(entitlement.usedSeconds) &&
+    Number.isFinite(entitlement.reservedSeconds) &&
+    Number.isFinite(entitlement.remainingSeconds) &&
     Number.isFinite(entitlement.maxRequestSeconds)
   );
 }
@@ -181,13 +189,76 @@ function sleep(milliseconds: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
+type DesktopSubscriptionResponse = {
+  success?: boolean;
+  entitlement?: unknown;
+  error?: string;
+  code?: string;
+  requestId?: string | null;
+};
+
+type DesktopUsageSnapshot = {
+  accountKey: string;
+  entitlement: DesktopEntitlement;
+  requestId: string | null;
+  updatedAt: string;
+};
+
+const DESKTOP_USAGE_UPDATED_EVENT = "voicelab-desktop-usage-updated";
+const subscriptionRequests = new Map<
+  string,
+  Promise<DesktopSubscriptionResponse | undefined>
+>();
+
+function entitlementUsage(entitlement: DesktopEntitlement): DesktopSttUsage | null {
+  if (!entitlement.active) return null;
+  return {
+    used_seconds: entitlement.usedSeconds,
+    limit_seconds: entitlement.usageLimitSeconds,
+    remaining_seconds: entitlement.remainingSeconds,
+    usage_window: entitlement.usageWindow || "day",
+  };
+}
+
+function fetchDesktopSubscription(accountKey: string) {
+  const pending = subscriptionRequests.get(accountKey);
+  if (pending) return pending;
+
+  const request = Promise.resolve(window.electronAPI.desktopSubscription?.())
+    .then((result): DesktopSubscriptionResponse | undefined => {
+      if (result?.success && isDesktopEntitlement(result.entitlement)) {
+        window.dispatchEvent(
+          new CustomEvent<DesktopUsageSnapshot>(DESKTOP_USAGE_UPDATED_EVENT, {
+            detail: {
+              accountKey,
+              entitlement: result.entitlement,
+              requestId: result.requestId || null,
+              updatedAt: new Date().toISOString(),
+            },
+          })
+        );
+      }
+      return result;
+    })
+    .finally(() => {
+      if (subscriptionRequests.get(accountKey) === request) {
+        subscriptionRequests.delete(accountKey);
+      }
+    });
+
+  subscriptionRequests.set(accountKey, request);
+  return request;
+}
+
 export function useUsage(): UseUsageResult | null {
   const { isSignedIn, user } = useAuth();
+  const accountKey = user?.id || "desktop-session";
   const [sttUsage, setSttUsage] = useState<DesktopSttUsage | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<CatalogState>(EMPTY_CATALOG);
   const [subscription, setSubscription] = useState<SubscriptionState>(EMPTY_SUBSCRIPTION);
   const [billingError, setBillingError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isWaitingForBillingReturn, setIsWaitingForBillingReturn] = useState(false);
   const [isPollingSubscription, setIsPollingSubscription] = useState(false);
   const pricingRequest = useRef(0);
@@ -260,7 +331,7 @@ export function useUsage(): UseUsageResult | null {
         }));
       }
       try {
-        const result = await window.electronAPI.desktopSubscription?.();
+        const result = await fetchDesktopSubscription(accountKey);
         if (subscriptionRequest.current !== request) return null;
         if (!result?.success || !isDesktopEntitlement(result.entitlement)) {
           setSubscription((current) => ({
@@ -273,6 +344,9 @@ export function useUsage(): UseUsageResult | null {
           }));
           return null;
         }
+        // Apply locally as well as publishing the shared snapshot. This keeps a
+        // newly mounted usage surface correct even if it joined an in-flight
+        // request just after that request's shared event was emitted.
         setSubscription({
           entitlement: result.entitlement,
           isLoading: false,
@@ -281,6 +355,8 @@ export function useUsage(): UseUsageResult | null {
           errorCode: null,
           requestId: result.requestId || null,
         });
+        setSttUsage(entitlementUsage(result.entitlement));
+        setUpdatedAt(new Date().toISOString());
         return result.entitlement.active;
       } catch (error) {
         if (subscriptionRequest.current !== request) return null;
@@ -295,13 +371,18 @@ export function useUsage(): UseUsageResult | null {
         return null;
       }
     },
-    [isSignedIn]
+    [accountKey, isSignedIn]
   );
 
   const refetch = useCallback(async () => {
     setBillingError(null);
-    await Promise.all([loadPricing(), loadSubscription()]);
-  }, [loadPricing, loadSubscription]);
+    setIsRefreshing(true);
+    try {
+      await loadSubscription({ silent: true });
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [loadSubscription]);
 
   const pollSubscription = useCallback(async () => {
     const poll = ++billingPoll.current;
@@ -325,13 +406,8 @@ export function useUsage(): UseUsageResult | null {
       setBillingError(error);
       return { success: false, error };
     }
-    if (catalog.enabled === false && subscription.entitlement?.active !== true) {
-      const error = "Desktop plans are not available right now.";
-      setBillingError(error);
-      return { success: false, error };
-    }
     try {
-      const result = await window.electronAPI.openVoiceLabBilling("dictate");
+      const result = await window.electronAPI.openVoiceLabBilling("desktop");
       if (!result?.success) {
         const error = result?.error || "Billing is unavailable.";
         setBillingError(error);
@@ -345,7 +421,7 @@ export function useUsage(): UseUsageResult | null {
       setBillingError(message);
       return { success: false, error: message };
     }
-  }, [catalog.enabled, subscription.entitlement?.active]);
+  }, []);
 
   useEffect(() => {
     const refreshAfterBillingReturn = () => {
@@ -363,11 +439,42 @@ export function useUsage(): UseUsageResult | null {
   }, [pollSubscription]);
 
   useEffect(() => {
+    const cleanup = window.electronAPI.onDesktopUsageRefresh?.(() => {
+      if (isSignedIn) void loadSubscription({ silent: true });
+    });
+    return () => cleanup?.();
+  }, [isSignedIn, loadSubscription]);
+
+  // Every usage surface owns a hook instance. Share the authoritative desktop
+  // response so refreshing Settings updates the sidebar without remounting the
+  // control panel or sending duplicate concurrent requests.
+  useEffect(() => {
+    if (!isSignedIn) return;
+    const syncSnapshot = (event: Event) => {
+      const snapshot = (event as CustomEvent<DesktopUsageSnapshot>).detail;
+      if (!snapshot || snapshot.accountKey !== accountKey) return;
+      setSubscription({
+        entitlement: snapshot.entitlement,
+        isLoading: false,
+        hasLoaded: true,
+        error: null,
+        errorCode: null,
+        requestId: snapshot.requestId,
+      });
+      setSttUsage(entitlementUsage(snapshot.entitlement));
+      setUpdatedAt(snapshot.updatedAt);
+    };
+    window.addEventListener(DESKTOP_USAGE_UPDATED_EVENT, syncSnapshot);
+    return () => window.removeEventListener(DESKTOP_USAGE_UPDATED_EVENT, syncSnapshot);
+  }, [accountKey, isSignedIn]);
+
+  useEffect(() => {
     setSttUsage(null);
     setUpdatedAt(null);
     setCatalog(EMPTY_CATALOG);
     setSubscription(EMPTY_SUBSCRIPTION);
     setBillingError(null);
+    setIsRefreshing(false);
     billingReturnArmed.current = false;
     setIsWaitingForBillingReturn(false);
     setIsPollingSubscription(false);
@@ -395,7 +502,7 @@ export function useUsage(): UseUsageResult | null {
   const activePlan = useMemo(
     () =>
       entitlement?.active
-        ? catalog.plans.find((plan) => plan.code === entitlement.packageCode) || null
+        ? catalog.plans.find((plan) => plan.code === entitlement.planId) || null
         : null,
     [catalog.plans, entitlement]
   );
@@ -404,7 +511,7 @@ export function useUsage(): UseUsageResult | null {
 
   const isSubscribed = entitlement ? entitlement.active : null;
   const plan = entitlement?.active
-    ? entitlement.packageName || activePlan?.name || entitlement.packageCode
+    ? entitlement.planName || activePlan?.name || entitlement.planId
     : null;
   const planPrice = activePlan?.priceUsd
     ? {
@@ -418,7 +525,11 @@ export function useUsage(): UseUsageResult | null {
     auto_detection_supported: false,
   };
   if (entitlement) {
-    limits.desktop_daily_seconds = entitlement.dailySeconds;
+    limits.desktop_usage_window = entitlement.usageWindow;
+    limits.desktop_usage_limit_seconds = entitlement.usageLimitSeconds;
+    limits.desktop_used_seconds = entitlement.usedSeconds;
+    limits.desktop_reserved_seconds = entitlement.reservedSeconds;
+    limits.desktop_remaining_seconds = entitlement.remainingSeconds;
     limits.desktop_max_request_seconds = entitlement.maxRequestSeconds;
   }
   if (sttUsage) limits.desktop_stt_usage = sttUsage;
@@ -435,18 +546,19 @@ export function useUsage(): UseUsageResult | null {
     pricingProvider: catalog.provider,
     plans: catalog.plans,
     entitlement,
-    status: entitlement?.active ? entitlement.status || "active" : "inactive",
+    status: entitlement ? (entitlement.active ? "active" : "inactive") : "unknown",
     isSubscribed,
     isOverLimit: sttUsage ? sttUsage.remaining_seconds <= 0 : null,
-    isLoading: catalog.isLoading || subscription.isLoading,
-    hasLoaded: catalog.hasLoaded && subscription.hasLoaded,
+    isLoading: subscription.isLoading,
+    isRefreshing,
+    hasLoaded: subscription.hasLoaded,
     hasUsageData: sttUsage !== null,
     hasSubscriptionData: subscription.hasLoaded && entitlement !== null,
-    error: billingError || subscription.error || catalog.error,
-    errorCode: subscription.errorCode || catalog.errorCode,
-    errorRequestId: subscription.requestId || catalog.requestId,
+    error: billingError || subscription.error,
+    errorCode: subscription.errorCode,
+    errorRequestId: subscription.requestId,
     checkoutLoading: isWaitingForBillingReturn || isPollingSubscription,
-    billingAvailable: entitlement?.active === true || catalog.enabled !== false,
+    billingAvailable: true,
     refetch,
     openCheckout: openBilling,
     openBillingPortal: openBilling,
