@@ -14,14 +14,13 @@
 //    onnx worker script) are missing from app.asar.unpacked/.
 
 const fs = require("fs");
+const crypto = require("crypto");
 const path = require("path");
 const { execFileSync } = require("child_process");
 const { Arch } = require("app-builder-lib");
+const { getAbi } = require("node-abi");
 const { buildLinuxWrapperScript } = require("./lib/linux-launcher");
-const {
-  loadManifest,
-  verifyOwnedSidecar,
-} = require("./lib/sidecar-manifest");
+const { loadManifest, verifyOwnedSidecar } = require("./lib/sidecar-manifest");
 const WINDOW_CONFIG_KEYS = [
   "MAIN_WINDOW_CONFIG",
   "CONTROL_PANEL_CONFIG",
@@ -302,6 +301,46 @@ function verifyUnpackedBinaries(context) {
   console.log("  afterPack: verified unpacked bundled binaries");
 }
 
+function verifyBetterSqliteElectronAbi(context) {
+  const projectDir = context.packager.projectDir;
+  const platform = context.electronPlatformName;
+  const arch = Arch[context.arch];
+  const electronVersion = require(
+    path.join(projectDir, "node_modules", "electron", "package.json")
+  ).version;
+  const abi = String(getAbi(electronVersion, "electron"));
+  const rebuiltBinary = path.join(
+    projectDir,
+    "node_modules",
+    "better-sqlite3",
+    "bin",
+    `${platform}-${arch}-${abi}`,
+    "better-sqlite3.node"
+  );
+  const packagedBinary = path.join(
+    resolveResourcesDir(context),
+    "app.asar.unpacked",
+    "node_modules",
+    "better-sqlite3",
+    "build",
+    "Release",
+    "better_sqlite3.node"
+  );
+  const digest = (file) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+
+  for (const binary of [rebuiltBinary, packagedBinary]) {
+    if (!fs.statSync(binary, { throwIfNoEntry: false })?.isFile()) {
+      throw new Error(`afterPack: missing Electron ABI ${abi} binary ${binary}`);
+    }
+  }
+  if (digest(rebuiltBinary) !== digest(packagedBinary)) {
+    throw new Error(
+      `afterPack: packaged better-sqlite3 does not match Electron ${electronVersion} ABI ${abi}`
+    );
+  }
+  console.log(`  afterPack: verified better-sqlite3 Electron ABI ${abi} (${platform}-${arch})`);
+}
+
 function configuredPreloadPaths(projectDir) {
   const windowConfigs = require(path.join(projectDir, "src", "helpers", "windowConfig.js"));
   return WINDOW_CONFIG_KEYS.map((key) => {
@@ -423,7 +462,18 @@ function assertPackagedResourcesAreSecretFree(context) {
 
     const extension = path.extname(basename);
     if (
-      ![".json", ".txt", ".yaml", ".yml", ".config", ".ini", ".js", ".cjs", ".mjs", ".html"].includes(extension) ||
+      ![
+        ".json",
+        ".txt",
+        ".yaml",
+        ".yml",
+        ".config",
+        ".ini",
+        ".js",
+        ".cjs",
+        ".mjs",
+        ".html",
+      ].includes(extension) ||
       fs.statSync(filePath).size > 10 * 1024 * 1024
     ) {
       continue;
@@ -440,7 +490,9 @@ function assertPackagedResourcesAreSecretFree(context) {
     }
   }
 
-  console.log("  afterPack: verified packaged resources contain no environment files or shared credentials");
+  console.log(
+    "  afterPack: verified packaged resources contain no environment files or shared credentials"
+  );
 }
 
 function assertCompiledRendererIsSecretFree(context) {
@@ -468,9 +520,7 @@ function verifyOwnedSidecars(context) {
     (entry) => entry.platform === platform && entry.arch === arch
   );
   if (entries.length === 0) {
-    throw new Error(
-      `afterPack: no owned sidecar hashes are registered for ${platform}-${arch}`
-    );
+    throw new Error(`afterPack: no owned sidecar hashes are registered for ${platform}-${arch}`);
   }
   const binDir = path.join(resolveResourcesDir(context), "bin");
   for (const entry of entries) {
@@ -486,13 +536,8 @@ function verifyOwnedSidecars(context) {
 
 function writePackageVerification(context, sidecarCount) {
   const projectDir = context.packager.projectDir;
-  const packageJson = JSON.parse(
-    fs.readFileSync(path.join(projectDir, "package.json"), "utf8")
-  );
-  const markerPath = path.join(
-    resolveResourcesDir(context),
-    ".voicelab-package-verification.json"
-  );
+  const packageJson = JSON.parse(fs.readFileSync(path.join(projectDir, "package.json"), "utf8"));
+  const markerPath = path.join(resolveResourcesDir(context), ".voicelab-package-verification.json");
   const marker = {
     schema: 1,
     product: "VoiceLab",
@@ -511,7 +556,9 @@ function writePackageVerification(context, sidecarCount) {
   fs.writeFileSync(markerPath, `${JSON.stringify(marker, null, 2)}\n`, {
     mode: 0o644,
   });
-  console.log(`  afterPack: wrote package verification marker for ${marker.platform}-${marker.arch}`);
+  console.log(
+    `  afterPack: wrote package verification marker for ${marker.platform}-${marker.arch}`
+  );
 }
 
 exports.default = async function (context) {
@@ -522,6 +569,7 @@ exports.default = async function (context) {
   wrapLinuxBinary(context);
   verifyMeetingAecHelper(context);
   verifyUnpackedBinaries(context);
+  verifyBetterSqliteElectronAbi(context);
   const sidecarCount = verifyOwnedSidecars(context);
   enforceMacTransportSecurity(context);
   registerMacResourceBinariesForSigning(context);

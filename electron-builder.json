@@ -1,5 +1,6 @@
 {
   "appId": "uz.voicelab.desktop",
+  "beforeBuild": "scripts/rebuild-electron-native.js",
   "afterPack": "scripts/afterPack.js",
   "productName": "VoiceLab",
   "extraMetadata": {

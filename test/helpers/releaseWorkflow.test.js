@@ -26,7 +26,10 @@ test("release builds are private and promotion is the only writer", () => {
   assert.match(release, /promote-release:[\s\S]*?permissions:\n\s+contents: write/);
   assert.match(release, /environment: desktop-release-production/);
   assert.equal((release.match(/gh release create/g) || []).length, 1);
-  assert.doesNotMatch(release.slice(0, release.indexOf("promote-release:")), /gh release (?:create|upload)/);
+  assert.doesNotMatch(
+    release.slice(0, release.indexOf("promote-release:")),
+    /gh release (?:create|upload)/
+  );
 });
 
 test("all release architectures depend on the complete test gate", () => {
@@ -44,11 +47,33 @@ test("all release architectures depend on the complete test gate", () => {
 });
 
 test("release tests rebuild native modules for Node instead of Electron", () => {
-  const testGate = release.slice(release.indexOf("  test-gate:"), release.indexOf("  build-macos:"));
+  const testGate = release.slice(
+    release.indexOf("  test-gate:"),
+    release.indexOf("  build-macos:")
+  );
 
   assert.match(testGate, /npm ci --ignore-scripts/);
   assert.match(testGate, /npm rebuild better-sqlite3 ffmpeg-static/);
   assert.match(testGate, /ELECTRON_OVERRIDE_DIST_PATH: \/tmp/);
+});
+
+test("packaging force-rebuilds better-sqlite3 for the target Electron ABI", () => {
+  const builder = JSON.parse(fs.readFileSync(path.join(root, "electron-builder.json"), "utf8"));
+  const nativeRebuild = fs.readFileSync(
+    path.join(root, "scripts", "rebuild-electron-native.js"),
+    "utf8"
+  );
+
+  assert.equal(builder.beforeBuild, "scripts/rebuild-electron-native.js");
+  assert.match(nativeRebuild, /onlyModules:\s*NATIVE_MODULES/);
+  assert.match(nativeRebuild, /force:\s*true/);
+  assert.match(nativeRebuild, /buildFromSource:\s*true/);
+  assert.match(nativeRebuild, /getAbi\(electronVersion, "electron"\)/);
+  assert.match(nativeRebuild, /return true/);
+
+  const afterPack = fs.readFileSync(path.join(root, "scripts", "afterPack.js"), "utf8");
+  assert.match(afterPack, /verifyBetterSqliteElectronAbi/);
+  assert.match(afterPack, /packaged better-sqlite3 does not match Electron/);
 });
 
 test("manual and tag releases resolve immutable version provenance", () => {
