@@ -3,7 +3,11 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const REQUEST_TIMEOUT = 30000;
+// GitHub's release CDN can pause large sidecar downloads for longer than 30
+// seconds while keeping the connection healthy. Treat five minutes without
+// network activity as a timeout; shorter gaps must not restart a multi-hundred
+// megabyte artifact from byte zero.
+const REQUEST_TIMEOUT = 5 * 60 * 1000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000;
 const MAX_REDIRECTS = 5;

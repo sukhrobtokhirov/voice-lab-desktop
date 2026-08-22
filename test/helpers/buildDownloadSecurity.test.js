@@ -38,6 +38,14 @@ test("archive symlinks may only resolve to relative targets inside the extractio
   );
 });
 
+test("large release downloads tolerate CDN pauses", () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "..", "scripts", "lib", "download-utils.js"),
+    "utf8"
+  );
+  assert.match(source, /const REQUEST_TIMEOUT = 5 \* 60 \* 1000/);
+});
+
 test("sha256 verification fails closed", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-hash-"));
   const file = path.join(dir, "sidecar");
