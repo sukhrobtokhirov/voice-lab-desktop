@@ -103,12 +103,33 @@ function provenance(options) {
 function walk(root) {
   const files = [];
   const queue = [root];
+  const resolvedRoot = fs.realpathSync(root);
   while (queue.length > 0) {
     const current = queue.pop();
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       const fullPath = path.join(current, entry.name);
-      if (entry.isSymbolicLink())
-        die(`symbolic link is not allowed in release output: ${fullPath}`);
+      if (entry.isSymbolicLink()) {
+        const linkTarget = fs.readlinkSync(fullPath);
+        if (path.isAbsolute(linkTarget)) {
+          die(`absolute symbolic link is not allowed in release output: ${fullPath}`);
+        }
+
+        let resolvedTarget;
+        try {
+          resolvedTarget = fs.realpathSync(fullPath);
+        } catch {
+          die(`unresolved symbolic link is not allowed in release output: ${fullPath}`);
+        }
+        const relativeTarget = path.relative(resolvedRoot, resolvedTarget);
+        if (
+          relativeTarget === ".." ||
+          relativeTarget.startsWith(`..${path.sep}`) ||
+          path.isAbsolute(relativeTarget)
+        ) {
+          die(`symbolic link escapes release output: ${fullPath}`);
+        }
+        continue;
+      }
       if (entry.isDirectory()) queue.push(fullPath);
       if (entry.isFile()) files.push(fullPath);
     }
