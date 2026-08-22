@@ -1156,39 +1156,17 @@ declare global {
         code?: string;
         messageKey?: string;
       }>;
-      desktopPricing?: () => Promise<{
-        success: boolean;
-        enabled?: boolean;
-        currency?: string;
-        provider?: string | null;
-        plans?: Array<{
-          code: string | null;
-          name: string | null;
-          priceCents: number | null;
-          priceUsd: string | null;
-          currency: string;
-          billingInterval: string | null;
-          billingIntervalCount: number | null;
-          dailyMinutes: number | null;
-          maxRecordingSeconds: number | null;
-        }>;
-        error?: string;
-        code?: string;
-        status?: number | null;
-        requestId?: string | null;
-      }>;
       desktopSubscription?: () => Promise<{
         success: boolean;
         entitlement?: {
           active: boolean;
           planId: string | null;
           planName: string | null;
-          usageWindow: "hour" | "day" | null;
+          usageWindow: "day" | null;
           usageLimitSeconds: number;
           usedSeconds: number;
           reservedSeconds: number;
           remainingSeconds: number;
-          maxRequestSeconds: number;
           windowStartsAt: string | null;
           resetsAt: string | null;
         };

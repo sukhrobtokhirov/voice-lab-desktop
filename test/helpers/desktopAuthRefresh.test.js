@@ -231,6 +231,75 @@ test("an expired local refresh credential signs the user out with an explicit re
   );
 });
 
+test("invalid_refresh_token clears the desktop session and preserves diagnostics", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const { DesktopAuthManager, getSession } = loadDesktopAuthManager(initialSession());
+  const manager = managerFrom(DesktopAuthManager);
+  global.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        message: "The refresh token is invalid or expired.",
+        error: { code: "invalid_refresh_token" },
+        request_id: "req_invalid_refresh",
+      }),
+      { status: 401, headers: { "Content-Type": "application/json" } }
+    );
+
+  await assert.rejects(manager.refreshSession({ force: true }), (error) => {
+    assert.equal(error.code, "invalid_refresh_token");
+    assert.equal(error.requestId, "req_invalid_refresh");
+    return true;
+  });
+  assert.equal(getSession(), null);
+  assert.deepEqual(manager.getPublicStatus(), {
+    status: "signed-out",
+    user: null,
+    errorCode: "invalid_refresh_token",
+    errorMessage: "The refresh token is invalid or expired.",
+    errorRequestId: "req_invalid_refresh",
+  });
+});
+
+test("auth_unavailable preserves the rotating refresh credential for explicit retry", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const session = initialSession();
+  const { DesktopAuthManager, getSession } = loadDesktopAuthManager(session);
+  const manager = managerFrom(DesktopAuthManager);
+  global.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        message: "Desktop authentication is temporarily unavailable.",
+        error: { code: "auth_unavailable" },
+        request_id: "req_auth_unavailable",
+      }),
+      {
+        status: 503,
+        headers: { "Content-Type": "application/json", "Retry-After": "8" },
+      }
+    );
+
+  await assert.rejects(manager.refreshSession({ force: true }), (error) => {
+    assert.equal(error.code, "auth_unavailable");
+    assert.equal(error.retryAfterSeconds, 8);
+    return true;
+  });
+  assert.equal(getSession().refreshToken, session.refreshToken);
+  assert.deepEqual(manager.getPublicStatus(), {
+    status: "error",
+    user: null,
+    errorCode: "auth_unavailable",
+    errorMessage: "Desktop authentication is temporarily unavailable.",
+    errorRequestId: "req_auth_unavailable",
+    retryAfterSeconds: 8,
+  });
+});
+
 test("authenticated sessions proactively refresh before access-token expiry", async (t) => {
   const originalSetTimeout = global.setTimeout;
   const originalClearTimeout = global.clearTimeout;

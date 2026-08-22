@@ -456,7 +456,6 @@ const fullElectronAPI = {
   cloudReason: (text, opts) => ipcRenderer.invoke("cloud-reason", text, opts),
   cloudStreamingUsage: (text, audioDurationSeconds, opts) =>
     ipcRenderer.invoke("cloud-streaming-usage", text, audioDurationSeconds, opts),
-  desktopPricing: () => ipcRenderer.invoke("desktop-pricing"),
   desktopSubscription: () => ipcRenderer.invoke("desktop-subscription"),
   onDesktopUsageRefresh: (callback) => {
     const listener = (_event, payload) => callback(payload);

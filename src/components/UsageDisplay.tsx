@@ -1,6 +1,6 @@
 import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useUsage, type DesktopPricingPlan } from "../hooks/useUsage";
+import { useUsage } from "../hooks/useUsage";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 
@@ -38,7 +38,7 @@ function formatUpdatedAt(value: string | null, language: string) {
   }).format(date);
 }
 
-function formatResetAt(value: string | null, language: string, usageWindow: "hour" | "day") {
+function formatResetAt(value: string | null, language: string) {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
@@ -46,36 +46,9 @@ function formatResetAt(value: string | null, language: string, usageWindow: "hou
     year: "numeric",
     month: "short",
     day: "numeric",
-    ...(usageWindow === "hour" ? { hour: "2-digit", minute: "2-digit" } : {}),
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(date);
-}
-
-function formatMoney(value: string | null, currency: string, language: string) {
-  const amount = Number(value);
-  if (!Number.isFinite(amount)) return null;
-  try {
-    return new Intl.NumberFormat(language, {
-      style: "currency",
-      currency,
-      maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
-    }).format(amount);
-  } catch {
-    return `${value} ${currency}`;
-  }
-}
-
-function formatPrice(plan: DesktopPricingPlan, language: string) {
-  return formatMoney(plan.priceUsd, plan.currency, language);
-}
-
-function formatInterval(
-  interval: string | null,
-  count: number | null,
-  translate: (key: string, options?: Record<string, unknown>) => string
-) {
-  if (!interval) return null;
-  const unit = translate(`desktop.wallet.intervals.${interval}`, { defaultValue: interval });
-  return count && count > 1 ? `${count} ${unit}` : unit;
 }
 
 export default function UsageDisplay({ compact = false }: { compact?: boolean }) {
@@ -95,10 +68,7 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
     : t("desktop.wallet.manage");
   const stt = usage.sttUsage;
   const updatedAt = formatUpdatedAt(usage.updatedAt, i18n.language);
-  const usageWindow = entitlement?.usageWindow || stt?.usage_window || "day";
-  const resetsAt = formatResetAt(entitlement?.resetsAt || null, i18n.language, usageWindow);
-  const usageLimitLabel =
-    usageWindow === "hour" ? t("desktop.wallet.hourlyLimit") : t("desktop.wallet.dailyLimit");
+  const resetsAt = formatResetAt(entitlement?.resetsAt || null, i18n.language);
   const percentage = stt?.limit_seconds
     ? Math.min(100, Math.max(0, (stt.remaining_seconds / stt.limit_seconds) * 100))
     : active
@@ -111,24 +81,14 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
     const secondary = compactLoading
       ? t("desktop.wallet.checking")
       : active && stt
-        ? t(
-            usageWindow === "hour"
-              ? "desktop.wallet.remainingHourCompact"
-              : "desktop.wallet.remainingCompact",
-            {
-              duration: formatDuration(stt.remaining_seconds, i18n.language),
-            }
-          )
+        ? t("desktop.wallet.remainingCompact", {
+            duration: formatDuration(stt.remaining_seconds, i18n.language),
+          })
         : active && entitlement
-          ? t(
-              usageWindow === "hour"
-                ? "desktop.wallet.hourlyCompact"
-                : "desktop.wallet.dailyCompact",
-              {
-                duration: formatDuration(entitlement.usageLimitSeconds, i18n.language),
-              }
-            )
-        : t("desktop.wallet.unavailable");
+          ? t("desktop.wallet.dailyCompact", {
+              duration: formatDuration(entitlement.usageLimitSeconds, i18n.language),
+            })
+          : t("desktop.wallet.choosePlan");
     const handleCompactClick = () => {
       if (needsEntitlementRefresh) {
         void usage.refetch();
@@ -194,7 +154,7 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
           <span className="block truncate text-sm font-medium leading-5 text-foreground">
             {active
               ? entitlement.planName || usage.plan || t("desktop.wallet.activePlan")
-              : t("desktop.wallet.title")}
+              : t("desktop.wallet.noActivePlan")}
           </span>
           <span className="block truncate text-xs text-muted-foreground">{secondary}</span>
         </span>
@@ -213,8 +173,8 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
                 ? t("desktop.wallet.checking")
                 : t("desktop.wallet.unavailable")
               : active
-              ? t("desktop.wallet.activeDescription")
-              : t("desktop.wallet.inactiveDescription")}
+                ? t("desktop.wallet.activeDescription")
+                : t("desktop.wallet.inactiveDescription")}
           </p>
         </div>
         <Badge variant={hasAuthoritativeEntitlement && active ? "success" : "outline"}>
@@ -234,20 +194,20 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
             <p className="font-medium text-foreground">
               {entitlement.planName || usage.plan || t("desktop.wallet.activePlan")}
             </p>
-            {usage.planPrice && (
-              <span className="text-sm text-muted-foreground">
-                {formatMoney(usage.planPrice.amount, usage.planPrice.currency, i18n.language)}
-              </span>
-            )}
+            <Badge variant="success">{t("desktop.wallet.active")}</Badge>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <UsageValue
-              label={usageLimitLabel}
-              value={formatDuration(entitlement.usageLimitSeconds, i18n.language)}
+              label={t("desktop.wallet.balance")}
+              value={formatDuration(entitlement.usedSeconds, i18n.language)}
             />
             <UsageValue
-              label={t("desktop.wallet.maxRecording")}
-              value={formatDuration(entitlement.maxRequestSeconds, i18n.language)}
+              label={t("desktop.wallet.available")}
+              value={formatDuration(entitlement.remainingSeconds, i18n.language)}
+            />
+            <UsageValue
+              label={t("desktop.wallet.dailyLimit")}
+              value={formatDuration(entitlement.usageLimitSeconds, i18n.language)}
             />
           </div>
           {resetsAt && (
@@ -259,71 +219,14 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
       )}
 
       {stt && (
-        <div className="grid grid-cols-3 gap-3">
-          <UsageValue
-            label={t(
-              usageWindow === "hour" ? "desktop.wallet.usedThisHour" : "desktop.wallet.balance"
-            )}
-            value={formatDuration(stt.used_seconds, i18n.language)}
-          />
-          <UsageValue
-            label={t(
-              usageWindow === "hour"
-                ? "desktop.wallet.remainingThisHour"
-                : "desktop.wallet.available"
-            )}
-            value={formatDuration(stt.remaining_seconds, i18n.language)}
-          />
-          <UsageValue
-            label={usageLimitLabel}
-            value={formatDuration(stt.limit_seconds, i18n.language)}
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+          <div
+            className="h-full rounded-full bg-primary transition-[width] duration-300"
+            style={{
+              width: `${Math.min(100, Math.max(0, (stt.remaining_seconds / stt.limit_seconds) * 100))}%`,
+            }}
           />
         </div>
-      )}
-
-      {hasAuthoritativeEntitlement &&
-        !active &&
-        usage.pricingEnabled === true &&
-        usage.plans.length > 0 && (
-        <div className="space-y-2">
-          {usage.plans.map((plan) => {
-            const price = formatPrice(plan, i18n.language);
-            const planInterval = formatInterval(plan.billingInterval, plan.billingIntervalCount, t);
-            return (
-              <div key={plan.code} className="rounded-xl border border-border/60 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="font-medium text-foreground">{plan.name}</p>
-                  {price && (
-                    <p className="whitespace-nowrap text-sm font-semibold text-foreground">
-                      {t("desktop.wallet.priceCompact", {
-                        price,
-                        interval: planInterval || "",
-                      })}
-                    </p>
-                  )}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  {plan.dailyMinutes !== null && (
-                    <span>{t("desktop.wallet.dailyMinutes", { count: plan.dailyMinutes })}</span>
-                  )}
-                  {plan.maxRecordingSeconds !== null && (
-                    <span>
-                      {t("desktop.wallet.maxRecordingSeconds", {
-                        count: plan.maxRecordingSeconds,
-                      })}
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {hasAuthoritativeEntitlement && usage.pricingEnabled === false && !active && (
-        <p className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-          {t("desktop.wallet.billingDisabled")}
-        </p>
       )}
 
       {usage.error && (

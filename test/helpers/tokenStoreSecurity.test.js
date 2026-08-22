@@ -95,11 +95,9 @@ test("tightens permissions on an existing encrypted credential store", () => {
       installationId: "550e8400-e29b-41d4-a716-446655440000",
       session: null,
     };
-    fs.writeFileSync(
-      file,
-      Buffer.concat([MAGIC, Buffer.from(`ENC:${JSON.stringify(fixture)}`)]),
-      { mode: 0o644 }
-    );
+    fs.writeFileSync(file, Buffer.concat([MAGIC, Buffer.from(`ENC:${JSON.stringify(fixture)}`)]), {
+      mode: 0o644,
+    });
     fs.chmodSync(file, 0o644);
 
     loadTokenStore(dir).getInstallationId();
@@ -140,6 +138,8 @@ test("creates and persists one canonical lowercase installation UUID before any 
 
     assert.match(firstId, CANONICAL_UUID_PATTERN);
     assert.equal(firstId, firstId.toLowerCase());
+    assert.equal(fs.readFileSync(path.join(dir, "installation-id"), "utf8").trim(), firstId);
+    assert.equal(fs.statSync(path.join(dir, "installation-id")).mode & 0o777, 0o600);
     assert.equal(readEncryptedStore(dir).installationId, firstId);
     assert.equal(firstStore.getSession(), null);
     assert.equal(firstStore.getPending(), null);
@@ -148,6 +148,26 @@ test("creates and persists one canonical lowercase installation UUID before any 
     assert.equal(restartedStore.getInstallationId(), firstId);
     restartedStore.clear();
     assert.equal(loadTokenStore(dir).getInstallationId(), firstId);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("keeps the installation UUID stable when credential storage is quarantined", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-token-"));
+  try {
+    const firstId = loadTokenStore(dir).getInstallationId();
+    fs.writeFileSync(path.join(dir, "auth-token.bin"), "corrupt credential blob", {
+      mode: 0o600,
+    });
+
+    const restarted = loadTokenStore(dir);
+    assert.equal(restarted.getInstallationId(), firstId);
+    assert.equal(fs.readFileSync(path.join(dir, "installation-id"), "utf8").trim(), firstId);
+    assert.equal(
+      fs.readdirSync(dir).some((name) => name.startsWith("auth-token.bin.unreadable-")),
+      true
+    );
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

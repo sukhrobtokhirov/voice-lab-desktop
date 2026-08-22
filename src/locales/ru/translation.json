@@ -3111,8 +3111,8 @@
       "live": "Данные появятся после следующей диктовки.",
       "manage": "Управление оплатой",
       "upgradePlan": "Улучшить тариф",
-      "activeDescription": "Тариф Desktop активен и готов к использованию.",
-      "inactiveDescription": "Выберите тариф Desktop на сайте VoiceLab.",
+      "activeDescription": "Диктовка Desktop доступна в вашем текущем тарифе VoiceLab.",
+      "inactiveDescription": "Диктовка Desktop не включена в текущий тариф VoiceLab. Управляйте тарифом на сайте, затем обновите данные.",
       "active": "Активен",
       "inactive": "Неактивен",
       "activePlan": "Активный тариф",
@@ -3135,7 +3135,7 @@
       "resetsOn": "Лимит сбросится {{date}}",
       "dailyMinutes": "{{count}} минут в день",
       "maxRecordingSeconds": "До {{count}} секунд на запись",
-      "refreshHint": "Обновите после возвращения со страницы оплаты.",
+      "refreshHint": "Обновите после изменения тарифа на сайте VoiceLab.",
       "refreshing": "Обновление…",
       "refresh": "Обновить",
       "intervals": { "month": "месяц" }
@@ -3147,8 +3147,8 @@
       "useLocal": "Управлять биллингом VoiceLab"
     },
     "subscriptionPrompt": {
-      "title": "Нужен тариф Desktop",
-      "description": "Выберите тариф VoiceLab Flow на сайте, затем вернитесь сюда и обновите доступ.",
+      "title": "Диктовка Desktop недоступна",
+      "description": "Управляйте тарифом на сайте VoiceLab, затем вернитесь сюда и обновите лимит.",
       "limitTitle": "Дневной лимит исчерпан",
       "limitDescription": "Тариф Desktop активен, но дневной лимит диктовки использован. Управляйте тарифом на VoiceLab или повторите попытку после сброса лимита."
     },

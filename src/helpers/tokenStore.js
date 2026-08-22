@@ -17,6 +17,7 @@ const USER_EMAIL_MAX_LENGTH = 320;
 const USER_NAME_MAX_LENGTH = 256;
 const USER_IMAGE_MAX_LENGTH = 2048;
 const storeFile = () => path.join(app.getPath("userData"), "auth-token.bin");
+const installationIdFile = () => path.join(app.getPath("userData"), "installation-id");
 const legacyStoreFile = () => path.join(app.getPath("userData"), "auth-token.json");
 const legacyMigrationSentinel = () =>
   path.join(app.getPath("userData"), ".auth-token-legacy-migrated");
@@ -35,6 +36,52 @@ function canonicalInstallationId(value) {
 
 function createInstallationId() {
   return crypto.randomUUID().toLowerCase();
+}
+
+function readInstallationIdFile() {
+  const file = installationIdFile();
+  try {
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 128) return null;
+    tightenCredentialFilePermissions(file);
+    return canonicalInstallationId(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function persistInstallationId(value) {
+  const existing = readInstallationIdFile();
+  if (existing) return existing;
+
+  const installationId = canonicalInstallationId(value) || createInstallationId();
+  const file = installationIdFile();
+  const directory = path.dirname(file);
+  const temporary = `${file}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  fs.chmodSync(directory, 0o700);
+  try {
+    fs.writeFileSync(temporary, `${installationId}\n`, { mode: 0o600, flag: "wx" });
+    try {
+      // Do not replace an installation identity created concurrently by a
+      // second process. Whichever process links first owns this installation.
+      fs.linkSync(temporary, file);
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
+    tightenCredentialFilePermissions(file);
+    const persisted = readInstallationIdFile();
+    if (!persisted) {
+      const error = new Error("Installation identity could not be persisted");
+      error.code = "AUTH_INSTALLATION_ID_UNAVAILABLE";
+      throw error;
+    }
+    return persisted;
+  } finally {
+    try {
+      fs.rmSync(temporary, { force: true });
+    } catch {}
+  }
 }
 
 function safeProfileText(value, maximum, { collapseWhitespace = false } = {}) {
@@ -178,9 +225,7 @@ function tightenCredentialFilePermissions(file) {
 function quarantineUnreadableStore(file) {
   if (!fs.existsSync(file)) return null;
   tightenCredentialFilePermissions(file);
-  const quarantine = `${file}.unreadable-${Date.now()}-${crypto
-    .randomBytes(4)
-    .toString("hex")}`;
+  const quarantine = `${file}.unreadable-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
   try {
     fs.renameSync(file, quarantine);
     tightenCredentialFilePermissions(quarantine);
@@ -344,8 +389,16 @@ function update(mutator, { allowMemoryOnly = false } = {}) {
 }
 
 function getInstallationId() {
+  // Installation identity is not a credential. Keep it in its own protected
+  // file so it remains stable even when encrypted credential storage is
+  // temporarily unavailable or a corrupt credential blob is quarantined.
+  const persistedInstallationId = readInstallationIdFile();
   const store = readStore();
-  const installationId = canonicalInstallationId(store.installationId) || createInstallationId();
+  const installationId = persistInstallationId(
+    persistedInstallationId ||
+      canonicalInstallationId(store.installationId) ||
+      createInstallationId()
+  );
   if (store.installationId !== installationId || !installationIdPersisted) {
     const next = { ...store, installationId };
     if (secretCrypto.isAvailable()) {

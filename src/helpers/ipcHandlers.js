@@ -2861,22 +2861,6 @@ class IPCHandlers {
       return { success: true };
     });
 
-    this._handle("desktop-pricing", async () => {
-      try {
-        if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
-        const pricing = await this.voiceLabApiClient.getDesktopPricing();
-        return { success: true, ...pricing };
-      } catch (error) {
-        return typeof error?.toPublic === "function"
-          ? error.toPublic()
-          : {
-              success: false,
-              error: error.message || "Pricing unavailable",
-              code: "PRICING_UNAVAILABLE",
-            };
-      }
-    });
-
     this._handle("desktop-subscription", async () => {
       try {
         if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
@@ -2998,26 +2982,20 @@ class IPCHandlers {
         senderId: event.sender.id,
       });
       try {
-        const { prepareCloudSttAudio } = require("./ffmpegUtils");
+        const { prepareDesktopSttAudio } = require("./ffmpegUtils");
         const boundedAudio = toBoundedAudioBuffer(
           audioBuffer,
           MAX_DICTATION_AUDIO_BYTES,
           "Dictation audio"
         );
-        const prepared = await prepareCloudSttAudio(boundedAudio, {
-          hintExt: opts.mimeType?.includes("wav")
-            ? "wav"
-            : opts.mimeType?.includes("ogg")
-              ? "ogg"
-              : opts.mimeType?.includes("mp4")
-                ? "m4a"
-                : "webm",
+        const prepared = prepareDesktopSttAudio(boundedAudio, {
+          contentType: opts.mimeType,
         });
-        const audioData = prepared.buffer;
-        const { validatePcm16Wav } = require("./wavValidator");
-        const durationMs = validatePcm16Wav(audioData).durationMs;
+        const durationMs = Number.isFinite(opts.durationSeconds)
+          ? Math.max(0, Math.round(opts.durationSeconds * 1000))
+          : null;
         return await transcribeWithVoiceLab({
-          buffer: audioData,
+          buffer: prepared.buffer,
           source: "dictate",
           durationMs,
           language: opts.language ?? null,
@@ -3070,8 +3048,8 @@ class IPCHandlers {
             ? preferredLanguage.split("-")[0]
             : null;
         const existingRow = this.databaseManager.getTranscriptionById(id);
-        const { prepareCloudSttAudio } = require("./ffmpegUtils");
-        const prepared = await prepareCloudSttAudio(buffer);
+        const { prepareDesktopSttAudio } = require("./ffmpegUtils");
+        const prepared = prepareDesktopSttAudio(buffer, { contentType: "audio/wav" });
         const result = await transcribeWithVoiceLab({
           buffer: prepared.buffer,
           source: "dictate-retry",
@@ -5464,7 +5442,6 @@ class IPCHandlers {
         streamingProvider: "",
         supportedLanguages: ["uz", "en", "ru"],
         autoDetectionSupported: false,
-        maxDurationSeconds: 300,
       };
     });
 
@@ -5492,15 +5469,12 @@ class IPCHandlers {
           };
         }
         const sourceBuffer = fs.readFileSync(allowedPath);
-        const { prepareCloudSttAudio, getAudioDurationSeconds } = require("./ffmpegUtils");
-        const durationSeconds = await getAudioDurationSeconds(allowedPath);
-        const prepared = await prepareCloudSttAudio(sourceBuffer, {
-          hintExt: path.extname(allowedPath).slice(1) || "mp3",
-        });
+        const { prepareDesktopSttAudio } = require("./ffmpegUtils");
+        const prepared = prepareDesktopSttAudio(sourceBuffer);
         return await transcribeWithVoiceLab({
           buffer: prepared.buffer,
           source: "dictate-upload",
-          durationMs: Math.round(durationSeconds * 1000),
+          durationMs: null,
           language: options.language ?? null,
           contentType: prepared.contentType,
           fileName: prepared.fileName,

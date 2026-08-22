@@ -335,25 +335,16 @@ class WindowManager {
     }
 
     const MIN_HOLD_DURATION_MS = 150;
-    const MAX_PUSH_DURATION_MS = 300000; // 5 minutes max recording
     const downTime = Date.now();
 
     if (this.textEditMonitor) this.textEditMonitor.captureTargetPid();
     this.showDictationPanel();
-
-    const safetyTimeoutId = setTimeout(() => {
-      if (this.macCompoundPushState?.active) {
-        debugLogger.warn("Compound PTT safety timeout", undefined, "ptt");
-        this.forceStopMacCompoundPush("timeout");
-      }
-    }, MAX_PUSH_DURATION_MS);
 
     this.macCompoundPushState = {
       active: true,
       downTime,
       isRecording: false,
       requiredModifiers,
-      safetyTimeoutId,
     };
 
     setTimeout(() => {

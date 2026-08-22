@@ -40,21 +40,20 @@ test("renderer startup and editing paths cannot activate desktop sync", () => {
   assert.doesNotMatch(syncService, /electronAPI|setInterval|addEventListener|desktopSyncRun/);
 });
 
-test("post-login usage exposes static STT capabilities without wallet requests", () => {
+test("post-login usage exposes static STT capabilities without wallet or pricing requests", () => {
   const usage = read("src/hooks/useUsage.ts");
   const ipcHandlers = read("src/helpers/ipcHandlers.js");
   const config = handlerBlock(ipcHandlers, "get-stt-config");
 
   assert.doesNotMatch(usage, /cloudUsage|cloud-usage|getWallet/);
-  assert.match(usage, /desktopPricing/);
+  assert.doesNotMatch(usage, /desktopPricing|loadPricing|pricingRequest/);
   assert.match(usage, /desktopSubscription/);
-  assert.match(usage, /pricingRequest\.current/);
   assert.match(usage, /SUPPORTED_LANGUAGES = \["uz", "en", "ru"\]/);
   assert.match(usage, /autoDetectionSupported: false/);
   assert.doesNotMatch(usage, /subscriptionFromUser|subscription_status|subscriptionStatus/);
   assert.match(config, /supportedLanguages: \["uz", "en", "ru"\]/);
   assert.match(config, /autoDetectionSupported: false/);
-  assert.match(config, /maxDurationSeconds: 300/);
+  assert.doesNotMatch(config, /maxDurationSeconds|dailyMinutes|maxRecordingSeconds/);
   assert.doesNotMatch(config, /getWallet|cloudUsage|proxyFetch/);
 });
 
@@ -66,9 +65,9 @@ test("cloud health is a local auth check and billing remains an explicit link", 
   assert.match(health, /authenticated/);
   assert.doesNotMatch(health, /getWallet|proxyFetch|net\.fetch/);
   assert.match(source, /this\._handle\("open-voicelab-billing"/);
-  assert.match(source, /this\._handle\("desktop-pricing"/);
+  assert.doesNotMatch(source, /this\._handle\("desktop-pricing"/);
   assert.match(source, /this\._handle\("desktop-subscription"/);
-  assert.match(source, /getDesktopPricing/);
+  assert.doesNotMatch(source, /getDesktopPricing/);
   assert.match(source, /getDesktopUsage/);
   assert.match(source, /shell\.openExternal\(this\.voiceLabApiClient\.getBillingUrl\(source\)\)/);
 });
@@ -112,17 +111,19 @@ test("usage UI uses the desktop entitlement and keeps website billing reachable"
   const hook = read("src/hooks/useUsage.ts");
   const display = read("src/components/UsageDisplay.tsx");
 
-  assert.match(hook, /balanceCredits: null/);
-  assert.match(hook, /availableCredits: null/);
-  assert.doesNotMatch(hook, /plan: "free"|balanceCredits: "0"|availableCredits: "0"/);
+  assert.doesNotMatch(
+    hook,
+    /balanceCredits|availableCredits|reservedCredits|estimatedCredits|chargedCredits|topUpUrl/
+  );
+  assert.doesNotMatch(hook, /plan: "free"/);
   assert.match(hook, /result\.entitlement\.active/);
   assert.match(
     hook,
     /status: entitlement \? \(entitlement\.active \? "active" : "inactive"\) : "unknown"/
   );
-  assert.match(hook, /\[isSignedIn, user\?\.id, loadPricing, loadSubscription\]/);
+  assert.match(hook, /\[isSignedIn, user\?\.id, loadSubscription\]/);
   assert.match(display, /if \(!usage\) return null/);
-  assert.match(display, /usage\.plans\.map/);
+  assert.doesNotMatch(display, /usage\.plans|planPrice|priceCompact/);
   assert.match(display, /usage\.openBillingPortal\(\)/);
   assert.doesNotMatch(display, /Live balance|AI Credit wallet/);
 });

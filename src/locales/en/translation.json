@@ -3107,8 +3107,8 @@
       "live": "Usage appears after your next dictation.",
       "manage": "Manage billing",
       "upgradePlan": "Upgrade plan",
-      "activeDescription": "Your desktop plan is active and ready to use.",
-      "inactiveDescription": "Choose a desktop plan on the VoiceLab website.",
+      "activeDescription": "Desktop dictation is available on your current VoiceLab plan.",
+      "inactiveDescription": "Desktop dictation is not enabled for your current VoiceLab plan. Manage your plan on the website, then refresh.",
       "active": "Active",
       "inactive": "Inactive",
       "activePlan": "Active plan",
@@ -3131,7 +3131,7 @@
       "resetsOn": "Usage resets on {{date}}",
       "dailyMinutes": "{{count}} minutes per day",
       "maxRecordingSeconds": "Up to {{count}} seconds per recording",
-      "refreshHint": "Refresh after returning from payment.",
+      "refreshHint": "Refresh after changing your plan on VoiceLab.",
       "refreshing": "Refreshing…",
       "refresh": "Refresh",
       "intervals": { "month": "month" }
@@ -3143,8 +3143,8 @@
       "useLocal": "Manage VoiceLab billing"
     },
     "subscriptionPrompt": {
-      "title": "Desktop plan required",
-      "description": "Choose a VoiceLab Flow plan on the website, then return here to refresh your access.",
+      "title": "Desktop dictation is unavailable",
+      "description": "Manage your VoiceLab plan on the website, then return here and refresh your allowance.",
       "limitTitle": "Daily allowance reached",
       "limitDescription": "Your desktop plan is active, but today’s dictation allowance has been used. Manage the plan on VoiceLab or try again after the allowance resets."
     },

@@ -1,9 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const Module = require("node:module");
-const os = require("node:os");
 const path = require("node:path");
 
 function loadFfmpegUtils() {
@@ -28,9 +26,8 @@ function signatureBuffer(hex, asciiWrites = []) {
   return buffer;
 }
 
-test("desktop STT recognizes every documented container and canonical MIME", async () => {
-  const { detectAudioContainer, prepareCloudSttAudio, requiresCloudSttConversion } =
-    loadFfmpegUtils();
+test("desktop STT recognizes and preserves every documented container", () => {
+  const { detectAudioContainer, prepareDesktopSttAudio } = loadFfmpegUtils();
   const cases = [
     [
       "wav",
@@ -80,58 +77,24 @@ test("desktop STT recognizes every documented container and canonical MIME", asy
 
   for (const [container, contentType, fileName, buffer] of cases) {
     assert.equal(detectAudioContainer(buffer), container);
-    if (container === "webm") {
-      assert.equal(requiresCloudSttConversion(container), true);
-      continue;
-    }
-    const prepared = await prepareCloudSttAudio(buffer);
-    assert.equal(prepared.converted, false);
+    const prepared = prepareDesktopSttAudio(buffer);
     assert.equal(prepared.contentType, contentType);
     assert.equal(prepared.fileName, fileName);
     assert.equal(prepared.buffer, buffer);
   }
-
-  assert.equal(requiresCloudSttConversion("wav"), false);
-  assert.equal(requiresCloudSttConversion("m4a"), false);
-  assert.equal(requiresCloudSttConversion(null), true);
 });
 
-test("desktop STT canonicalizes Chromium WebM recordings to 16 kHz mono PCM WAV", async () => {
-  const { getFFmpegPath, parseWavFormat, prepareCloudSttAudio } = loadFfmpegUtils();
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-webm-contract-"));
-  const webmPath = path.join(tempDir, "recording.webm");
+test("desktop STT uses MIME only as a hint and never rewrites unknown bytes", () => {
+  const { prepareDesktopSttAudio } = loadFfmpegUtils();
+  const original = Buffer.from("opaque server-sniffed recording");
+  const prepared = prepareDesktopSttAudio(original, { contentType: "audio/webm; codecs=opus" });
 
-  try {
-    execFileSync(
-      getFFmpegPath(),
-      [
-        "-f",
-        "lavfi",
-        "-i",
-        "sine=frequency=440:duration=0.75",
-        "-c:a",
-        "libopus",
-        "-y",
-        webmPath,
-      ],
-      { stdio: "ignore" }
-    );
-
-    const prepared = await prepareCloudSttAudio(fs.readFileSync(webmPath));
-    assert.equal(prepared.converted, true);
-    assert.equal(prepared.contentType, "audio/wav");
-    assert.equal(prepared.fileName, "audio.wav");
-    assert.deepEqual(parseWavFormat(prepared.buffer), {
-      channels: 1,
-      sampleRate: 16000,
-      bitsPerSample: 16,
-    });
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
+  assert.equal(prepared.buffer, original);
+  assert.equal(prepared.contentType, "audio/webm");
+  assert.equal(prepared.fileName, "audio.webm");
 });
 
-test("desktop dictation derives duration from validated WAV and never calls website cleanup", () => {
+test("desktop dictation sends original audio and never calls website cleanup", () => {
   const root = path.resolve(__dirname, "../..");
   const ipc = fs.readFileSync(path.join(root, "src/helpers/ipcHandlers.js"), "utf8");
   const audioManager = fs.readFileSync(path.join(root, "src/helpers/audioManager.js"), "utf8");
@@ -140,9 +103,19 @@ test("desktop dictation derives duration from validated WAV and never calls webs
 
   assert.notEqual(cloudMethodStart, -1);
   assert.notEqual(cloudMethodEnd, -1);
-  assert.match(ipc, /const durationMs = validatePcm16Wav\(audioData\)\.durationMs/);
+  assert.match(ipc, /prepareDesktopSttAudio\(boundedAudio/);
+  assert.doesNotMatch(ipc, /prepareCloudSttAudio\(boundedAudio/);
   assert.doesNotMatch(
     audioManager.slice(cloudMethodStart, cloudMethodEnd),
     /electronAPI\.cloudReason\s*\(/
   );
+});
+
+test("desktop recording has no client-invented five-minute request cap", () => {
+  const root = path.resolve(__dirname, "../..");
+  const client = fs.readFileSync(path.join(root, "src/helpers/voiceLabApiClient.js"), "utf8");
+  const windows = fs.readFileSync(path.join(root, "src/helpers/windowManager.js"), "utf8");
+
+  assert.doesNotMatch(client, /MAX_AUDIO_DURATION_MS|maxDurationSeconds\s*=\s*Math\.min/);
+  assert.doesNotMatch(windows, /MAX_PUSH_DURATION_MS|5 minutes max recording/);
 });

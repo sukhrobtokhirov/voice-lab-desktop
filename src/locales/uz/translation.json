@@ -3109,8 +3109,8 @@
       "live": "Foydalanish keyingi diktovkadan soʻng ko‘rinadi.",
       "manage": "Tarifni boshqarish",
       "upgradePlan": "Tarifni yaxshilash",
-      "activeDescription": "Desktop tarifingiz faol va foydalanishga tayyor.",
-      "inactiveDescription": "VoiceLab saytida desktop tarifini tanlang.",
+      "activeDescription": "Joriy VoiceLab tarifingizda Desktop diktovkasi mavjud.",
+      "inactiveDescription": "Joriy VoiceLab tarifingizda Desktop diktovkasi yoqilmagan. Saytda tarifni boshqaring, keyin yangilang.",
       "active": "Faol",
       "inactive": "Faol emas",
       "activePlan": "Faol tarif",
@@ -3133,7 +3133,7 @@
       "resetsOn": "Foydalanish limiti {{date}} kuni yangilanadi",
       "dailyMinutes": "Kuniga {{count}} daqiqa",
       "maxRecordingSeconds": "Har yozuv {{count}} soniyagacha",
-      "refreshHint": "To‘lovdan qaytgach yangilang.",
+      "refreshHint": "VoiceLab saytida tarifni o‘zgartirgach yangilang.",
       "refreshing": "Yangilanmoqda…",
       "refresh": "Yangilash",
       "intervals": { "month": "oy" }
@@ -3145,8 +3145,8 @@
       "useLocal": "VoiceLab billingni boshqarish"
     },
     "subscriptionPrompt": {
-      "title": "Desktop tarifi kerak",
-      "description": "VoiceLab saytida Desktop tarifini tanlang, so‘ng foydalanish huquqini yangilash uchun bu yerga qayting.",
+      "title": "Desktop diktovkasi mavjud emas",
+      "description": "VoiceLab saytida tarifni boshqaring, keyin bu yerga qaytib limitni yangilang.",
       "limitTitle": "Kunlik limit tugadi",
       "limitDescription": "Desktop tarifingiz faol, lekin bugungi diktovka limiti ishlatildi. VoiceLab saytida tarifni boshqaring yoki limit yangilangach qayta urinib ko‘ring."
     },

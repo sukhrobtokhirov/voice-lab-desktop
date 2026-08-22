@@ -100,15 +100,6 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
   const calls = [];
   installFetch(t, async (url, init) => {
     calls.push({ url, init });
-    if (url.endsWith("/billing/desktop/pricing")) {
-      return jsonResponse({
-        enabled: false,
-        currency: "USD",
-        provider: "polar",
-        plans: [],
-        request_id: "req_pricing",
-      });
-    }
     if (url.endsWith("/desktop/usage")) {
       return jsonResponse({
         desktop_stt: {
@@ -120,7 +111,6 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
           used_seconds: 842,
           reserved_seconds: 0,
           remaining_seconds: 27_958,
-          max_request_seconds: 300,
           window_starts_at: "2026-08-22T00:00:00Z",
           resets_at: "2026-08-23T00:00:00Z",
         },
@@ -144,7 +134,6 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
     return jsonResponse({ ok: true, request_id: `req_sync_${calls.length}` });
   });
 
-  await client.getDesktopPricing();
   await client.getDesktopUsage();
   await client.sendDictationChunk(
     {
@@ -157,24 +146,19 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
     Buffer.from("audio"),
     { contentType: "audio/mpeg" }
   );
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 2);
   assert.deepEqual(
     calls.map(({ url, init }) => [url, init.method]),
     [
-      [`${API_ORIGIN}/api/v1/billing/desktop/pricing`, "GET"],
       [`${API_ORIGIN}/v1/desktop/usage`, "GET"],
       [`${API_ORIGIN}/v1/desktop/stt`, "POST"],
     ]
   );
 
   for (const { init } of calls) assertNoBrowserCredentials(init);
-  const pricingHeaders = new Headers(calls[0].init.headers);
-  assert.equal(pricingHeaders.has("authorization"), false);
-  assert.equal(pricingHeaders.has("x-voicelab-installation-id"), false);
-  assert.equal(pricingHeaders.has("x-voicelab-session-id"), false);
   assert.equal(authManager.state.accessTokenCalls, 2);
 
-  for (const { init } of calls.slice(1)) {
+  for (const { init } of calls) {
     const headers = new Headers(init.headers);
     assert.equal(headers.get("authorization"), "Bearer desktop-access-token");
     assert.equal(headers.has("x-voicelab-client"), false);
@@ -183,9 +167,9 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
     assert.equal(headers.has("x-voicelab-installation-id"), false);
     assert.equal(headers.has("x-voicelab-session-id"), false);
   }
+  assert.equal(new Headers(calls[0].init.headers).has("content-type"), false);
   assert.equal(new Headers(calls[1].init.headers).has("content-type"), false);
-  assert.equal(new Headers(calls[2].init.headers).has("content-type"), false);
-  assert.ok(calls[2].init.body instanceof FormData);
+  assert.ok(calls[1].init.body instanceof FormData);
   assert.equal(authManager.state.refreshCalls, 0);
   assert.equal(authManager.state.invalidations, 0);
 });
@@ -298,59 +282,6 @@ test("desktop subscription usage is never cached", async (t) => {
   assert.notEqual(second.requestId, first.requestId);
 });
 
-test("public pricing preserves Retry-After and structured error diagnostics", async (t) => {
-  const { client } = createClient(t);
-  let calls = 0;
-  installFetch(t, async () => {
-    calls += 1;
-    return jsonResponse(
-      {
-        error: {
-          code: "rate_limited",
-          message: "Pricing is rate limited.",
-          fields: { pricing: "Retry later." },
-        },
-        request_id: "req_pricing_rate_limit",
-      },
-      429,
-      { "retry-after": "23" }
-    );
-  });
-
-  await assert.rejects(client.getDesktopPricing(), (error) => {
-    assert.equal(error.code, "RATE_LIMITED");
-    assert.equal(error.status, 429);
-    assert.equal(error.retryAfterSeconds, 23);
-    assert.equal(error.toPublic().requestId, "req_pricing_rate_limit");
-    assert.deepEqual(error.toPublic().fields, { pricing: "Retry later." });
-    return true;
-  });
-  assert.equal(calls, 1);
-});
-
-test("invalid pricing JSON retains request id and content type diagnostics", async (t) => {
-  const { client } = createClient(t);
-  installFetch(
-    t,
-    async () =>
-      new Response("<html>upstream failure</html>", {
-        status: 502,
-        headers: {
-          "content-type": "text/html; charset=utf-8",
-          "x-request-id": "req_pricing_invalid_json",
-        },
-      })
-  );
-
-  await assert.rejects(client.getDesktopPricing(), (error) => {
-    assert.equal(error.code, "BACKEND_RESPONSE_INVALID");
-    assert.equal(error.status, 502);
-    assert.equal(error.details.request_id, "req_pricing_invalid_json");
-    assert.equal(error.details.content_type, "text/html");
-    return true;
-  });
-});
-
 test("authenticated cancellation remains active while the response body is streaming", async (t) => {
   const { client } = createClient(t);
   const externalController = new AbortController();
@@ -391,47 +322,6 @@ test("authenticated cancellation remains active while the response body is strea
 
   await assert.rejects(request, (error) => {
     assert.equal(error.code, "CANCELLED");
-    return true;
-  });
-  assert.equal(calls, 1);
-});
-
-test("public pricing timeout remains active while the response body is streaming", async (t) => {
-  const { client } = createClient(t);
-  const originalSetTimeout = global.setTimeout;
-  global.setTimeout = (callback, milliseconds, ...args) =>
-    originalSetTimeout(callback, milliseconds === 15_000 ? 5 : milliseconds, ...args);
-  t.after(() => {
-    global.setTimeout = originalSetTimeout;
-  });
-  let calls = 0;
-  installFetch(t, async (_url, init) => {
-    calls += 1;
-    return {
-      ok: true,
-      status: 200,
-      headers: new Headers({ "content-type": "application/json" }),
-      text() {
-        return new Promise((resolve, reject) => {
-          const timer = originalSetTimeout(
-            () => resolve('{"enabled":false,"plans":[],"request_id":"req_slow"}'),
-            50
-          );
-          init.signal.addEventListener(
-            "abort",
-            () => {
-              clearTimeout(timer);
-              reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
-            },
-            { once: true }
-          );
-        });
-      },
-    };
-  });
-
-  await assert.rejects(client.getDesktopPricing(), (error) => {
-    assert.equal(error.code, "SERVICE_UNAVAILABLE");
     return true;
   });
   assert.equal(calls, 1);

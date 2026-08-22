@@ -478,101 +478,29 @@ function detectAudioContainer(buffer) {
   return null;
 }
 
-function requiresCloudSttConversion(container) {
-  // Chromium MediaRecorder WebM blobs have been rejected intermittently by the
-  // production decoder even though WebM/Opus is part of the public contract.
-  // Canonicalizing them also finalizes container metadata before multipart
-  // upload. Other documented containers can safely retain their native bytes.
-  return container === "webm" || !CLOUD_STT_FORMATS[container];
-}
-
 /**
- * Normalize audio for VoiceLab Cloud STT uploads.
- * Chromium WebM recordings and unknown containers are converted to a canonical
- * 16 kHz mono PCM WAV. Other documented containers are passed through.
+ * Describe a Desktop STT upload without changing its bytes. The Desktop API
+ * inspects and normalizes the recording server-side; MIME and file extension
+ * are deliberately only hints.
  */
-async function prepareCloudSttAudio(input, options = {}) {
-  const hintExt = (options.hintExt || "").replace(/^\./, "").toLowerCase();
-  let buffer = null;
-  let inputPath = null;
-  let tempInputPath = null;
-
-  if (typeof input === "string") {
-    inputPath = input;
-    buffer = fs.readFileSync(inputPath);
-  } else {
-    buffer = Buffer.isBuffer(input) ? input : Buffer.from(input);
-  }
-
-  // Only the bytes may authorize passthrough. A filename extension is merely an
-  // FFmpeg input hint and must never decide the MIME type sent to VoiceLab.
+function prepareDesktopSttAudio(input, options = {}) {
+  const buffer = Buffer.isBuffer(input) ? input : Buffer.from(input);
   const detected = detectAudioContainer(buffer);
-  const passthrough = detected && CLOUD_STT_FORMATS[detected];
-  if (passthrough && !requiresCloudSttConversion(detected)) {
-    return {
-      buffer,
-      fileName: `audio.${passthrough.ext}`,
-      contentType: passthrough.contentType,
-      converted: false,
-    };
-  }
-
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "voicelab-stt-"));
-  try {
-    fs.chmodSync(tempDir, 0o700);
-  } catch {
-    // Windows ACLs are authoritative; chmod may be unsupported.
-  }
-  const inExt = detected === "webm" ? "webm" : detected === "flac" ? "flac" : hintExt || "webm";
-  tempInputPath = inputPath || path.join(tempDir, `input.${inExt}`);
-  const tempWavPath = path.join(tempDir, "output.wav");
-
-  try {
-    if (!inputPath) {
-      fs.writeFileSync(tempInputPath, buffer, { mode: 0o600 });
-    }
-    const outputFd = fs.openSync(tempWavPath, "wx", 0o600);
-    fs.closeSync(outputFd);
-    await convertToWav(tempInputPath, tempWavPath, { sampleRate: 16000, channels: 1 });
-    const wavBuffer = fs.readFileSync(tempWavPath);
-    return {
-      buffer: wavBuffer,
-      fileName: "audio.wav",
-      contentType: "audio/wav",
-      converted: true,
-    };
-  } finally {
-    try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    } catch {
-      // ignore cleanup errors
-    }
-  }
-}
-
-function getAudioDurationSeconds(inputPath) {
-  return new Promise((resolve, reject) => {
-    const processHandle = spawn(getFFmpegPath(), ["-hide_banner", "-i", inputPath]);
-    let stderr = "";
-    processHandle.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-      if (stderr.length > 64 * 1024) stderr = stderr.slice(-64 * 1024);
-    });
-    processHandle.on("error", reject);
-    processHandle.on("close", () => {
-      const match = stderr.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
-      if (!match) {
-        reject(new Error("Audio duration could not be measured"));
-        return;
-      }
-      const duration = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
-      if (!Number.isFinite(duration) || duration <= 0) {
-        reject(new Error("Audio duration is invalid"));
-        return;
-      }
-      resolve(duration);
-    });
-  });
+  const detectedFormat = detected ? CLOUD_STT_FORMATS[detected] : null;
+  const hintedContentType = String(options.contentType || "")
+    .split(";", 1)[0]
+    .trim()
+    .toLowerCase();
+  const hintedFormat = Object.values(CLOUD_STT_FORMATS).find(
+    (format) => format.contentType === hintedContentType
+  );
+  const format = detectedFormat || hintedFormat;
+  return {
+    buffer,
+    fileName: format ? `audio.${format.ext}` : "audio.bin",
+    contentType: format?.contentType || "application/octet-stream",
+    detectedContainer: detected,
+  };
 }
 
 module.exports = {
@@ -585,8 +513,6 @@ module.exports = {
   computeFloat32RMS,
   mergeAudioSegments,
   detectAudioContainer,
-  requiresCloudSttConversion,
-  prepareCloudSttAudio,
-  getAudioDurationSeconds,
+  prepareDesktopSttAudio,
   clearCache,
 };

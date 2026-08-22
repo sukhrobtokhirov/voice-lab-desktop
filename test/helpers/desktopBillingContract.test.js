@@ -13,19 +13,17 @@ function handlerBlock(source, channel) {
   return source.slice(start, end === -1 ? source.length : end);
 }
 
-test("desktop billing reads public pricing and authenticated subscription only", () => {
+test("desktop billing reads only authenticated desktop usage", () => {
   const client = read("src/helpers/voiceLabApiClient.js");
   const ipc = read("src/helpers/ipcHandlers.js");
-  const pricing = handlerBlock(ipc, "desktop-pricing");
   const subscription = handlerBlock(ipc, "desktop-subscription");
   const openBilling = handlerBlock(ipc, "open-voicelab-billing");
 
-  assert.match(client, /DESKTOP_PRICING_PATH/);
   assert.match(client, /DESKTOP_USAGE_PATH/);
-  assert.match(client, /async getDesktopPricing\(\)/);
   assert.match(client, /async getDesktopUsage\(/);
-  assert.doesNotMatch(client, /billing\/desktop\/polar\/checkout/);
-  assert.match(pricing, /getDesktopPricing/);
+  assert.doesNotMatch(client, /DESKTOP_PRICING_PATH|getDesktopPricing|billing\/desktop\//);
+  assert.doesNotMatch(ipc, /this\._handle\("desktop-pricing"/);
+  assert.doesNotMatch(read("preload.js"), /desktopPricing/);
   assert.match(subscription, /getDesktopUsage/);
   assert.match(openBilling, /shell\.openExternal/);
   assert.match(openBilling, /getBillingUrl/);
@@ -89,26 +87,17 @@ test("sidebar and settings show server plan limits and manual refresh", () => {
   const compactDisplay = display.slice(compactStart, compactEnd);
 
   assert.match(sidebar, /<UsageDisplay compact \/>/);
-  assert.doesNotMatch(display, /usage\.plans\[0\]/);
-  assert.match(display, /usage\.plans\.map/);
+  assert.doesNotMatch(display, /usage\.plans|planPrice|formatPrice|priceCompact/);
   assert.match(display, /entitlement\.usageLimitSeconds/);
-  assert.match(display, /entitlement\.maxRequestSeconds/);
-  assert.match(display, /entitlement\?\.usageWindow/);
   assert.match(display, /entitlement\?\.resetsAt/);
-  assert.match(display, /plan\.dailyMinutes/);
-  assert.match(display, /plan\.maxRecordingSeconds/);
+  assert.match(display, /entitlement\.usedSeconds/);
+  assert.match(display, /entitlement\.remainingSeconds/);
   assert.match(display, /usage\.refetch\(\)/);
   assert.match(display, /usage\.hasSubscriptionData && entitlement !== null/);
   assert.match(compactDisplay, /needsEntitlementRefresh[\s\S]*usage\.refetch\(\)/);
-  assert.match(compactDisplay, /desktop\.wallet\.unavailable/);
-  assert.doesNotMatch(
-    compactDisplay,
-    /priceCompact|formatPrice|plans\[0\]|noActivePlan|inactiveDescription/
-  );
-  assert.match(
-    display,
-    /hasAuthoritativeEntitlement &&[\s\S]*usage\.pricingEnabled === true[\s\S]*usage\.plans\.length > 0/
-  );
+  assert.match(compactDisplay, /desktop\.wallet\.noActivePlan/);
+  assert.match(compactDisplay, /desktop\.wallet\.choosePlan/);
+  assert.doesNotMatch(display, /hourlyLimit|remainingHourCompact|usedThisHour|remainingThisHour/);
   assert.match(display, /disabled=\{!usage\.billingAvailable \|\| usage\.checkoutLoading\}/);
   assert.match(hook, /DESKTOP_USAGE_UPDATED_EVENT/);
   assert.match(hook, /subscriptionRequests\.get\(accountKey\)/);
@@ -149,12 +138,7 @@ test("every locale contains the desktop subscription and plan labels", () => {
       "checking",
       "choosePlan",
       "dailyLimit",
-      "hourlyLimit",
-      "remainingHourCompact",
-      "usedThisHour",
-      "remainingThisHour",
       "resetsOn",
-      "maxRecording",
       "refresh",
     ]) {
       assert.equal(typeof messages.desktop?.wallet?.[key], "string", `${locale}: ${key}`);
