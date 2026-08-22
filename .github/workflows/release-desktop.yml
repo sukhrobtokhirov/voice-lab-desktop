@@ -310,6 +310,7 @@ jobs:
   build-windows:
     name: Build Windows x64 privately
     needs: [validate-release, test-gate]
+    if: ${{ vars.ENABLE_WINDOWS_RELEASE == 'true' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -415,7 +416,16 @@ jobs:
   promote-release:
     name: Atomically promote verified release
     needs: [validate-release, test-gate, build-macos, build-linux, build-windows]
-    if: ${{ success() }}
+    if: >-
+      ${{
+        always() &&
+        needs.validate-release.result == 'success' &&
+        needs.test-gate.result == 'success' &&
+        needs.build-macos.result == 'success' &&
+        needs.build-linux.result == 'success' &&
+        ((vars.ENABLE_WINDOWS_RELEASE == 'true' && needs.build-windows.result == 'success') ||
+         (vars.ENABLE_WINDOWS_RELEASE != 'true' && needs.build-windows.result == 'skipped'))
+      }}
     runs-on: ubuntu-latest
     environment: desktop-release-production
     permissions:
@@ -441,6 +451,7 @@ jobs:
           node scripts/release-contract.js promote \
             --tag "${{ needs.validate-release.outputs.tag }}" \
             --source-sha "${{ needs.validate-release.outputs.source_sha }}" \
+            --include-windows "${{ vars.ENABLE_WINDOWS_RELEASE == 'true' }}" \
             --dir staged-release
 
       - name: Publish one complete release
@@ -448,6 +459,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.validate-release.outputs.tag }}
           VERSION: ${{ needs.validate-release.outputs.version }}
+          WINDOWS_ENABLED: ${{ vars.ENABLE_WINDOWS_RELEASE == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -468,11 +480,16 @@ jobs:
 
           mapfile -t assets < <(find staged-release -maxdepth 1 -type f -print | sort)
           test "${#assets[@]}" -gt 0
+          release_scope="macOS arm64/x64 and Linux x64"
+          if [ "$WINDOWS_ENABLED" = "true" ]; then
+            release_scope="$release_scope, and Windows x64"
+          fi
+
           gh release create "$TAG" "${assets[@]}" \
             --draft \
             --verify-tag \
             --title "VoiceLab Desktop $VERSION" \
-            --notes "Verified macOS arm64/x64, Linux x64, and Windows x64 release."
+            --notes "Verified $release_scope release."
           release_created=1
 
           expected_count="${#assets[@]}"

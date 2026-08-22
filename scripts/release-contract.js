@@ -7,12 +7,13 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const PACKAGE = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
 const LOCK = JSON.parse(fs.readFileSync(path.join(ROOT, "package-lock.json"), "utf8"));
-const TARGETS = [
+const CORE_TARGETS = [
   ["macos", "arm64"],
   ["macos", "x64"],
   ["linux", "x64"],
-  ["windows", "x64"],
 ];
+const WINDOWS_TARGET = ["windows", "x64"];
+const TARGETS = [...CORE_TARGETS, WINDOWS_TARGET];
 const TEXT_EXTENSIONS = new Set([".json", ".yml", ".yaml", ".txt", ".js", ".cjs", ".mjs"]);
 const SECRET_ASSIGNMENT =
   /(?:AISHA_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|OPENROUTER_API_KEY|GROQ_API_KEY|GOOGLE_CLIENT_SECRET|AWS_SECRET_ACCESS_KEY|AZURE_OPENAI_API_KEY|DATABASE_URL|DJANGO_SECRET_KEY|JWT_SECRET)\s*[=:]\s*["']?(?!["']?(?:\s|$))[^\s,"'}]+/i;
@@ -42,6 +43,14 @@ function requireArg(options, name) {
   const value = options[name];
   if (!value) die(`--${name} is required`);
   return value;
+}
+
+function booleanArg(options, name, fallback = false) {
+  const value = options[name];
+  if (value === undefined) return fallback;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  die(`--${name} must be true or false`);
 }
 
 function validateVersionContract(tag) {
@@ -98,7 +107,8 @@ function walk(root) {
     const current = queue.pop();
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       const fullPath = path.join(current, entry.name);
-      if (entry.isSymbolicLink()) die(`symbolic link is not allowed in release output: ${fullPath}`);
+      if (entry.isSymbolicLink())
+        die(`symbolic link is not allowed in release output: ${fullPath}`);
       if (entry.isDirectory()) queue.push(fullPath);
       if (entry.isFile()) files.push(fullPath);
     }
@@ -151,7 +161,10 @@ function selectAssets(dist, platform, arch) {
   let installers;
   if (platform === "macos") {
     installers = entries.filter((entry) => /\.(dmg|zip)$/i.test(entry));
-    if (!installers.some((entry) => /\.dmg$/i.test(entry)) || !installers.some((entry) => /\.zip$/i.test(entry))) {
+    if (
+      !installers.some((entry) => /\.dmg$/i.test(entry)) ||
+      !installers.some((entry) => /\.zip$/i.test(entry))
+    ) {
       die(`macOS ${arch} requires both DMG and ZIP artifacts`);
     }
   } else if (platform === "linux") {
@@ -183,7 +196,8 @@ function findPackageMarker(dist, platform, arch) {
   );
   for (const markerPath of markers) {
     const marker = JSON.parse(fs.readFileSync(markerPath, "utf8"));
-    const expectedPlatform = platform === "macos" ? "darwin" : platform === "windows" ? "win32" : "linux";
+    const expectedPlatform =
+      platform === "macos" ? "darwin" : platform === "windows" ? "win32" : "linux";
     if (marker.platform !== expectedPlatform || marker.arch !== arch) continue;
     if (marker.version !== PACKAGE.version || marker.schema !== 1) {
       die(`invalid package verification marker: ${markerPath}`);
@@ -211,7 +225,12 @@ function packageArtifacts(options) {
   const dist = path.resolve(requireArg(options, "dist"));
   const out = path.resolve(requireArg(options, "out"));
   validateVersionContract(tag);
-  if (!TARGETS.some(([candidatePlatform, candidateArch]) => candidatePlatform === platform && candidateArch === arch)) {
+  if (
+    !TARGETS.some(
+      ([candidatePlatform, candidateArch]) =>
+        candidatePlatform === platform && candidateArch === arch
+    )
+  ) {
     die(`unexpected target ${platform}-${arch}`);
   }
   if (!/^[0-9a-f]{40}$/i.test(sourceSha)) die("source SHA is invalid");
@@ -220,13 +239,14 @@ function packageArtifacts(options) {
   scanSecrets(dist);
   const marker = findPackageMarker(dist, platform, arch);
   const assets = selectAssets(dist, platform, arch);
-  const metadata = assets.find((asset) => path.basename(asset) === expectedMetadata(platform, arch));
+  const metadata = assets.find(
+    (asset) => path.basename(asset) === expectedMetadata(platform, arch)
+  );
   if (updaterVersion(metadata) !== PACKAGE.version) {
     die(`updater metadata version must equal ${PACKAGE.version}`);
   }
 
-  const signatureVerified =
-    platform === "linux" || process.env.VOICELAB_SIGNATURE_VERIFIED === "1";
+  const signatureVerified = platform === "linux" || process.env.VOICELAB_SIGNATURE_VERIFIED === "1";
   const notarizationVerified =
     platform !== "macos" || process.env.VOICELAB_NOTARIZATION_VERIFIED === "1";
   if (!signatureVerified) die(`${platform}-${arch} signature verification was not attested`);
@@ -265,9 +285,13 @@ function promote(options) {
   validateVersionContract(tag);
   scanSecrets(dir);
 
+  // Fail closed for callers that have not explicitly opted out of Windows.
+  const includeWindows = booleanArg(options, "include-windows", true);
+  const releaseTargets = includeWindows ? TARGETS : CORE_TARGETS;
+
   const allArtifacts = new Map();
   const attestations = [];
-  for (const [platform, arch] of TARGETS) {
+  for (const [platform, arch] of releaseTargets) {
     const attestationPath = path.join(dir, `attestation-${platform}-${arch}.json`);
     if (!fs.existsSync(attestationPath)) die(`missing target attestation: ${platform}-${arch}`);
     const attestation = JSON.parse(fs.readFileSync(attestationPath, "utf8"));
@@ -299,12 +323,9 @@ function promote(options) {
     attestations.push({ platform, arch, file: path.basename(attestationPath) });
   }
 
-  for (const metadataName of [
-    "latest-arm64-mac.yml",
-    "latest-x64-mac.yml",
-    "latest-linux.yml",
-    "latest.yml",
-  ]) {
+  for (const metadataName of new Set(
+    releaseTargets.map(([platform, arch]) => expectedMetadata(platform, arch))
+  )) {
     const metadataPath = path.join(dir, metadataName);
     if (!fs.existsSync(metadataPath) || updaterVersion(metadataPath) !== PACKAGE.version) {
       die(`missing or stale updater metadata: ${metadataName}`);

@@ -44,6 +44,15 @@ test("all release architectures depend on the complete test gate", () => {
     release,
     /needs: \[validate-release, test-gate, build-macos, build-linux, build-windows\]/
   );
+  assert.match(
+    release,
+    /build-windows:[\s\S]*?if: \$\{\{ vars\.ENABLE_WINDOWS_RELEASE == 'true' \}\}/
+  );
+  assert.match(release, /--include-windows "\$\{\{ vars\.ENABLE_WINDOWS_RELEASE == 'true' \}\}"/);
+  assert.match(
+    release,
+    /vars\.ENABLE_WINDOWS_RELEASE != 'true' && needs\.build-windows\.result == 'skipped'/
+  );
 });
 
 test("release tests rebuild native modules for Node instead of Electron", () => {
@@ -82,6 +91,7 @@ test("manual and tag releases resolve immutable version provenance", () => {
   assert.match(release, /git rev-list -n 1 "\$RELEASE_TAG"/);
   assert.match(release, /release-contract\.js provenance/);
   assert.match(contract, /tag \$\{tag\} must equal v\$\{PACKAGE\.version\}/);
+  assert.match(contract, /const releaseTargets = includeWindows \? TARGETS : CORE_TARGETS/);
 });
 
 test("promotion stays private until every uploaded asset is counted", () => {
