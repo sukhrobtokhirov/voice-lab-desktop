@@ -5,6 +5,7 @@ const os = require("os");
 const path = require("path");
 const {
   safeArchivePath,
+  safeArchiveSymlinkTarget,
   sha256File,
   verifySha256,
 } = require("../../scripts/lib/download-utils");
@@ -20,6 +21,21 @@ test("archive paths cannot escape the extraction directory", () => {
   assert.throws(() => safeArchivePath(root, "../outside"), /Unsafe archive path/);
   assert.throws(() => safeArchivePath(root, "/absolute"), /Unsafe archive path/);
   assert.throws(() => safeArchivePath(root, "C:\\absolute.exe"), /Unsafe archive path/);
+});
+
+test("archive symlinks may only resolve to relative targets inside the extraction directory", () => {
+  const root = path.join(os.tmpdir(), "voicelab-safe-extract");
+  const safeLink = safeArchiveSymlinkTarget(root, "bundle/libvoice.dylib", "libvoice.1.dylib");
+  assert.equal(safeLink.entryPath, path.join(root, "bundle", "libvoice.dylib"));
+  assert.equal(safeLink.targetPath, path.join(root, "bundle", "libvoice.1.dylib"));
+  assert.throws(
+    () => safeArchiveSymlinkTarget(root, "bundle/libvoice.dylib", "../../outside"),
+    /Unsafe archive path/
+  );
+  assert.throws(
+    () => safeArchiveSymlinkTarget(root, "bundle/libvoice.dylib", "/etc/passwd"),
+    /Unsafe archive link target/
+  );
 });
 
 test("sha256 verification fails closed", () => {
@@ -45,8 +61,5 @@ test("owned sidecar manifest declares and verifies the macOS ARM64 baseline", ()
   if (fs.existsSync(file)) {
     assert.equal(verifyOwnedSidecar(file, "darwin", "arm64", manifest), entry.sha256);
   }
-  assert.throws(
-    () => verifyOwnedSidecar(file, "linux", "x64", manifest),
-    /No owned sidecar hash/
-  );
+  assert.throws(() => verifyOwnedSidecar(file, "linux", "x64", manifest), /No owned sidecar hash/);
 });

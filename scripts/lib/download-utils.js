@@ -243,10 +243,10 @@ function safeArchivePath(destDir, archivePath) {
   const root = path.resolve(destDir);
   const normalized = String(archivePath || "").replace(/\\/g, "/");
   if (
-    !normalized
-    || normalized.startsWith("/")
-    || /^[A-Za-z]:\//.test(normalized)
-    || normalized.split("/").includes("..")
+    !normalized ||
+    normalized.startsWith("/") ||
+    /^[A-Za-z]:\//.test(normalized) ||
+    normalized.split("/").includes("..")
   ) {
     throw new Error(`Unsafe archive path: ${archivePath}`);
   }
@@ -255,6 +255,23 @@ function safeArchivePath(destDir, archivePath) {
     throw new Error(`Archive entry escapes destination: ${archivePath}`);
   }
   return target;
+}
+
+function safeArchiveSymlinkTarget(destDir, entryPath, linkPath) {
+  const normalizedLink = String(linkPath || "").replace(/\\/g, "/");
+  if (!normalizedLink || normalizedLink.startsWith("/") || /^[A-Za-z]:\//.test(normalizedLink)) {
+    throw new Error(`Unsafe archive link target: ${linkPath}`);
+  }
+
+  const normalizedEntry = String(entryPath || "").replace(/\\/g, "/");
+  const targetEntry = path.posix.normalize(
+    path.posix.join(path.posix.dirname(normalizedEntry), normalizedLink)
+  );
+  return {
+    entryPath: safeArchivePath(destDir, normalizedEntry),
+    targetEntryPath: targetEntry,
+    targetPath: safeArchivePath(destDir, targetEntry),
+  };
 }
 
 function zipEntryIsLink(entry) {
@@ -288,6 +305,7 @@ async function extractZip(zipPath, destDir) {
 
 async function extractTarGz(tarPath, destDir) {
   const tar = require("tar");
+  const deferredLinks = new Map();
   fs.mkdirSync(destDir, { recursive: true, mode: 0o700 });
   await tar.x({
     file: tarPath,
@@ -296,12 +314,39 @@ async function extractTarGz(tarPath, destDir) {
     preservePaths: false,
     filter(entryPath, entry) {
       safeArchivePath(destDir, entryPath);
-      if (["SymbolicLink", "Link"].includes(entry?.type)) {
-        throw new Error(`Archive links are not allowed: ${entryPath}`);
+      if (entry?.type === "Link") {
+        throw new Error(`Archive hard links are not allowed: ${entryPath}`);
+      }
+      if (entry?.type === "SymbolicLink") {
+        const safeLink = safeArchiveSymlinkTarget(destDir, entryPath, entry.linkpath);
+        deferredLinks.set(path.posix.normalize(String(entryPath).replace(/\\/g, "/")), safeLink);
+        return false;
       }
       return true;
     },
   });
+
+  const resolveLinkTarget = (entryPath, seen = new Set()) => {
+    if (seen.has(entryPath)) {
+      throw new Error(`Archive symlink cycle is not allowed: ${entryPath}`);
+    }
+    const link = deferredLinks.get(entryPath);
+    if (!link) return safeArchivePath(destDir, entryPath);
+    seen.add(entryPath);
+    return resolveLinkTarget(link.targetEntryPath, seen);
+  };
+
+  // Materialize safe archive symlinks as regular files. This preserves the
+  // expected library aliases without leaving links in the packaged app or
+  // allowing archive extraction to traverse through a link.
+  for (const [entryPath, link] of deferredLinks) {
+    const sourcePath = resolveLinkTarget(entryPath);
+    if (!fs.statSync(sourcePath, { throwIfNoEntry: false })?.isFile()) {
+      throw new Error(`Archive symlink target is not a regular file: ${link.targetEntryPath}`);
+    }
+    fs.mkdirSync(path.dirname(link.entryPath), { recursive: true, mode: 0o700 });
+    fs.copyFileSync(sourcePath, link.entryPath);
+  }
 }
 
 async function extractArchive(archivePath, destDir) {
@@ -317,7 +362,9 @@ function sha256File(filePath) {
 }
 
 function verifySha256(filePath, expectedSha256) {
-  const expected = String(expectedSha256 || "").trim().toLowerCase();
+  const expected = String(expectedSha256 || "")
+    .trim()
+    .toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(expected)) {
     throw new Error(`Missing or invalid owned sha256 for ${path.basename(filePath)}`);
   }
@@ -408,6 +455,7 @@ module.exports = {
   findBinaryInDir,
   parseArgs,
   safeArchivePath,
+  safeArchiveSymlinkTarget,
   setExecutable,
   sha256File,
   verifySha256,
