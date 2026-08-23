@@ -1,115 +1,93 @@
 <p align="center">
-  <img src="src/assets/logo.svg" alt="VoiceLab" width="120" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="src/assets/voicelab-dark.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="src/assets/voicelab.svg" />
+    <img src="src/assets/voicelab.svg" alt="VoiceLab" width="360" />
+  </picture>
 </p>
 
 <h1 align="center">VoiceLab Desktop</h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat" alt="Platform" />
-  <a href="https://github.com/voicelab-uz/desktop/releases/latest"><img src="https://img.shields.io/github/v/release/voicelab-uz/desktop?style=flat&sort=semver" alt="GitHub release" /></a>
-  <a href="https://github.com/voicelab-uz/desktop/blob/main/LICENSE"><img src="https://img.shields.io/github/license/voicelab-uz/desktop?style=flat" alt="License" /></a>
+  You speak, Voicelab won't miss a word.
 </p>
 
 <p align="center">
-  Desktop dictation for VoiceLab — press a hotkey, speak, and text appears at your cursor.<br/>
-  VoiceLab Cloud speech-to-text through your signed-in account—no API key or local speech model required.
+  <a href="https://github.com/voicelab-uz/desktop/releases/latest"><strong>Download VoiceLab</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://voicelab.uz">VoiceLab website</a>
 </p>
 
 <p align="center">
-  <a href="https://voicelab.uz">Website</a> &middot;
-  <a href="https://github.com/voicelab-uz/desktop/releases/latest">Download</a> &middot;
-  <a href="docs/releasing.md">Releasing</a> &middot;
-  <a href="ADAPTATION.md">Adaptation notes</a>
+  <a href="https://github.com/voicelab-uz/desktop/releases/latest"><img src="https://img.shields.io/github/v/release/voicelab-uz/desktop?display_name=tag&sort=semver" alt="Latest release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/voicelab-uz/desktop" alt="MIT license" /></a>
 </p>
 
 ---
 
+VoiceLab Desktop records your speech and sends it to the VoiceLab API for transcription. Sign in with your VoiceLab account, speak, and use the result in your work.
+
 ## Download
 
-| Platform | File |
-| -------- | ---- |
-| macOS (Apple Silicon) | [`VoiceLab-*-arm64-mac.dmg`](https://github.com/voicelab-uz/desktop/releases/latest) |
-| macOS (Intel) | [`VoiceLab-*-x64-mac.dmg`](https://github.com/voicelab-uz/desktop/releases/latest) |
-| Windows (x64) | Temporarily unavailable; Windows signing is not configured yet |
-| Linux (x64) | [`VoiceLab-*-linux-x64.AppImage`](https://github.com/voicelab-uz/desktop/releases/latest) |
-| Linux packages | `.deb`, `.rpm`, and `.tar.gz` files on the release page |
+[**Download the latest version**](https://github.com/voicelab-uz/desktop/releases/latest)
 
-All releases: **[github.com/voicelab-uz/desktop/releases](https://github.com/voicelab-uz/desktop/releases)**
+That link always opens the newest published release—no README update is needed when you publish a new version.
 
-### Install (macOS)
+| Your computer                           | Download                                                                                            |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Mac with Apple Silicon (M1, M2, M3, M4) | [`VoiceLab-*-arm64.dmg`](https://github.com/voicelab-uz/desktop/releases/latest)                    |
+| Mac with Intel                          | [`VoiceLab-*-x64.dmg`](https://github.com/voicelab-uz/desktop/releases/latest)                      |
+| Linux                                   | [`.AppImage`, `.deb`, `.rpm`, or `.tar.gz`](https://github.com/voicelab-uz/desktop/releases/latest) |
+| Windows                                 | Coming soon                                                                                         |
 
-1. Download the `.dmg` for your chip (Apple Silicon vs Intel).
-2. Open the disk image and drag **VoiceLab** into **Applications**.
-3. Open **VoiceLab**. New public release builds are signed and notarized, so macOS should not show the unidentified-developer warning. Older unsigned releases may still require **Open Anyway**. Grant microphone and accessibility permissions when prompted.
-4. On first run, sign in to your **VoiceLab account** in the browser. Dictation starts automatically after authorization; no separate API key is required.
+### Install on macOS
 
-### Share with friends
+1. Download the `.dmg` for your Mac.
+2. Open it and drag **VoiceLab** to **Applications**.
+3. Open VoiceLab, allow microphone and accessibility access when asked, then sign in.
 
-This repo is **public**. Send them:
+### Install on Linux
 
-- Latest release: https://github.com/voicelab-uz/desktop/releases/latest
-- Or the direct installer link for their operating system from that page
+- **AppImage:** make the file executable, then open it.
+- **Ubuntu / Debian:** install the `.deb` file.
+- **Fedora / RHEL:** install the `.rpm` file.
 
-Each person signs in with their own VoiceLab account. You can also share the appropriate installer file directly.
+## What it does
 
-### Install (Windows — coming soon)
+- Records audio from your microphone.
+- Sends it to the VoiceLab API for transcription.
+- Helps you turn speech into text without managing API keys or local speech models.
 
-Windows builds are temporarily disabled until a Windows Authenticode certificate is configured.
+## Run it locally
 
-### Install (Linux)
-
-- **AppImage:** download the `.AppImage`, make it executable, and run it.
-- **Debian/Ubuntu:** download the `.deb` package and install it with your package manager.
-- **Fedora/RHEL:** download the `.rpm` package and install it with your package manager.
-- **Other distributions:** use the `.tar.gz` archive.
-
-On Linux, grant microphone and desktop accessibility permissions through your distribution’s settings when prompted.
-
-## Features
-
-- **Voice dictation** — global hotkey, auto-paste into the focused app
-- **VoiceLab Cloud STT** — authenticated Desktop Dictate operations charged to the account's AI Credit wallet
-- **Notes & meetings** — carry over from the OpenWhispr base (product surface still evolving)
-- **uz / en / ru** UI focus for VoiceLab
-
-## Develop
+You need [Node.js 24+](https://nodejs.org/) and npm.
 
 ```bash
 git clone https://github.com/voicelab-uz/desktop.git
 cd desktop
-cp .env.example .env   # fill values as needed; do not commit .env
-npm install
+cp .env.example .env
+npm ci
 npm run dev
 ```
 
-Requires **Node.js 24+**.
+Keep `.env` private. It is for local configuration and must not be committed.
 
-Useful scripts:
+### Build a local installer
 
-| Command | Purpose |
-| ------- | ------- |
-| `npm run dev` | Electron + Vite development |
-| `npm run build:mac:arm64` | Signed macOS arm64 package (requires the VoiceLab Developer ID identity) |
-| `npm run build:mac:unsigned` | Unsigned local macOS package for UI-only QA; do not install over `/Applications/VoiceLab.app` |
-| `npm run build:win` | Local Windows x64 package |
-| `npm run build:linux` | Local Linux x64 packages |
-| `npm run build:mac:cloud` | Unsigned arm64 build (CI-style) |
+```bash
+# macOS, unsigned local build
+npm run build:mac:unsigned
 
-See [ADAPTATION.md](ADAPTATION.md) for the fork architecture and VoiceLab integration notes.
+# Linux packages
+npm run build:linux
+```
 
-## Releases & auto-update
+Signed public installers are built by GitHub Actions when a maintainer pushes a `vX.Y.Z` tag. The **Download VoiceLab** link above will then automatically point people to that new release.
 
-Tagged versions (`v*.*.*`) publish macOS arm64/x64 and Linux x64 artifacts via GitHub Actions (**Release VoiceLab Desktop**). Windows publishing is temporarily disabled.
+## Help
 
-Details: [docs/releasing.md](docs/releasing.md).
+For a bug or a feature request, please [open an issue](https://github.com/voicelab-uz/desktop/issues).
 
 ## License
 
-[MIT](LICENSE) — free for personal and commercial use.
-
-## Acknowledgments
-
-VoiceLab Desktop is adapted from [OpenWhispr](https://github.com/OpenWhispr/openwhispr).
-
-- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) for speaker diarization
-- [Electron](https://www.electronjs.org/) · [React](https://react.dev/) · [VoiceLab](https://voicelab.uz)
+[MIT](LICENSE)
