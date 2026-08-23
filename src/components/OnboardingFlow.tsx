@@ -310,7 +310,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                 </>
               ) : (
                 <div className="w-full max-w-xl">
-                  <h1 className="text-2xl font-semibold tracking-[-0.025em]">
+                  <h1 className="text-2xl font-semibold tracking-tight">
                     {t("desktop.onboarding.howItWorks.title")}
                   </h1>
                   <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
@@ -391,7 +391,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
               {step === "language-permissions" && (
                 <div className="m-auto w-full max-w-xl px-6 py-8">
                   <div className="text-center">
-                    <h2 className="text-2xl font-semibold leading-tight tracking-[-0.025em]">
+                    <h2 className="text-2xl font-semibold leading-tight tracking-tight">
                       {t("desktop.onboarding.personalize.title")}
                     </h2>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -471,7 +471,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
               {step === "hotkey" && (
                 <div className="m-auto flex w-full max-w-lg flex-col items-center px-6 py-3 text-center">
                   <div>
-                    <h2 className="text-2xl font-semibold leading-tight tracking-[-0.025em]">
+                    <h2 className="text-2xl font-semibold leading-tight tracking-tight">
                       {t("desktop.onboarding.permissions.title")}
                     </h2>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -636,7 +636,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                       </span>
                       <h2
                         id="shortcut-check-title"
-                        className="relative mt-3 text-lg font-semibold tracking-[-0.02em]"
+                        className="relative mt-3 text-lg font-semibold tracking-tight"
                       >
                         {t("desktop.onboarding.permissions.shortcutDetected")}
                       </h2>
@@ -648,7 +648,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                       </kbd>
                       <h2
                         id="shortcut-check-title"
-                        className="mt-3 text-lg font-semibold tracking-[-0.02em]"
+                        className="mt-3 text-lg font-semibold tracking-tight"
                       >
                         {t("desktop.onboarding.permissions.shortcut")}
                       </h2>

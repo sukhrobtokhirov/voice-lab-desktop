@@ -20,13 +20,16 @@ test("publishes completed cloud dictation before the optional preview guard", ()
   );
 });
 
-test("exposes the result only to the control panel and renders it in onboarding", () => {
+test("exposes completed dictation to the control panel and tests onboarding shortcuts locally", () => {
   const preload = read("preload.js");
   const generator = read("scripts/generate-preloads.js");
   const onboarding = read("src/components/OnboardingFlow.tsx");
 
   assert.match(preload, /onDictationComplete: registerListener\(\n[ ]{4}"dictation-complete"/);
   assert.match(generator, /"onDictationComplete",/);
-  assert.match(onboarding, /window\.electronAPI\?\.onDictationComplete\?\.\(\(\{ text \}\) => \{/);
-  assert.match(onboarding, /if \(result\) setTestText\(result\);/);
+  assert.match(generator, /"setShortcutTestMode",/);
+  assert.match(generator, /"onShortcutTested",/);
+  assert.match(onboarding, /window\.electronAPI\?\.setShortcutTestMode\?\.\(true\)/);
+  assert.match(onboarding, /window\.electronAPI\?\.onShortcutTested\?\.\(\(\) => \{/);
+  assert.match(onboarding, /setIsShortcutDetected\(true\)/);
 });

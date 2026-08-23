@@ -77,7 +77,7 @@ export default function WelcomeGreeting({ name, onComplete }: WelcomeGreetingPro
       {greetingVisible && (
         <p
           aria-hidden="true"
-          className={`text-3xl font-semibold tracking-[-0.03em] sm:text-4xl ${
+          className={`text-3xl font-semibold tracking-tight sm:text-4xl ${
             phase === "fading" ? "welcome-greeting-exit" : ""
           }`}
         >

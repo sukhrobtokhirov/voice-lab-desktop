@@ -188,7 +188,7 @@ function MacFnKeycap() {
       className="relative flex h-14 w-14 items-center justify-center rounded-md border border-border bg-muted/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
       aria-label="Fn and Globe key"
     >
-      <span className="absolute right-2 top-1.5 text-[10px] font-semibold leading-none">fn</span>
+      <span className="absolute right-2 top-1.5 text-2xs font-semibold leading-none">fn</span>
       <Globe2 className="mt-3 h-4 w-4 text-muted-foreground" strokeWidth={1.7} />
     </kbd>
   );
