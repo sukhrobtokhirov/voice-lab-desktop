@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Plus,
-  Loader2,
   FolderOpen,
   MoreHorizontal,
   Pencil,
@@ -14,6 +13,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { Button } from "../ui/button";
+import { Skeleton } from "../ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -87,6 +87,30 @@ import { isRegenerableNoteTitle } from "../../helpers/regenerableNoteTitle";
 
 const FOLDER_INPUT_CLASS =
   "w-full h-6 bg-foreground/5 dark:bg-white/5 rounded px-2 text-xs text-foreground outline-none border border-primary/30 focus:border-primary/50";
+
+function NoteListSkeleton() {
+  return (
+    <div className="space-y-2 px-3 py-3" aria-busy="true" aria-label="Loading notes">
+      {[0, 1, 2].map((row) => (
+        <div key={row} className="rounded-md border border-border/40 px-2.5 py-2">
+          <Skeleton className="h-3 w-3/5" />
+          <Skeleton className="mt-2 h-2.5 w-2/5" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NoteEditorSkeleton() {
+  return (
+    <div className="flex-1 p-6" aria-busy="true" aria-label="Loading note">
+      <Skeleton className="h-6 w-2/5" />
+      <Skeleton className="mt-7 h-3 w-full" />
+      <Skeleton className="mt-3 h-3 w-11/12" />
+      <Skeleton className="mt-3 h-3 w-4/5" />
+    </div>
+  );
+}
 
 function makeContentHash(content: string): string {
   return String(content.length) + "-" + content.slice(0, 50);
@@ -818,88 +842,7 @@ export default function PersonalNotesView({
 
           <div className="flex-1 overflow-y-auto">
             {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 size={12} className="animate-spin text-foreground/15" />
-              </div>
-            ) : notes.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 px-4">
-                <svg
-                  className="text-foreground dark:text-white mb-3"
-                  width="40"
-                  height="36"
-                  viewBox="0 0 40 36"
-                  fill="none"
-                >
-                  <rect
-                    x="12"
-                    y="1"
-                    width="20"
-                    height="26"
-                    rx="2"
-                    transform="rotate(5 22 14)"
-                    fill="currentColor"
-                    fillOpacity={0.025}
-                    stroke="currentColor"
-                    strokeOpacity={0.06}
-                  />
-                  <rect
-                    x="8"
-                    y="3"
-                    width="20"
-                    height="26"
-                    rx="2"
-                    fill="currentColor"
-                    fillOpacity={0.04}
-                    stroke="currentColor"
-                    strokeOpacity={0.08}
-                  />
-                  <rect
-                    x="12"
-                    y="9"
-                    width="10"
-                    height="1.5"
-                    rx="0.75"
-                    fill="currentColor"
-                    fillOpacity={0.07}
-                  />
-                  <rect
-                    x="12"
-                    y="13"
-                    width="12"
-                    height="1.5"
-                    rx="0.75"
-                    fill="currentColor"
-                    fillOpacity={0.05}
-                  />
-                  <rect
-                    x="12"
-                    y="17"
-                    width="8"
-                    height="1.5"
-                    rx="0.75"
-                    fill="currentColor"
-                    fillOpacity={0.04}
-                  />
-                </svg>
-                <p className="text-xs text-foreground/50 dark:text-foreground/25 mb-3">
-                  {t("notes.empty.emptyFolder")}
-                </p>
-                <div className="flex flex-col gap-1.5 w-full max-w-36">
-                  <button
-                    onClick={handleNewNote}
-                    className="flex items-center justify-center gap-1.5 h-6 rounded-md bg-primary/8 dark:bg-primary/10 border border-primary/12 dark:border-primary/15 text-xs font-medium text-primary/70 hover:bg-primary/12 hover:text-primary hover:border-primary/20 transition-colors"
-                  >
-                    <Plus size={10} />
-                    {t("notes.empty.createNote")}
-                  </button>
-                  <button
-                    onClick={() => setShowAddNotesDialog(true)}
-                    className="flex items-center justify-center gap-1.5 h-6 rounded-md border border-foreground/8 dark:border-white/8 text-xs text-foreground/40 hover:text-foreground/60 hover:border-foreground/15 hover:bg-foreground/3 dark:hover:bg-white/3 transition-colors"
-                  >
-                    {t("notes.addToFolder.addExisting")}
-                  </button>
-                </div>
-              </div>
+              <NoteListSkeleton />
             ) : (
               notes.map((note) => (
                 <NoteListItem
@@ -923,7 +866,9 @@ export default function PersonalNotesView({
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
-        {editorNote ? (
+        {isLoading ? (
+          <NoteEditorSkeleton />
+        ) : editorNote ? (
           <>
             <NoteEditor
               key={editorNote.id}

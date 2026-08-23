@@ -198,29 +198,51 @@ function LoadingFallback({ message }) {
 
   return (
     <div
-      className="min-h-screen bg-background px-5 py-6 text-foreground"
+      className="h-screen overflow-hidden bg-background text-foreground"
       aria-busy="true"
       aria-label={fallbackMessage || "Loading content"}
     >
       <ConnectionStatus />
-      <div className="mx-auto flex w-full max-w-4xl gap-5">
-        <aside className="hidden w-56 shrink-0 border-r border-border pr-5 sm:block">
-          <Skeleton className="h-8 w-full" />
-          <div className="mt-7 space-y-2">
+      <div className="flex h-full overflow-hidden">
+        <aside className="flex w-64 shrink-0 flex-col border-r border-black/10 bg-white dark:border-white/12 dark:bg-[#171717]">
+          <div className="h-12 shrink-0" />
+          <div className="px-3 pb-4">
+            <Skeleton className="h-8 w-full" />
+          </div>
+          <div className="px-3">
+            <Skeleton className="mb-2 h-3 w-14" />
+            <div className="space-y-0.5">
+              {[0, 1, 2].map((row) => (
+                <Skeleton key={row} className="h-9 w-full" />
+              ))}
+            </div>
+          </div>
+          <div className="mt-auto space-y-3 border-t border-black/10 p-3 dark:border-white/12">
+            <Skeleton className="h-10 w-full" />
             <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-4/5" />
+            <div className="flex items-center gap-2.5 px-2.5">
+              <Skeleton className="h-7 w-7 shrink-0 rounded-full" />
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <Skeleton className="h-3.5 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            </div>
           </div>
         </aside>
-        <main className="min-w-0 flex-1 space-y-4 pt-1">
-          <Skeleton className="h-5 w-32" />
-          {[0, 1, 2].map((row) => (
-            <div key={row} className="rounded-lg border border-border p-4">
-              <Skeleton className="h-4 w-2/5" />
-              <Skeleton className="mt-3 h-3 w-full" />
-              <Skeleton className="mt-2 h-3 w-3/5" />
+        <main className="flex min-w-0 flex-1 flex-col">
+          <div className="h-12 shrink-0 border-b border-black/10 dark:border-white/12" />
+          <div className="flex-1 overflow-hidden px-4 pt-5">
+            <div className="mx-auto max-w-3xl space-y-3">
+              <Skeleton className="h-3 w-16" />
+              {[0, 1, 2].map((row) => (
+                <div key={row} className="rounded-lg border border-border bg-card/50 px-4 py-3.5">
+                  <Skeleton className="h-3.5 w-1/4" />
+                  <Skeleton className="mt-3 h-3 w-full" />
+                  <Skeleton className="mt-2 h-3 w-4/5" />
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
         </main>
       </div>
     </div>
