@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useState } from "react";
 import App from "./App.jsx";
 import AuthenticationStep from "./components/AuthenticationStep.tsx";
 import MeetingNotificationOverlay from "./components/MeetingNotificationOverlay.tsx";
@@ -43,7 +43,6 @@ function MainApp() {
   const [isControlPanelEntering, setIsControlPanelEntering] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [postOnboardingSettingsSection, setPostOnboardingSettingsSection] = useState(undefined);
-  const welcomeShownRef = useRef(false);
 
   const isAgentPanel = window.location.search.includes("agent=true");
   const isControlPanel =
@@ -85,14 +84,8 @@ function MainApp() {
         setShowWelcomeGreeting(false);
       } else {
         setShowOnboarding(false);
-        if (isSignedIn && !welcomeShownRef.current) {
-          welcomeShownRef.current = true;
-          setShowWelcomeGreeting(true);
-        }
       }
     }
-
-    if (!isSignedIn) welcomeShownRef.current = false;
 
     if (isDictationPanel && !resolved) {
       // Keep the dictation overlay hidden during onboarding — OnboardingFlow
@@ -111,7 +104,6 @@ function MainApp() {
       setShowOnboarding(false);
       localStorage.setItem("onboardingCompleted", "true");
       if (isSignedIn) {
-        welcomeShownRef.current = true;
         setShowWelcomeGreeting(true);
       }
     },

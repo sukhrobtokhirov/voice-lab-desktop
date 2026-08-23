@@ -202,7 +202,7 @@
       "microphoneRequired": "需要麥克風存取權限",
       "openSystemSettings": "打開系統設定",
       "systemAudioTitle": "系統音訊",
-      "systemAudioDescription": "讓會議錄音機聽到通話另一方的聲音 — 會議、講座、Podcast。你可以稍後在「設定」中開啟。",
+      "systemAudioDescription": "用於會議音訊。",
       "optional": "可選",
       "recommended": "建議",
       "accessibilityTroubleshooting": "在系統設定 → 輔助使用中，將 VoiceLab 的開關關閉再重新開啟。如果無效，請將 VoiceLab 從清單中移除後重新加入。還是不行？請寄信至 info@voicelab.uz。"

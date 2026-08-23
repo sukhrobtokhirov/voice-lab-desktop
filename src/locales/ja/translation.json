@@ -202,7 +202,7 @@
       "microphoneRequired": "マイクへのアクセスが必要です",
       "openSystemSettings": "システム設定を開く",
       "systemAudioTitle": "システムオーディオ",
-      "systemAudioDescription": "会議レコーダーが通話の相手側の音声（会議、講義、ポッドキャストなど）を聴けるようにします。後から設定で有効にできます。",
+      "systemAudioDescription": "会議の音声用です。",
       "optional": "任意",
       "recommended": "推奨",
       "accessibilityTroubleshooting": "システム設定 → アクセシビリティで、VoiceLabのスイッチをオフにしてから再度オンにしてください。それでもうまくいかない場合は、リストからVoiceLabを削除して再度追加してみてください。それでも解決しませんか？info@voicelab.uz までメールでお問い合わせください。"

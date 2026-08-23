@@ -217,7 +217,7 @@
       "microphoneRequired": "Microphone access required",
       "openSystemSettings": "Open System Settings",
       "systemAudioTitle": "System Audio",
-      "systemAudioDescription": "Lets the meeting recorder hear the other side of your calls — meetings, lectures, podcasts. You can turn this on later in Settings.",
+      "systemAudioDescription": "For meeting audio.",
       "optional": "Optional",
       "recommended": "Recommended",
       "accessibilityTroubleshooting": "In System Settings → Accessibility, switch VoiceLab's toggle off and back on. If that doesn't work, remove VoiceLab from the list and add it back. Still stuck? Email info@voicelab.uz."

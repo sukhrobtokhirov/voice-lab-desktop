@@ -181,7 +181,7 @@
       "microphoneRequired": "Acesso ao microfone necessário",
       "openSystemSettings": "Abrir Configurações do Sistema",
       "systemAudioTitle": "Áudio do Sistema",
-      "systemAudioDescription": "Permite que o gravador de reuniões ouça o outro lado das suas chamadas — reuniões, aulas, podcasts. Você pode ativar depois nas Configurações.",
+      "systemAudioDescription": "Para o áudio de reuniões.",
       "optional": "Opcional",
       "recommended": "Recomendado",
       "accessibilityTroubleshooting": "Em Configurações do Sistema → Acessibilidade, desative o interruptor do VoiceLab e ative-o novamente. Se isso não funcionar, remova o VoiceLab da lista e adicione-o de volta. Ainda com problemas? Envie um e-mail para info@voicelab.uz."

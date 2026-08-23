@@ -58,6 +58,8 @@ test("a newly signed-in user receives a typed greeting before entering the app",
   assert.match(onboarding, /setIntroPhase\("complete"\), 500/);
   assert.match(router, /showWelcomeGreeting/);
   assert.match(router, /<WelcomeGreeting name=\{greetingName\}/);
+  assert.match(router, /const handleOnboardingComplete[\s\S]*setShowWelcomeGreeting\(true\)/);
+  assert.doesNotMatch(router, /welcomeShownRef/);
   assert.match(greeting, /const EMPTY_BEFORE_MS = 500/);
   assert.match(greeting, /characters\.slice\(0, typedLength\)\.join\(""\)/);
   assert.match(greeting, /const EMPTY_AFTER_MS = 500/);
@@ -173,6 +175,9 @@ test("onboarding setup asks only for needed access and checks the shortcut local
   assert.match(onboarding, /permissions\.requestMicPermission/);
   assert.match(onboarding, /needsTextInsertionPermission/);
   assert.match(onboarding, /permissions\.requestAccessibilityPermission/);
+  assert.match(onboarding, /useSystemAudioPermission/);
+  assert.match(onboarding, /canManageSystemAudioInApp\(systemAudio\)/);
+  assert.match(onboarding, /systemAudio\.request/);
   assert.doesNotMatch(onboarding, /requestSystemAudioPermission/);
   assert.match(onboarding, /<HotkeyInput/);
   assert.match(onboarding, /variant="onboarding"/);

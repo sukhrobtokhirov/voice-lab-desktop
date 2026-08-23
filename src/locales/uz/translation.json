@@ -217,7 +217,7 @@
       "microphoneRequired": "Mikrofon ruxsati kerak",
       "openSystemSettings": "Tizim sozlamalarini ochish",
       "systemAudioTitle": "Tizim audiosi",
-      "systemAudioDescription": "Uchrashuv yozuvchisiga qo‘ng‘iroqning ikkinchi tomonini — uchrashuv, ma’ruza va boshqalarni — eshitish imkonini beradi",
+      "systemAudioDescription": "Uchrashuvdagi boshqa tomon ovozi uchun.",
       "optional": "Ixtiyoriy",
       "recommended": "Tavsiya etiladi",
       "accessibilityTroubleshooting": "Tizim sozlamalari → Qulayliklar bo‘limida VoiceLab tugmasini o‘chirib, qayta yoqing. Yordam bermasa, VoiceLab-ni ro‘yxatdan olib tashlab, qayta qo‘shing. Hali ham ishlamasa? info@voicelab.uz ga yozing."

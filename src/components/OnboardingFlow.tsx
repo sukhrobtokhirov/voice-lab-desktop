@@ -6,10 +6,12 @@ import AuthenticationStep from "./AuthenticationStep";
 import { HotkeyInput } from "./ui/HotkeyInput";
 import { useHotkeyRegistration } from "../hooks/useHotkeyRegistration";
 import { usePermissions } from "../hooks/usePermissions";
+import { useSystemAudioPermission } from "../hooks/useSystemAudioPermission";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useAuth } from "../hooks/useAuth";
 import { formatHotkeyLabelForPlatform, getDefaultHotkey } from "../utils/hotkeys";
 import { getPlatform } from "../utils/platform";
+import { canManageSystemAudioInApp } from "../utils/systemAudioAccess";
 import wordmark from "../assets/voicelab.svg";
 import onboardingEndImage from "../assets/bg/3cf7eb296abc1ebbce4daafaf641a4f0.jpg";
 import {
@@ -113,8 +115,10 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const [isShortcutCheckOpen, setIsShortcutCheckOpen] = useState(false);
   const [showPermissionNotice, setShowPermissionNotice] = useState(false);
   const permissions = usePermissions(() => setShowPermissionNotice(true));
+  const systemAudio = useSystemAudioPermission();
   const { registerHotkey, isRegistering } = useHotkeyRegistration();
   const { isSignedIn } = useAuth();
+  const shouldShowSystemAudioPermission = canManageSystemAudioInApp(systemAudio);
 
   useEffect(() => {
     if (step !== "hotkey") return undefined;
@@ -502,8 +506,22 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                             },
                           ]
                         : []),
+                      ...(shouldShowSystemAudioPermission
+                        ? [
+                            {
+                              id: "system-audio",
+                              icon: Monitor,
+                              title: t("onboarding.permissions.systemAudioTitle"),
+                              description: t("onboarding.permissions.systemAudioDescription"),
+                              granted: systemAudio.granted,
+                              request: systemAudio.request,
+                              pending: systemAudio.isChecking,
+                            },
+                          ]
+                        : []),
                     ].map((permission, index) => {
                       const Icon = permission.icon;
+                      const isPending = permission.pending ?? false;
                       return (
                         <div
                           key={permission.id}
@@ -539,8 +557,11 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                                 ? t("desktop.onboarding.permissions.granted")
                                 : t("desktop.onboarding.permissions.allow")
                             }`}
-                            disabled={permission.granted}
-                            onClick={permission.granted ? undefined : permission.request}
+                            aria-busy={isPending || undefined}
+                            disabled={permission.granted || isPending}
+                            onClick={
+                              permission.granted || isPending ? undefined : permission.request
+                            }
                             className={`relative ml-auto h-6 w-10 shrink-0 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default ${
                               permission.granted
                                 ? "border-foreground bg-foreground"

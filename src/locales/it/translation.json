@@ -202,7 +202,7 @@
       "microphoneRequired": "Accesso al microfono richiesto",
       "openSystemSettings": "Apri Impostazioni di Sistema",
       "systemAudioTitle": "Audio di Sistema",
-      "systemAudioDescription": "Permette al registratore delle riunioni di sentire l'altro lato delle tue chiamate — riunioni, lezioni, podcast. Puoi attivarlo più tardi nelle Impostazioni.",
+      "systemAudioDescription": "Per l’audio delle riunioni.",
       "optional": "Facoltativo",
       "recommended": "Consigliato",
       "accessibilityTroubleshooting": "In Impostazioni di Sistema → Accessibilità, disattiva l'interruttore di VoiceLab e riattivalo. Se non funziona, rimuovi VoiceLab dall'elenco e aggiungilo di nuovo. Ancora problemi? Scrivi a info@voicelab.uz."

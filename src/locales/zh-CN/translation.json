@@ -202,7 +202,7 @@
       "microphoneRequired": "需要麦克风访问权限",
       "openSystemSettings": "打开系统设置",
       "systemAudioTitle": "系统音频",
-      "systemAudioDescription": "让会议录音机听到通话另一方的声音 — 会议、讲座、播客。你可以稍后在“设置”中开启。",
+      "systemAudioDescription": "用于会议音频。",
       "optional": "可选",
       "recommended": "推荐",
       "accessibilityTroubleshooting": "在系统设置 → 辅助功能中，将 VoiceLab 的开关关闭再重新打开。如果无效，请将 VoiceLab 从列表中移除后重新添加。还是不行？请发邮件至 info@voicelab.uz。"

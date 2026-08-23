@@ -202,7 +202,7 @@
       "microphoneRequired": "Se requiere acceso al micrófono",
       "openSystemSettings": "Abrir Ajustes del Sistema",
       "systemAudioTitle": "Audio del Sistema",
-      "systemAudioDescription": "Permite que el grabador de reuniones escuche al resto de participantes de tus llamadas: reuniones, clases, pódcasts. Puedes activarlo más tarde en Ajustes.",
+      "systemAudioDescription": "Para el audio de reuniones.",
       "optional": "Opcional",
       "recommended": "Recomendado",
       "accessibilityTroubleshooting": "En Configuración del Sistema → Accesibilidad, desactiva el interruptor de VoiceLab y vuelve a activarlo. Si eso no funciona, elimina VoiceLab de la lista y añádelo de nuevo. ¿Sigues con problemas? Escribe a info@voicelab.uz."
