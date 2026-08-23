@@ -1,8 +1,9 @@
 import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Calendar, Loader2, LogIn, Monitor, Video } from "lucide-react";
+import { Calendar, LogIn, Monitor, Video } from "lucide-react";
 import { Button } from "./ui/button";
 import { cn } from "./lib/utils";
+import { Skeleton } from "./ui/skeleton";
 import type { CalendarEvent } from "../types/calendar";
 import { formatUpcomingDateGroup } from "../utils/dateFormatting";
 import { useSystemAudioPermission } from "../hooks/useSystemAudioPermission";
@@ -84,8 +85,14 @@ export default function UpcomingMeetings({ events, isLoading }: UpcomingMeetings
 
       {/* Loading state */}
       {isLoading && (
-        <div className="flex items-center justify-center gap-2 py-6">
-          <Loader2 size={14} className="animate-spin text-primary" />
+        <div className="space-y-2" aria-busy="true" aria-label="Loading meetings">
+          {[0, 1, 2].map((row) => (
+            <div key={row} className="rounded-md border border-border/40 px-3 py-2.5">
+              <Skeleton className="h-3 w-1/3" />
+              <Skeleton className="mt-3 h-3.5 w-full" />
+              <Skeleton className="mt-2 h-3 w-2/3" />
+            </div>
+          ))}
         </div>
       )}
 

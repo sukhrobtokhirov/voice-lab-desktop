@@ -43,6 +43,7 @@ import MeetingRecordingMount from "./MeetingRecordingMount";
 import MeetingRecordingPill from "./notes/MeetingRecordingPill";
 import WindowControls from "./WindowControls";
 import ConnectionStatus from "./ConnectionStatus";
+import { Skeleton } from "./ui/skeleton";
 
 import { getCachedPlatform } from "../utils/platform";
 import {
@@ -79,19 +80,16 @@ const ChatView = React.lazy(() => import("./chat/ChatView"));
 const CommandSearch = React.lazy(() => import("./CommandSearch"));
 
 function PanelLoadingFallback() {
-  const { t } = useTranslation();
-  const loadingLabel = t("common.loading");
-
   return (
-    <div
-      className="flex min-h-48 w-full items-center justify-center"
-      role="status"
-      aria-label={loadingLabel}
-    >
-      <div className="flex items-center gap-3 rounded-full border border-border/60 bg-card/80 px-4 py-2 text-sm text-muted-foreground shadow-sm">
-        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#e55347]" />
-        <span className="break-words">{loadingLabel}</span>
-      </div>
+    <div className="w-full space-y-4 px-4 pt-4" aria-busy="true" aria-label="Loading content">
+      <Skeleton className="h-5 w-36" />
+      {[0, 1, 2].map((row) => (
+        <div key={row} className="rounded-lg border border-border p-4">
+          <Skeleton className="h-4 w-1/3" />
+          <Skeleton className="mt-3 h-3 w-full" />
+          <Skeleton className="mt-2 h-3 w-2/3" />
+        </div>
+      ))}
     </div>
   );
 }

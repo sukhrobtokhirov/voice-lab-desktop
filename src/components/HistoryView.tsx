@@ -1,7 +1,8 @@
 import { Fragment, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
-import { Loader2, Sparkles, Cloud, X, Mic, Trash2, Archive } from "lucide-react";
+import { Sparkles, Cloud, X, Mic, Trash2, Archive } from "lucide-react";
+import { Skeleton } from "./ui/skeleton";
 import TranscriptionItem from "./ui/TranscriptionItem";
 import type { TranscriptionItem as TranscriptionItemType } from "../types/electron";
 import { formatHotkeyLabel, parseHotkeyList } from "../utils/hotkeys";
@@ -29,6 +30,20 @@ interface HistoryViewProps {
   onRetryTranscription: (id: number, options?: { isRecover?: boolean }) => Promise<void>;
   showDiscarded: boolean;
   onToggleDiscarded: () => void;
+}
+
+function TranscriptionHistorySkeleton() {
+  return (
+    <div className="space-y-1.5" aria-busy="true" aria-label="Loading transcriptions">
+      {[0, 1, 2, 3].map((row) => (
+        <div key={row} className="rounded-lg border border-border bg-card/50 px-4 py-3.5">
+          <Skeleton className="h-3.5 w-1/4" />
+          <Skeleton className="mt-3 h-3 w-full" />
+          <Skeleton className="mt-2 h-3 w-4/5" />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function HistoryView({
@@ -186,12 +201,7 @@ export default function HistoryView({
               </div>
             )}
             {isLoading && history.length === 0 ? (
-              <div className="rounded-lg border border-border bg-card/50 dark:bg-card/60 backdrop-blur-sm">
-                <div className="flex items-center justify-center gap-2 py-8">
-                  <Loader2 size={14} className="animate-spin text-primary" />
-                  <span className="text-sm text-muted-foreground">{t("controlPanel.loading")}</span>
-                </div>
-              </div>
+              <TranscriptionHistorySkeleton />
             ) : history.length === 0 ? (
               <div className="rounded-lg border border-border bg-card/50 dark:bg-card/60 backdrop-blur-sm">
                 <div className="flex flex-col items-center justify-center py-16 px-4">

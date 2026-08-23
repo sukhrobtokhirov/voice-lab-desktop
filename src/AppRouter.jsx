@@ -6,6 +6,7 @@ import TranscriptionPreviewOverlay from "./components/TranscriptionPreviewOverla
 import UpdateNotificationOverlay from "./components/UpdateNotificationOverlay.tsx";
 import WindowControls from "./components/WindowControls.tsx";
 import { Card, CardContent } from "./components/ui/card.tsx";
+import { Skeleton } from "./components/ui/skeleton.tsx";
 import { useAuth } from "./hooks/useAuth";
 import { useTheme } from "./hooks/useTheme";
 import ConnectionStatus from "./components/ConnectionStatus";
@@ -196,14 +197,31 @@ function LoadingFallback({ message }) {
   const fallbackMessage = message || null;
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
+    <div
+      className="min-h-screen bg-background px-5 py-6 text-foreground"
+      aria-busy="true"
+      aria-label={fallbackMessage || "Loading content"}
+    >
       <ConnectionStatus />
-      <div className="flex flex-col items-center gap-5" role="status" aria-live="polite">
-        {fallbackMessage && (
-          <p className="text-sm font-medium text-muted-foreground dark:text-foreground/60 tracking-tight">
-            {fallbackMessage}
-          </p>
-        )}
+      <div className="mx-auto flex w-full max-w-4xl gap-5">
+        <aside className="hidden w-56 shrink-0 border-r border-border pr-5 sm:block">
+          <Skeleton className="h-8 w-full" />
+          <div className="mt-7 space-y-2">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-9 w-4/5" />
+          </div>
+        </aside>
+        <main className="min-w-0 flex-1 space-y-4 pt-1">
+          <Skeleton className="h-5 w-32" />
+          {[0, 1, 2].map((row) => (
+            <div key={row} className="rounded-lg border border-border p-4">
+              <Skeleton className="h-4 w-2/5" />
+              <Skeleton className="mt-3 h-3 w-full" />
+              <Skeleton className="mt-2 h-3 w-3/5" />
+            </div>
+          ))}
+        </main>
       </div>
     </div>
   );
