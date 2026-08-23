@@ -6,8 +6,6 @@
   </picture>
 </p>
 
-<h1 align="center">VoiceLab Desktop</h1>
-
 <p align="center">
   You speak, Voicelab won't miss a word.
 </p>
