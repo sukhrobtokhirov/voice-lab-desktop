@@ -49,6 +49,7 @@ test("helper build workflows install runtime dependencies and link AT-SPI correc
     "utf8"
   );
 
+  assert.match(meetingAec, /node-version: "24"/);
   assert.match(meetingAec, /Install Node dependencies[\s\S]*?npm ci --ignore-scripts/);
   assert.match(linuxTextMonitor, /pkg-config --cflags --libs atspi-2 gobject-2\.0 glib-2\.0/);
 });
