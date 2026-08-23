@@ -39,6 +39,20 @@ test("workflow actions use a Node 24-compatible runtime", () => {
   assert.match(localMsvcAction, /VsDevCmd\.bat/);
 });
 
+test("helper build workflows install runtime dependencies and link AT-SPI correctly", () => {
+  const meetingAec = fs.readFileSync(
+    path.join(workflowsDir, "build-meeting-aec-helper.yml"),
+    "utf8"
+  );
+  const linuxTextMonitor = fs.readFileSync(
+    path.join(workflowsDir, "build-linux-text-monitor.yml"),
+    "utf8"
+  );
+
+  assert.match(meetingAec, /Install Node dependencies[\s\S]*?npm ci --ignore-scripts/);
+  assert.match(linuxTextMonitor, /pkg-config --cflags --libs atspi-2 gobject-2\.0 glib-2\.0/);
+});
+
 test("release builds are private and promotion is the only writer", () => {
   assert.match(release, /permissions:\n\s+contents: read/);
   assert.match(release, /build-macos:[\s\S]*?--publish never/);
