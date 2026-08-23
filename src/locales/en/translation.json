@@ -745,10 +745,10 @@
   "auth": {
     "cloudNotConfigured": "Cloud Not Configured",
     "desktopTitle": "Sign in to VoiceLab",
-    "desktopBrowserHint": "Sign-in opens in your browser only when you choose it and returns here when complete.",
+    "desktopBrowserHint": "Finish signing in in your browser. VoiceLab will return here automatically.",
     "desktopWaiting": "Complete sign-in in your browser. VoiceLab Flow will continue automatically.",
     "desktopSecurity": "Your password never enters the desktop app. The refresh token is encrypted in a private local credential store.",
-    "desktopOpenBrowser": "Sign in",
+    "desktopOpenBrowser": "Continue in browser",
     "desktopOpening": "Opening secure sign-in…",
     "desktopReopen": "Open browser again",
     "desktopCancel": "Cancel sign-in",
@@ -3168,8 +3168,8 @@
     "onboarding": {
       "progress": {
         "welcome": "Welcome",
-        "mode": "Account",
-        "language-permissions": "Language",
+        "mode": "How it works",
+        "language-permissions": "Personalize",
         "hotkey": "Shortcut",
         "ready": "Ready"
       },
@@ -3177,6 +3177,41 @@
         "title": "VoiceLab",
         "description": "Turn spoken words into text wherever you work. When you are ready, sign in to set up dictation.",
         "preferences": "VoiceLab starts with your system appearance and language."
+      },
+      "howItWorks": {
+        "title": "How it works",
+        "description": "Speak naturally. VoiceLab turns your words into text in the app you’re using.",
+        "speak": "Speak",
+        "voicelab": "VoiceLab",
+        "text": "Text"
+      },
+      "personalize": {
+        "title": "Personalize",
+        "description": "Choose the language and appearance you prefer.",
+        "language": "Language",
+        "appearance": "Appearance",
+        "light": "Light",
+        "dark": "Dark",
+        "system": "System"
+      },
+      "permissions": {
+        "title": "Set up your voice",
+        "description": "Allow access and choose the key that starts dictation.",
+        "microphone": "Microphone",
+        "microphoneDescription": "Needed to hear your dictation.",
+        "textInsertion": "Text insertion",
+        "textInsertionDescription": "Needed to type the result in other apps.",
+        "allow": "Allow",
+        "granted": "Allowed",
+        "shortcut": "Shortcut",
+        "try": "Try it",
+        "tryPlaceholder": "Change the shortcut, then press or hold it and speak here.",
+        "tryHint": "Like the shortcut? Continue when you’re ready.",
+        "holdToDictate": "Hold {{shortcut}} to dictate.",
+        "pressShortcut": "Press the shortcut once to check it.",
+        "shortcutDetected": "Shortcut detected. You’re all set.",
+        "required": "Allow the required access to continue.",
+        "permissionNotice": "You can allow this later in Settings."
       },
       "advanced": {
         "title": "Advanced setup",
@@ -3208,6 +3243,7 @@
       },
       "ready": {
         "title": "Ready",
+        "greeting": "Hello, {{name}}",
         "account": "Your VoiceLab account is connected.",
         "local": "Local transcription is selected.",
         "provider": "Open Advanced settings to connect your provider.",

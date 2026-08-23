@@ -3168,8 +3168,8 @@
     "onboarding": {
       "progress": {
         "welcome": "Accueillir",
-        "mode": "Compte",
-        "language-permissions": "Langue",
+        "mode": "Comment ça marche",
+        "language-permissions": "Personnaliser",
         "hotkey": "Raccourci",
         "ready": "Prêt"
       },
@@ -3177,6 +3177,41 @@
         "title": "Dictée VoiceLab",
         "description": "Transformez vos paroles en texte où que vous travailliez. Quand vous serez prêt, connectez-vous pour configurer la dictée.",
         "preferences": "VoiceLab utilise d’abord l’apparence et la langue de votre système."
+      },
+      "howItWorks": {
+        "title": "Comment ça marche",
+        "description": "Parlez naturellement. VoiceLab transforme vos paroles en texte dans l’application que vous utilisez.",
+        "speak": "Parlez",
+        "voicelab": "VoiceLab",
+        "text": "Texte"
+      },
+      "personalize": {
+        "title": "À votre image",
+        "description": "Choisissez la langue et l’apparence qui vous conviennent.",
+        "language": "Langue",
+        "appearance": "Apparence",
+        "light": "Clair",
+        "dark": "Sombre",
+        "system": "Système"
+      },
+      "permissions": {
+        "title": "Configurez votre voix",
+        "description": "Autorisez l’accès et choisissez la touche qui lance la dictée.",
+        "microphone": "Microphone",
+        "microphoneDescription": "Nécessaire pour entendre votre dictée.",
+        "textInsertion": "Saisie de texte",
+        "textInsertionDescription": "Nécessaire pour écrire le résultat dans d’autres apps.",
+        "allow": "Autoriser",
+        "granted": "Autorisé",
+        "shortcut": "Raccourci",
+        "try": "Essayer",
+        "tryPlaceholder": "Changez le raccourci, appuyez ou maintenez-le, puis parlez ici.",
+        "tryHint": "Le raccourci vous convient ? Continuez quand vous voulez.",
+        "holdToDictate": "Maintenez {{shortcut}} pour dicter.",
+        "pressShortcut": "Appuyez une fois sur le raccourci pour le vérifier.",
+        "shortcutDetected": "Raccourci détecté. Tout est prêt.",
+        "required": "Autorisez l’accès nécessaire pour continuer.",
+        "permissionNotice": "Vous pourrez l’autoriser plus tard dans Réglages."
       },
       "advanced": {
         "title": "Configuration avancée",
@@ -3208,6 +3243,7 @@
       },
       "ready": {
         "title": "Prêt",
+        "greeting": "Bonjour, {{name}}",
         "account": "Votre compte VoiceLab est connecté.",
         "local": "La transcription locale est sélectionnée.",
         "provider": "Ouvrez les paramètres avancés pour connecter votre fournisseur.",

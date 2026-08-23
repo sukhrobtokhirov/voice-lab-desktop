@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import App from "./App.jsx";
 import AuthenticationStep from "./components/AuthenticationStep.tsx";
 import MeetingNotificationOverlay from "./components/MeetingNotificationOverlay.tsx";
@@ -9,6 +9,7 @@ import { Card, CardContent } from "./components/ui/card.tsx";
 import { useAuth } from "./hooks/useAuth";
 import { useTheme } from "./hooks/useTheme";
 import ConnectionStatus from "./components/ConnectionStatus";
+import WelcomeGreeting from "./components/WelcomeGreeting.tsx";
 import { hasOnboardingProgress } from "./constants/onboarding";
 
 const ControlPanel = React.lazy(() => import("./components/ControlPanel.tsx"));
@@ -35,11 +36,14 @@ export default function AppRouter() {
 }
 
 function MainApp() {
-  const { isSignedIn, isGracePeriodOnly, isLoaded: authLoaded } = useAuth();
+  const { isSignedIn, isGracePeriodOnly, isLoaded: authLoaded, user } = useAuth();
 
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showWelcomeGreeting, setShowWelcomeGreeting] = useState(false);
+  const [isControlPanelEntering, setIsControlPanelEntering] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [postOnboardingSettingsSection, setPostOnboardingSettingsSection] = useState(undefined);
+  const welcomeShownRef = useRef(false);
 
   const isAgentPanel = window.location.search.includes("agent=true");
   const isControlPanel =
@@ -78,10 +82,17 @@ function MainApp() {
     if (isControlPanel) {
       if (!resolved) {
         setShowOnboarding(true);
+        setShowWelcomeGreeting(false);
       } else {
         setShowOnboarding(false);
+        if (isSignedIn && !welcomeShownRef.current) {
+          welcomeShownRef.current = true;
+          setShowWelcomeGreeting(true);
+        }
       }
     }
+
+    if (!isSignedIn) welcomeShownRef.current = false;
 
     if (isDictationPanel && !resolved) {
       // Keep the dictation overlay hidden during onboarding — OnboardingFlow
@@ -92,13 +103,32 @@ function MainApp() {
     setIsLoading(false);
   }, [authLoaded, isControlPanel, isDictationPanel, isGracePeriodOnly, isSignedIn]);
 
-  const handleOnboardingComplete = (options) => {
-    if (options?.openSettings) {
-      setPostOnboardingSettingsSection("transcription");
-    }
-    setShowOnboarding(false);
-    localStorage.setItem("onboardingCompleted", "true");
-  };
+  const handleOnboardingComplete = useCallback(
+    (options) => {
+      if (options?.openSettings) {
+        setPostOnboardingSettingsSection("transcription");
+      }
+      setShowOnboarding(false);
+      localStorage.setItem("onboardingCompleted", "true");
+      if (isSignedIn) {
+        welcomeShownRef.current = true;
+        setShowWelcomeGreeting(true);
+      }
+    },
+    [isSignedIn]
+  );
+
+  const handleWelcomeGreetingComplete = useCallback(() => {
+    setShowWelcomeGreeting(false);
+    setIsControlPanelEntering(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isControlPanelEntering) return undefined;
+
+    const timer = window.setTimeout(() => setIsControlPanelEntering(false), 1000);
+    return () => window.clearTimeout(timer);
+  }, [isControlPanelEntering]);
 
   if (isAgentPanel) {
     return (
@@ -121,6 +151,11 @@ function MainApp() {
         <OnboardingFlow onComplete={handleOnboardingComplete} />
       </Suspense>
     );
+  }
+
+  if (isControlPanel && showWelcomeGreeting && isSignedIn) {
+    const greetingName = user?.name?.trim() || user?.email?.split("@")[0] || "VoiceLab";
+    return <WelcomeGreeting name={greetingName} onComplete={handleWelcomeGreetingComplete} />;
   }
 
   // Returning signed-out users still receive the account gate before the
@@ -156,7 +191,9 @@ function MainApp() {
 
   return isControlPanel ? (
     <Suspense fallback={<LoadingFallback />}>
-      <ControlPanel initialSettingsSection={postOnboardingSettingsSection} />
+      <div className={isControlPanelEntering ? "app-content-in" : undefined}>
+        <ControlPanel initialSettingsSection={postOnboardingSettingsSection} />
+      </div>
     </Suspense>
   ) : (
     <App />

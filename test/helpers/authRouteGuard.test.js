@@ -29,14 +29,40 @@ test("browser sign-in starts only after an explicit user action", () => {
   assert.doesNotMatch(authentication, /autoStarted|void start\(\)/);
   assert.doesNotMatch(authentication, /authErrorMessage|authErrorRequestId|authErrorFields/);
   assert.match(authentication, /hasStarted/);
+  assert.match(authentication, /role="status" aria-live="polite"/);
+  assert.match(authentication, /t\("auth\.desktopWaiting"\)/);
 });
 
-test("onboarding returns to account authorization when its session is lost", () => {
+test("onboarding requires account authorization on its final step", () => {
   const onboarding = read("src/components/OnboardingFlow.tsx");
 
   assert.match(onboarding, /useAuth\(\)/);
-  assert.match(onboarding, /authLoaded && !isSignedIn && stepIndex > authStepIndex/);
-  assert.match(onboarding, /go\("mode"\)/);
+  assert.match(onboarding, /step === "ready" \? \(/);
+  assert.match(onboarding, /\{!isSignedIn && \(/);
+  assert.match(onboarding, /<AuthenticationStep onAuthComplete=\{\(\) => \{\}\} \/>/);
+  assert.match(onboarding, /3cf7eb296abc1ebbce4daafaf641a4f0\.jpg/);
+  assert.match(onboarding, /grid flex-1 grid-cols-\[minmax\(0,0\.86fr\)_minmax\(0,1\.14fr\)\]/);
+  assert.match(onboarding, /className="h-full w-full object-cover"/);
+  assert.match(onboarding, /absolute left-1\/2 top-8 z-10 flex -translate-x-1\/2/);
+  assert.match(onboarding, /Make every word sound like it belongs\./);
+});
+
+test("a newly signed-in user receives a typed greeting before entering the app", () => {
+  const onboarding = read("src/components/OnboardingFlow.tsx");
+  const router = read("src/AppRouter.jsx");
+  const greeting = read("src/components/WelcomeGreeting.tsx");
+  const styles = read("src/index.css");
+
+  assert.match(onboarding, /introPhase, setIntroPhase/);
+  assert.match(onboarding, /setIntroPhase\("mark"\), 500/);
+  assert.match(onboarding, /setIntroPhase\("complete"\), 500/);
+  assert.match(router, /showWelcomeGreeting/);
+  assert.match(router, /<WelcomeGreeting name=\{greetingName\}/);
+  assert.match(greeting, /const EMPTY_BEFORE_MS = 500/);
+  assert.match(greeting, /characters\.slice\(0, typedLength\)\.join\(""\)/);
+  assert.match(greeting, /const EMPTY_AFTER_MS = 500/);
+  assert.match(styles, /@keyframes welcome-greeting-exit/);
+  assert.match(styles, /animation: app-content-in 1000ms/);
 });
 
 test("macOS accessibility action performs one explicit native request", () => {
@@ -110,13 +136,88 @@ test("onboarding navigation uses an existing translated common action", () => {
   assert.doesNotMatch(onboarding, /t\("common\.continue"\)/);
 });
 
-test("onboarding replaces an unsupported automatic language and keeps actions visible", () => {
+test("onboarding navigation actions keep one consistent footprint", () => {
+  const onboarding = read("src/components/OnboardingFlow.tsx");
+  const sharedNavClass = /className=\{ONBOARDING_NAV_BUTTON_CLASS\}/g;
+
+  assert.match(onboarding, /const ONBOARDING_NAV_BUTTON_CLASS = "min-w-28"/);
+  assert.equal((onboarding.match(sharedNavClass) || []).length, 5);
+});
+
+test("onboarding personalizes interface language and appearance without the settings context", () => {
   const onboarding = read("src/components/OnboardingFlow.tsx");
 
-  assert.match(onboarding, /item\.value !== "auto" && !item\.disabled/);
-  assert.match(onboarding, /setLanguage\(fallback\.value\)/);
+  assert.match(onboarding, /ONBOARDING_UI_LANGUAGES/);
+  assert.match(onboarding, /value: "uz"/);
+  assert.match(onboarding, /value: "en"/);
+  assert.match(onboarding, /value: "ru"/);
+  assert.match(onboarding, /onClick=\{\(\) => setUiLanguage\(language\.value\)\}/);
+  assert.match(onboarding, /onClick=\{\(\) => setTheme\(option\.value\)\}/);
+  assert.doesNotMatch(onboarding, /useSettings\(\)/);
+  assert.doesNotMatch(onboarding, /WindowControls/);
+  assert.doesNotMatch(onboarding, /<header/);
   assert.match(onboarding, /<footer className="[^"]*shrink-0/);
   assert.match(onboarding, /<main className="[^"]*min-h-0/);
+});
+
+test("onboarding setup asks only for needed access and checks the shortcut locally", () => {
+  const onboarding = read("src/components/OnboardingFlow.tsx");
+  const windowManager = read("src/helpers/windowManager.js");
+  const ipcHandlers = read("src/helpers/ipcHandlers.js");
+  const main = read("main.js");
+  const hotkeyInput = read("src/components/ui/HotkeyInput.tsx");
+  const overlayPreload = read("preloads/overlay.js");
+  const controlPanelPreload = read("preloads/control-panel.js");
+
+  assert.match(onboarding, /platform === "darwin" \? "Fn" : getDefaultHotkey\(\)/);
+  assert.match(onboarding, /permissions\.requestMicPermission/);
+  assert.match(onboarding, /needsTextInsertionPermission/);
+  assert.match(onboarding, /permissions\.requestAccessibilityPermission/);
+  assert.doesNotMatch(onboarding, /requestSystemAudioPermission/);
+  assert.match(onboarding, /<HotkeyInput/);
+  assert.match(onboarding, /variant="onboarding"/);
+  assert.doesNotMatch(onboarding, /function ShortcutKeyboard/);
+  assert.match(hotkeyInput, /function MacFnKeycap/);
+  assert.match(hotkeyInput, /<Globe2/);
+  assert.match(onboarding, /role="switch"/);
+  assert.match(onboarding, /isShortcutCheckOpen/);
+  assert.match(onboarding, /<ConfettiBurst \/>/);
+  assert.match(onboarding, /setupPermissionsGranted && isShortcutDetected/);
+  assert.match(onboarding, /setDictationKey\(value\)/);
+  assert.match(onboarding, /onShortcutTested/);
+  assert.match(onboarding, /setShortcutTestMode/);
+  assert.doesNotMatch(onboarding, /onDictationComplete/);
+  assert.doesNotMatch(onboarding, /Textarea/);
+  assert.match(onboarding, /<main className="[^"]*overflow-hidden/);
+  assert.doesNotMatch(onboarding, /overflow-y-auto/);
+  assert.doesNotMatch(onboarding, /variant="hero"/);
+
+  assert.match(windowManager, /isShortcutTestMode\(\)[\s\S]*notifyShortcutTested\(currentHotkey\)/);
+  assert.match(windowManager, /shortcut-test-detected/);
+  assert.match(windowManager, /sender !== this\.controlPanelWindow\.webContents/);
+  assert.match(ipcHandlers, /setShortcutTestMode\(enabled, event\.sender\)/);
+  assert.match(main, /isShortcutTestMode\(\)[\s\S]*notifyShortcutTested/);
+  assert.match(controlPanelPreload, /const preloadCapabilities = new Set\([^;]*"onShortcutTested"/);
+  assert.match(
+    controlPanelPreload,
+    /const preloadCapabilities = new Set\([^;]*"setShortcutTestMode"/
+  );
+  assert.doesNotMatch(
+    overlayPreload,
+    /const preloadCapabilities = new Set\([^;]*"setShortcutTestMode"/
+  );
+  assert.doesNotMatch(
+    overlayPreload,
+    /const preloadCapabilities = new Set\([^;]*"onShortcutTested"/
+  );
+});
+
+test("global error screen keeps internal error details out of the interface", () => {
+  const boundary = read("src/components/ErrorBoundary.tsx");
+
+  assert.match(boundary, /componentDidCatch\(error: Error/);
+  assert.doesNotMatch(boundary, /this\.state\.error\.message/);
+  assert.doesNotMatch(boundary, /<pre/);
 });
 
 test("settings keeps both interface and transcription language selectors reachable", () => {

@@ -33,10 +33,10 @@ That link always opens the newest published release—no README update is needed
 
 | Your computer                           | Download                                                                                            |
 | --------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Mac with Apple Silicon (M1, M2, M3, M4) | [`VoiceLab-*-arm64.dmg`](https://github.com/voicelab-uz/desktop/releases/latest)                    |
-| Mac with Intel                          | [`VoiceLab-*-x64.dmg`](https://github.com/voicelab-uz/desktop/releases/latest)                      |
-| Linux                                   | [`.AppImage`, `.deb`, `.rpm`, or `.tar.gz`](https://github.com/voicelab-uz/desktop/releases/latest) |
-| Windows                                 | Coming soon                                                                                         |
+| Mac with Apple Silicon (M1, M2, M3, M4, M5) | [`.dmg`](https://github.com/voicelab-uz/desktop/releases/latest)                      |
+| Mac with Intel                              | [`.dmg`](https://github.com/voicelab-uz/desktop/releases/latest)                      |
+| Linux                                       | [`.AppImage`](https://github.com/voicelab-uz/desktop/releases/latest) / [`.deb`](https://github.com/voicelab-uz/desktop/releases/latest) / [`.rpm`](https://github.com/voicelab-uz/desktop/releases/latest) / [`.tar.gz`](https://github.com/voicelab-uz/desktop/releases/latest) |
+| Windows                                     | Coming soon                                                                                         |
 
 ### Install on macOS
 

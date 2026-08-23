@@ -3168,8 +3168,8 @@
     "onboarding": {
       "progress": {
         "welcome": "Willkommen",
-        "mode": "Konto",
-        "language-permissions": "Sprache",
+        "mode": "So funktioniert es",
+        "language-permissions": "Anpassen",
         "hotkey": "Abkürzung",
         "ready": "Bereit"
       },
@@ -3177,6 +3177,41 @@
         "title": "VoiceLab Flow",
         "description": "Verwandeln Sie gesprochene Worte überall bei der Arbeit in Text. Wenn Sie bereit sind, melden Sie sich an, um das Diktat einzurichten.",
         "preferences": "VoiceLab übernimmt zunächst das Erscheinungsbild und die Sprache Ihres Systems."
+      },
+      "howItWorks": {
+        "title": "So funktioniert es",
+        "description": "Sprechen Sie ganz natürlich. VoiceLab wandelt Ihre Worte in der App, die Sie gerade nutzen, in Text um.",
+        "speak": "Sprechen",
+        "voicelab": "VoiceLab",
+        "text": "Text"
+      },
+      "personalize": {
+        "title": "Auf Sie zugeschnitten",
+        "description": "Wählen Sie Sprache und Erscheinungsbild.",
+        "language": "Sprache",
+        "appearance": "Darstellung",
+        "light": "Hell",
+        "dark": "Dunkel",
+        "system": "System"
+      },
+      "permissions": {
+        "title": "Richte deine Stimme ein",
+        "description": "Erlaube den Zugriff und wähle die Taste für Diktate.",
+        "microphone": "Mikrofon",
+        "microphoneDescription": "Damit VoiceLab Ihr Diktat hören kann.",
+        "textInsertion": "Texteingabe",
+        "textInsertionDescription": "Damit das Ergebnis in anderen Apps eingegeben werden kann.",
+        "allow": "Erlauben",
+        "granted": "Erlaubt",
+        "shortcut": "Kurzbefehl",
+        "try": "Ausprobieren",
+        "tryPlaceholder": "Ändern Sie den Kurzbefehl, drücken oder halten Sie ihn und sprechen Sie hier.",
+        "tryHint": "Gefällt Ihnen der Kurzbefehl? Fahren Sie fort, wenn Sie bereit sind.",
+        "holdToDictate": "Halte {{shortcut}} gedrückt, um zu diktieren.",
+        "pressShortcut": "Drücke die Taste einmal, um sie zu prüfen.",
+        "shortcutDetected": "Tastenkürzel erkannt. Alles bereit.",
+        "required": "Erlauben Sie den nötigen Zugriff, um fortzufahren.",
+        "permissionNotice": "Sie können dies später in den Einstellungen erlauben."
       },
       "advanced": {
         "title": "Erweiterte Einrichtung",
@@ -3208,6 +3243,7 @@
       },
       "ready": {
         "title": "Bereit",
+        "greeting": "Hallo, {{name}}",
         "account": "Ihr VoiceLab-Konto ist verbunden.",
         "local": "Lokale Transkription ist ausgewählt.",
         "provider": "Öffnen Sie die erweiterten Einstellungen, um eine Verbindung zu Ihrem Anbieter herzustellen.",

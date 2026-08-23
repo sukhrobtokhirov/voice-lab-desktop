@@ -7,17 +7,16 @@ interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState {
   hasError: boolean;
-  error: Error | null;
 }
 
 export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false };
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
+    return { hasError: true };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
@@ -37,11 +36,6 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
               {i18n.t("errorBoundary.title")}
             </h1>
             <p className="text-sm text-muted-foreground">{i18n.t("errorBoundary.description")}</p>
-            {this.state.error && (
-              <pre className="text-xs text-destructive bg-surface-1 rounded-md p-3 overflow-auto max-h-32 text-left">
-                {this.state.error.message}
-              </pre>
-            )}
             <button
               onClick={this.handleReload}
               className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"

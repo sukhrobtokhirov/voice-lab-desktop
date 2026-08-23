@@ -280,6 +280,7 @@ const fullElectronAPI = {
   cleanupApp: () => ipcRenderer.invoke("cleanup-app"),
   updateHotkey: (hotkey) => ipcRenderer.invoke("update-hotkey", hotkey),
   setHotkeyListeningMode: (enabled) => ipcRenderer.invoke("set-hotkey-listening-mode", enabled),
+  setShortcutTestMode: (enabled) => ipcRenderer.invoke("set-shortcut-test-mode", enabled),
   getHotkeyModeInfo: () => ipcRenderer.invoke("get-hotkey-mode-info"),
   getHyprlandConfigStatus: () => ipcRenderer.invoke("get-hyprland-config-status"),
   startWindowDrag: () => ipcRenderer.invoke("start-window-drag"),
@@ -557,6 +558,11 @@ const fullElectronAPI = {
     const listener = (_event, key) => callback?.(key);
     ipcRenderer.on("dictation-key-active", listener);
     return () => ipcRenderer.removeListener("dictation-key-active", listener);
+  },
+  onShortcutTested: (callback) => {
+    const listener = (_event, key) => callback?.(key);
+    ipcRenderer.on("shortcut-test-detected", listener);
+    return () => ipcRenderer.removeListener("shortcut-test-detected", listener);
   },
   onWindowsPushToTalkUnavailable: registerListener("windows-ptt-unavailable"),
   onLinuxPttPermissionDenied: registerListener(

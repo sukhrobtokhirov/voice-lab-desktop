@@ -3168,8 +3168,8 @@
     "onboarding": {
       "progress": {
         "welcome": "Bem-vindo",
-        "mode": "Conta",
-        "language-permissions": "Linguagem",
+        "mode": "Como funciona",
+        "language-permissions": "Personalizar",
         "hotkey": "Atalho",
         "ready": "Preparar"
       },
@@ -3177,6 +3177,41 @@
         "title": "Ditado VoiceLab",
         "description": "Transforme palavras faladas em texto onde você trabalha. Quando estiver pronto, entre para configurar o ditado.",
         "preferences": "O VoiceLab começa com a aparência e o idioma do seu sistema."
+      },
+      "howItWorks": {
+        "title": "Como funciona",
+        "description": "Fale naturalmente. O VoiceLab transforma suas palavras em texto no aplicativo que você está usando.",
+        "speak": "Fale",
+        "voicelab": "VoiceLab",
+        "text": "Texto"
+      },
+      "personalize": {
+        "title": "Deixe do seu jeito",
+        "description": "Escolha o idioma e a aparência que preferir.",
+        "language": "Idioma",
+        "appearance": "Aparência",
+        "light": "Claro",
+        "dark": "Escuro",
+        "system": "Sistema"
+      },
+      "permissions": {
+        "title": "Configure sua voz",
+        "description": "Permita o acesso e escolha a tecla que inicia o ditado.",
+        "microphone": "Microfone",
+        "microphoneDescription": "Necessário para ouvir seu ditado.",
+        "textInsertion": "Inserção de texto",
+        "textInsertionDescription": "Necessário para digitar o resultado em outros apps.",
+        "allow": "Permitir",
+        "granted": "Permitido",
+        "shortcut": "Atalho",
+        "try": "Experimentar",
+        "tryPlaceholder": "Mude o atalho, pressione ou segure-o e fale aqui.",
+        "tryHint": "Gostou do atalho? Continue quando quiser.",
+        "holdToDictate": "Mantenha {{shortcut}} pressionado para ditar.",
+        "pressShortcut": "Pressione o atalho uma vez para verificá-lo.",
+        "shortcutDetected": "Atalho detectado. Está tudo pronto.",
+        "required": "Permita o acesso necessário para continuar.",
+        "permissionNotice": "Você pode permitir isso depois em Configurações."
       },
       "advanced": {
         "title": "Configuração avançada",
@@ -3208,6 +3243,7 @@
       },
       "ready": {
         "title": "Preparar",
+        "greeting": "Olá, {{name}}",
         "account": "Sua conta VoiceLab está conectada.",
         "local": "A transcrição local está selecionada.",
         "provider": "Abra Configurações avançadas para conectar seu provedor.",

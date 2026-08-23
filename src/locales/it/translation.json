@@ -3168,8 +3168,8 @@
     "onboarding": {
       "progress": {
         "welcome": "Benvenuto",
-        "mode": "Account",
-        "language-permissions": "Lingua",
+        "mode": "Come funziona",
+        "language-permissions": "Personalizza",
         "hotkey": "Scorciatoia",
         "ready": "Pronto"
       },
@@ -3177,6 +3177,41 @@
         "title": "VoiceLab dettato",
         "description": "Trasforma le parole pronunciate in testo ovunque lavori. Quando sei pronto, accedi per configurare la dettatura.",
         "preferences": "VoiceLab inizia con l’aspetto e la lingua del tuo sistema."
+      },
+      "howItWorks": {
+        "title": "Come funziona",
+        "description": "Parla in modo naturale. VoiceLab trasforma le tue parole in testo nell’app che stai usando.",
+        "speak": "Parla",
+        "voicelab": "VoiceLab",
+        "text": "Testo"
+      },
+      "personalize": {
+        "title": "Fallo tuo",
+        "description": "Scegli la lingua e l’aspetto che preferisci.",
+        "language": "Lingua",
+        "appearance": "Aspetto",
+        "light": "Chiaro",
+        "dark": "Scuro",
+        "system": "Sistema"
+      },
+      "permissions": {
+        "title": "Configura la tua voce",
+        "description": "Consenti l’accesso e scegli il tasto che avvia la dettatura.",
+        "microphone": "Microfono",
+        "microphoneDescription": "Necessario per ascoltare la dettatura.",
+        "textInsertion": "Inserimento testo",
+        "textInsertionDescription": "Necessario per scrivere il risultato in altre app.",
+        "allow": "Consenti",
+        "granted": "Consentito",
+        "shortcut": "Scorciatoia",
+        "try": "Prova",
+        "tryPlaceholder": "Cambia la scorciatoia, premila o tienila premuta e parla qui.",
+        "tryHint": "Ti piace la scorciatoia? Continua quando sei pronto.",
+        "holdToDictate": "Tieni premuto {{shortcut}} per dettare.",
+        "pressShortcut": "Premi una volta la scorciatoia per verificarla.",
+        "shortcutDetected": "Scorciatoia rilevata. È tutto pronto.",
+        "required": "Consenti l’accesso necessario per continuare.",
+        "permissionNotice": "Puoi consentirlo più tardi nelle Impostazioni."
       },
       "advanced": {
         "title": "Configurazione avanzata",
@@ -3208,6 +3243,7 @@
       },
       "ready": {
         "title": "Pronto",
+        "greeting": "Ciao, {{name}}",
         "account": "Il tuo account VoiceLab è collegato.",
         "local": "È selezionata la trascrizione locale.",
         "provider": "Apri Impostazioni avanzate per connettere il tuo provider.",

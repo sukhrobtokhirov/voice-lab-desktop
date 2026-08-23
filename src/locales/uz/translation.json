@@ -747,10 +747,10 @@
   "auth": {
     "cloudNotConfigured": "Cloud Not Configured",
     "desktopTitle": "VoiceLab’ga kiring",
-    "desktopBrowserHint": "Kirish faqat o‘zingiz tanlaganingizda brauzerda ochiladi va tugagach ilovaga qaytadi.",
+    "desktopBrowserHint": "Brauzeringizda kirishni yakunlang. VoiceLab avtomatik ravishda bu yerga qaytadi.",
     "desktopWaiting": "Brauzerda kirishni yakunlang. VoiceLab Flow avtomatik davom etadi.",
     "desktopSecurity": "Parolingiz desktop ilovasiga kiritilmaydi. Refresh token shaxsiy lokal credential omborida shifrlanadi.",
-    "desktopOpenBrowser": "Kirish",
+    "desktopOpenBrowser": "Brauzerda davom etish",
     "desktopOpening": "Xavfsiz kirish ochilmoqda…",
     "desktopReopen": "Brauzerni qayta ochish",
     "desktopCancel": "Kirishni bekor qilish",
@@ -3170,8 +3170,8 @@
     "onboarding": {
       "progress": {
         "welcome": "Boshlash",
-        "mode": "Hisob",
-        "language-permissions": "Til",
+        "mode": "Qanday ishlaydi",
+        "language-permissions": "Moslashtirish",
         "hotkey": "Tugma",
         "ready": "Tayyor"
       },
@@ -3179,6 +3179,41 @@
         "title": "VoiceLab",
         "description": "Qayerda ishlasangiz ham, aytganlaringizni matnga aylantiring. Tayyor bo‘lganingizda diktovni sozlash uchun kiring.",
         "preferences": "VoiceLab tizimingizdagi ko‘rinish va tildan boshlaydi."
+      },
+      "howItWorks": {
+        "title": "Qanday ishlaydi",
+        "description": "Tabiiy gapiring. VoiceLab so‘zlaringizni ishlatayotgan ilovangizda matnga aylantiradi.",
+        "speak": "Gapiring",
+        "voicelab": "VoiceLab",
+        "text": "Matn"
+      },
+      "personalize": {
+        "title": "O‘zingizga moslang",
+        "description": "O‘zingizga qulay til va ko‘rinishni tanlang.",
+        "language": "Til",
+        "appearance": "Ko‘rinish",
+        "light": "Yorug‘",
+        "dark": "Qorong‘i",
+        "system": "Tizim"
+      },
+      "permissions": {
+        "title": "Ovozingizni sozlang",
+        "description": "Ruxsatlarni bering va diktantni boshlaydigan tugmani tanlang.",
+        "microphone": "Mikrofon",
+        "microphoneDescription": "Diktovingizni eshitish uchun kerak.",
+        "textInsertion": "Matn kiritish",
+        "textInsertionDescription": "Natijani boshqa ilovalarga yozish uchun kerak.",
+        "allow": "Ruxsat berish",
+        "granted": "Ruxsat berildi",
+        "shortcut": "Tugma",
+        "try": "Sinab ko‘ring",
+        "tryPlaceholder": "Tugmani o‘zgartiring, so‘ng uni bosib yoki ushlab shu yerda gapiring.",
+        "tryHint": "Tugma sizga yoqsa, davom eting.",
+        "holdToDictate": "Diktant uchun {{shortcut}} tugmasini bosib turing.",
+        "pressShortcut": "Tekshirish uchun tugmani bir marta bosing.",
+        "shortcutDetected": "Tugma aniqlandi. Hammasi tayyor.",
+        "required": "Davom etish uchun kerakli ruxsatlarni bering.",
+        "permissionNotice": "Buni keyin Sozlamalarda ruxsat berishingiz mumkin."
       },
       "advanced": {
         "title": "Qo‘shimcha sozlash",
@@ -3210,6 +3245,7 @@
       },
       "ready": {
         "title": "Tayyor",
+        "greeting": "Salom, {{name}}",
         "account": "VoiceLab hisobingiz ulandi.",
         "local": "Lokal transkripsiya tanlandi.",
         "provider": "Providerni ulash uchun qo‘shimcha sozlamalarni oching.",

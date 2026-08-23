@@ -3168,8 +3168,8 @@
     "onboarding": {
       "progress": {
         "welcome": "いらっしゃいませ",
-        "mode": "アカウント",
-        "language-permissions": "言語",
+        "mode": "仕組み",
+        "language-permissions": "設定",
         "hotkey": "ショートカット",
         "ready": "準備ができて"
       },
@@ -3177,6 +3177,41 @@
         "title": "VoiceLab ディクテート",
         "description": "話した言葉を、作業中のどこでもテキストにします。準備ができたら、サインインして音声入力を設定できます。",
         "preferences": "VoiceLab はシステムの外観と言語をそのまま使って始まります。"
+      },
+      "howItWorks": {
+        "title": "仕組み",
+        "description": "自然に話すだけ。VoiceLab が、使っているアプリ内で言葉をテキストにします。",
+        "speak": "話す",
+        "voicelab": "VoiceLab",
+        "text": "テキスト"
+      },
+      "personalize": {
+        "title": "自分好みに設定",
+        "description": "使いやすい言語と外観を選びます。",
+        "language": "言語",
+        "appearance": "外観",
+        "light": "ライト",
+        "dark": "ダーク",
+        "system": "システム"
+      },
+      "permissions": {
+        "title": "音声入力を設定",
+        "description": "アクセスを許可し、音声入力を始めるキーを選びます。",
+        "microphone": "マイク",
+        "microphoneDescription": "音声入力を聞き取るために必要です。",
+        "textInsertion": "テキスト入力",
+        "textInsertionDescription": "他のアプリに結果を入力するために必要です。",
+        "allow": "許可",
+        "granted": "許可済み",
+        "shortcut": "ショートカット",
+        "try": "試す",
+        "tryPlaceholder": "ショートカットを変更して、押すか長押ししてここで話してください。",
+        "tryHint": "ショートカットが気に入ったら、準備ができたときに続けてください。",
+        "holdToDictate": "{{shortcut}} を長押しして音声入力します。",
+        "pressShortcut": "確認のためショートカットを一度押してください。",
+        "shortcutDetected": "ショートカットを検出しました。準備完了です。",
+        "required": "続けるには必要なアクセスを許可してください。",
+        "permissionNotice": "後で設定から許可できます。"
       },
       "advanced": {
         "title": "高度なセットアップ",
@@ -3208,6 +3243,7 @@
       },
       "ready": {
         "title": "準備ができて",
+        "greeting": "こんにちは、{{name}}さん",
         "account": "VoiceLab アカウントが接続されています。",
         "local": "ローカル転写が選択されています。",
         "provider": "詳細設定を開いてプロバイダーに接続します。",

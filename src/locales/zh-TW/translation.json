@@ -3163,8 +3163,8 @@
     "onboarding": {
       "progress": {
         "welcome": "歡迎",
-        "mode": "帳戶",
-        "language-permissions": "語言",
+        "mode": "運作方式",
+        "language-permissions": "個人化",
         "hotkey": "捷徑",
         "ready": "準備好"
       },
@@ -3172,6 +3172,41 @@
         "title": "VoiceLab 聽寫",
         "description": "在您工作的任何地方，將說出的內容轉為文字。準備好後，登入即可設定聽寫。",
         "preferences": "VoiceLab 預設採用您的系統外觀和語言。"
+      },
+      "howItWorks": {
+        "title": "運作方式",
+        "description": "自然說話即可。VoiceLab 會在您正在使用的應用程式中將語音轉為文字。",
+        "speak": "說話",
+        "voicelab": "VoiceLab",
+        "text": "文字"
+      },
+      "personalize": {
+        "title": "個人化設定",
+        "description": "選擇你喜歡的語言和外觀。",
+        "language": "語言",
+        "appearance": "外觀",
+        "light": "淺色",
+        "dark": "深色",
+        "system": "跟隨系統"
+      },
+      "permissions": {
+        "title": "設定語音輸入",
+        "description": "允許存取並選擇開始聽寫的按鍵。",
+        "microphone": "麥克風",
+        "microphoneDescription": "用來聽取你的語音輸入。",
+        "textInsertion": "文字輸入",
+        "textInsertionDescription": "用來將結果輸入其他應用程式。",
+        "allow": "允許",
+        "granted": "已允許",
+        "shortcut": "快捷鍵",
+        "try": "試試看",
+        "tryPlaceholder": "變更快捷鍵，然後按住或按下它並在這裡說話。",
+        "tryHint": "喜歡這個快捷鍵嗎？準備好後繼續即可。",
+        "holdToDictate": "按住 {{shortcut}} 開始聽寫。",
+        "pressShortcut": "按一下快捷鍵以確認。",
+        "shortcutDetected": "已偵測到快捷鍵。一切就緒。",
+        "required": "請允許所需的存取權以繼續。",
+        "permissionNotice": "你可以稍後在設定中允許。"
       },
       "advanced": {
         "title": "進階設定",
@@ -3203,6 +3238,7 @@
       },
       "ready": {
         "title": "準備好",
+        "greeting": "哈囉，{{name}}",
         "account": "您的 VoiceLab 帳戶已連線。",
         "local": "選擇本地轉錄。",
         "provider": "開啟高級設定以連接您的提供者。",

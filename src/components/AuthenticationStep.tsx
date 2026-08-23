@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUpRight, Loader2, ShieldCheck, X } from "lucide-react";
+import { ArrowUpRight, Loader2, X } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { cancelBrowserSignIn, reopenBrowserSignIn, signInWithSocial } from "../lib/auth";
 import { Button } from "./ui/button";
-import wordmark from "../assets/voicelab.svg";
 
 interface AuthenticationStepProps {
   onAuthComplete: () => void;
@@ -94,22 +93,10 @@ export default function AuthenticationStep({ onAuthComplete }: AuthenticationSte
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <img
-          src={wordmark}
-          alt="VoiceLab"
-          className="mx-auto mb-6 h-7 w-auto max-w-44 dark:invert"
-        />
         <h2 className="text-2xl font-semibold tracking-tight">{t("auth.desktopTitle")}</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           {waiting ? t("auth.desktopWaiting") : t("auth.desktopBrowserHint")}
         </p>
-      </div>
-
-      <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm leading-5 text-muted-foreground">
-        <div className="flex gap-2.5">
-          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-foreground/70" />
-          {t("auth.desktopSecurity")}
-        </div>
       </div>
 
       {error && (
@@ -119,8 +106,12 @@ export default function AuthenticationStep({ onAuthComplete }: AuthenticationSte
       )}
 
       {waiting ? (
-        <div className="grid gap-2.5">
-          <Button className="h-12 w-full rounded-lg" onClick={reopen}>
+        <div className="grid gap-3">
+          <div className="flex justify-center py-0.5" role="status" aria-live="polite">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+            <span className="sr-only">{t("auth.desktopWaiting")}</span>
+          </div>
+          <Button variant="outline" className="h-11 w-full rounded-lg" onClick={reopen}>
             <ArrowUpRight className="h-4 w-4" />
             {t("auth.desktopReopen")}
           </Button>

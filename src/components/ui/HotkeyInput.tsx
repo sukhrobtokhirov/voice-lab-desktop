@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, Trash2 } from "lucide-react";
+import { AlertTriangle, Globe2, Trash2 } from "lucide-react";
 import { formatHotkeyLabel, isGlobeLikeHotkey } from "../../utils/hotkeys";
 import { getPlatform } from "../../utils/platform";
 
@@ -179,7 +179,19 @@ function mapKeyboardEventToHotkey(e: KeyboardEvent): string | null {
 }
 
 export interface HotkeyInputVariant {
-  variant?: "default" | "hero";
+  variant?: "default" | "hero" | "onboarding";
+}
+
+function MacFnKeycap() {
+  return (
+    <kbd
+      className="relative flex h-14 w-14 items-center justify-center rounded-md border border-border bg-muted/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+      aria-label="Fn and Globe key"
+    >
+      <span className="absolute right-2 top-1.5 text-[10px] font-semibold leading-none">fn</span>
+      <Globe2 className="mt-3 h-4 w-4 text-muted-foreground" strokeWidth={1.7} />
+    </kbd>
+  );
 }
 
 export function HotkeyInput({
@@ -470,7 +482,10 @@ export function HotkeyInput({
 
   const displayValue = formatHotkeyLabel(value);
   const isGlobe = isGlobeLikeHotkey(value);
-  const hotkeyParts = value?.includes("+") ? displayValue.split("+") : [];
+  const isOnboarding = variant === "onboarding";
+  const hotkeyParts = value?.includes("+")
+    ? displayValue.split("+").map((part) => part.trim())
+    : [];
 
   // mousedown is prevented so clicking never focuses the container and starts
   // capture; focus/key events are stopped so keyboard use doesn't either.
@@ -496,8 +511,8 @@ export function HotkeyInput({
       </button>
     ) : null;
 
-  // Hero variant: large centered key display for onboarding
-  if (variant === "hero") {
+  // Centered variants are used where the shortcut is the primary action.
+  if (variant === "hero" || variant === "onboarding") {
     return (
       <div
         ref={containerRef}
@@ -511,7 +526,9 @@ export function HotkeyInput({
         onFocus={handleFocus}
         onBlur={handleBlur}
         className={`
-          relative group flex flex-col items-center justify-center py-4 px-5 min-h-28
+          relative group flex flex-col items-center justify-center ${
+            isOnboarding ? "min-h-20 px-3 py-2" : "min-h-28 px-5 py-4"
+          }
           rounded-md border cursor-pointer select-none outline-none
           transition-colors duration-150
           ${
@@ -578,6 +595,8 @@ export function HotkeyInput({
                     </kbd>
                   </React.Fragment>
                 ))
+              ) : isGlobe && isOnboarding && isMac ? (
+                <MacFnKeycap />
               ) : isGlobe ? (
                 <kbd className="px-3 py-1.5 bg-surface-raised border border-border rounded-sm text-lg shadow-sm">
                   🌐

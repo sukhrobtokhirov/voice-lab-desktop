@@ -55,6 +55,7 @@ class WindowManager {
     this._agentAnimationState = null;
     this._panelStartPosition = "bottom-right";
     this._isDictatingToggle = false;
+    this._shortcutTestMode = false;
     this._pendingMeetingNoteNavigation = null;
     this._pendingNoteNavigation = null;
 
@@ -291,6 +292,11 @@ class WindowManager {
 
       const activationMode = this.getActivationMode();
       const currentHotkey = triggeredHotkey || this.hotkeyManager.getCurrentHotkey?.();
+
+      if (this.isShortcutTestMode()) {
+        this.notifyShortcutTested(currentHotkey);
+        return;
+      }
 
       if (
         process.platform === "darwin" &&
@@ -621,6 +627,39 @@ class WindowManager {
     this.hotkeyManager.setListeningMode(enabled);
   }
 
+  setShortcutTestMode(enabled, sender) {
+    if (
+      !this.controlPanelWindow ||
+      this.controlPanelWindow.isDestroyed() ||
+      sender !== this.controlPanelWindow.webContents
+    ) {
+      return { success: false, message: "Shortcut testing is only available during onboarding" };
+    }
+
+    this._shortcutTestMode = enabled === true;
+    return { success: true };
+  }
+
+  isShortcutTestMode() {
+    return (
+      this._shortcutTestMode === true &&
+      this.controlPanelWindow &&
+      !this.controlPanelWindow.isDestroyed()
+    );
+  }
+
+  notifyShortcutTested(hotkey) {
+    if (!this.isShortcutTestMode()) {
+      return false;
+    }
+
+    this.controlPanelWindow.webContents.send(
+      "shortcut-test-detected",
+      typeof hotkey === "string" ? hotkey : ""
+    );
+    return true;
+  }
+
   async initializeHotkey() {
     await this.hotkeyManager.initializeHotkey(this.mainWindow, this.createHotkeyCallback());
   }
@@ -748,6 +787,7 @@ class WindowManager {
 
     this.controlPanelWindow.on("closed", () => {
       clearVisibilityTimer();
+      this._shortcutTestMode = false;
       this.controlPanelWindow = null;
       dockManager.setControlPanelVisible(false);
     });
