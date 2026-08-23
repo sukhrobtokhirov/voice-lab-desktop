@@ -25,6 +25,18 @@ const SECRET_KEYS = [
 
 const SECRET_KEY_SET = new Set(SECRET_KEYS);
 
+function getSystemUiLanguage() {
+  try {
+    const locale = app.getLocale?.();
+    if (locale) return locale;
+  } catch {
+    // app.getLocale is available after Electron is ready. Fall back to the
+    // process locale for early startup and test environments.
+  }
+
+  return process.env.LC_ALL || process.env.LC_MESSAGES || process.env.LANG || "en";
+}
+
 const PERSISTED_KEYS = [
   ...SECRET_KEYS,
   "LOCAL_TRANSCRIPTION_PROVIDER",
@@ -516,7 +528,7 @@ class EnvironmentManager {
   }
 
   getUiLanguage() {
-    return normalizeUiLanguage(this._getKey("UI_LANGUAGE"));
+    return normalizeUiLanguage(this._getKey("UI_LANGUAGE") || getSystemUiLanguage());
   }
 
   saveUiLanguage(language) {

@@ -1222,3 +1222,41 @@ body:has(.agent-overlay-window) #root {
 .dark .rich-text-editor-content p.is-editor-empty:first-child::before {
   color: oklch(0.7 0 0 / 0.2);
 }
+
+@keyframes onboarding-mark-sequence {
+  0% {
+    opacity: 0;
+    transform: scale(1.45);
+    animation-timing-function: ease-out;
+  }
+  23.6842% {
+    opacity: 1;
+    transform: scale(1.5);
+    animation-timing-function: linear;
+  }
+  76.3158% {
+    opacity: 1;
+    transform: scale(1.5);
+    animation-timing-function: ease-in;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+
+@keyframes onboarding-content-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [class*="onboarding-mark"],
+  [class*="onboarding-content"] {
+    animation: none;
+  }
+}

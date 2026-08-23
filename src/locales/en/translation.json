@@ -744,11 +744,11 @@
   },
   "auth": {
     "cloudNotConfigured": "Cloud Not Configured",
-    "desktopTitle": "Sign in to VoiceLab Flow",
-    "desktopBrowserHint": "Secure sign-in opens in your browser and returns here when complete.",
+    "desktopTitle": "Sign in to VoiceLab",
+    "desktopBrowserHint": "Sign-in opens in your browser only when you choose it and returns here when complete.",
     "desktopWaiting": "Complete sign-in in your browser. VoiceLab Flow will continue automatically.",
     "desktopSecurity": "Your password never enters the desktop app. The refresh token is encrypted in a private local credential store.",
-    "desktopOpenBrowser": "Continue in browser",
+    "desktopOpenBrowser": "Sign in",
     "desktopOpening": "Opening secure sign-in…",
     "desktopReopen": "Open browser again",
     "desktopCancel": "Cancel sign-in",
@@ -3174,8 +3174,9 @@
         "ready": "Ready"
       },
       "welcome": {
-        "title": "VoiceLab Flow",
-        "description": "Speak naturally. Your text appears where you need it."
+        "title": "VoiceLab",
+        "description": "Turn spoken words into text wherever you work. When you are ready, sign in to set up dictation.",
+        "preferences": "VoiceLab starts with your system appearance and language."
       },
       "advanced": {
         "title": "Advanced setup",

@@ -24,7 +24,19 @@ const jaPrompts = require("../locales/ja/prompts.json");
 const zhCNPrompts = require("../locales/zh-CN/prompts.json");
 const zhTWPrompts = require("../locales/zh-TW/prompts.json");
 
-const SUPPORTED_UI_LANGUAGES = ["uz", "en", "es", "fr", "de", "pt", "it", "ru", "ja", "zh-CN", "zh-TW"];
+const SUPPORTED_UI_LANGUAGES = [
+  "uz",
+  "en",
+  "es",
+  "fr",
+  "de",
+  "pt",
+  "it",
+  "ru",
+  "ja",
+  "zh-CN",
+  "zh-TW",
+];
 
 function normalizeUiLanguage(language) {
   const candidate = (language || "").trim();
@@ -38,7 +50,7 @@ function normalizeUiLanguage(language) {
 
   // Fall back to base language code (e.g. "en" from "en-US")
   const base = candidate.split("-")[0].split("_")[0].toLowerCase();
-  return SUPPORTED_UI_LANGUAGES.includes(base) ? base : "uz";
+  return SUPPORTED_UI_LANGUAGES.includes(base) ? base : "en";
 }
 
 const i18nMain = i18next.createInstance();
@@ -91,7 +103,13 @@ void i18nMain.init({
       prompts: zhTWPrompts,
     },
   },
-  lng: normalizeUiLanguage(process.env.UI_LANGUAGE || "uz"),
+  lng: normalizeUiLanguage(
+    process.env.UI_LANGUAGE ||
+      process.env.LC_ALL ||
+      process.env.LC_MESSAGES ||
+      process.env.LANG ||
+      "en"
+  ),
   fallbackLng: "en",
   ns: ["translation", "prompts"],
   defaultNS: "translation",

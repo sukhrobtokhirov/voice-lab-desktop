@@ -17,7 +17,7 @@ import { useSettingsStore } from "../stores/settingsStore";
 import { useUsage } from "../hooks/useUsage";
 import { useAuth } from "../hooks/useAuth";
 import type { DesktopLanguageCode, DesktopLanguageProvider } from "../config/desktopLanguages";
-import logoIcon from "../assets/icon.png";
+import wordmark from "../assets/voicelab.svg";
 import {
   ONBOARDING_STEP_KEY,
   ONBOARDING_STEPS,
@@ -30,11 +30,32 @@ interface OnboardingFlowProps {
   onComplete: (options?: { openSettings?: boolean }) => void;
 }
 
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (update: () => void) => void;
+};
+
+function updateWithViewTransition(update: () => void) {
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const startViewTransition = (document as ViewTransitionDocument).startViewTransition;
+
+  if (reducedMotion || !startViewTransition) {
+    update();
+    return;
+  }
+
+  startViewTransition.call(document, update);
+}
+
 export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState<OnboardingStep>(readOnboardingStep);
-  const preferredLanguage = useSettingsStore((state) => state.preferredLanguage) as DesktopLanguageCode;
-  const [hotkey, setHotkey] = useState(() => localStorage.getItem("hotkey") || "CommandOrControl+Shift+Space");
+  const [isIntroVisible, setIsIntroVisible] = useState(true);
+  const preferredLanguage = useSettingsStore(
+    (state) => state.preferredLanguage
+  ) as DesktopLanguageCode;
+  const [hotkey, setHotkey] = useState(
+    () => localStorage.getItem("hotkey") || "CommandOrControl+Shift+Space"
+  );
   const [testText, setTestText] = useState("");
   const permissions = usePermissions();
   const systemAudio = useSystemAudioPermission();
@@ -73,11 +94,21 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     () => getDesktopLanguageOptions(provider, cloudCapabilities),
     [cloudCapabilities, provider]
   );
-  const selectedSupported = languageOptions.some((item) => item.value === preferredLanguage && !item.disabled);
+  const selectedSupported = languageOptions.some(
+    (item) => item.value === preferredLanguage && !item.disabled
+  );
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setIsIntroVisible(false);
+    }
+  }, []);
 
   const go = useCallback((next: OnboardingStep) => {
-    localStorage.setItem(ONBOARDING_STEP_KEY, next);
-    setStep(next);
+    updateWithViewTransition(() => {
+      localStorage.setItem(ONBOARDING_STEP_KEY, next);
+      setStep(next);
+    });
   }, []);
 
   useEffect(() => {
@@ -96,18 +127,14 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     if (step !== "language-permissions" || selectedSupported || usage?.isLoading) return;
     const fallback = languageOptions.find((item) => item.value !== "auto" && !item.disabled);
     if (fallback && fallback.value !== preferredLanguage) setLanguage(fallback.value);
-  }, [
-    languageOptions,
-    preferredLanguage,
-    selectedSupported,
-    setLanguage,
-    step,
-    usage?.isLoading,
-  ]);
+  }, [languageOptions, preferredLanguage, selectedSupported, setLanguage, step, usage?.isLoading]);
 
   const finish = () => {
     const state = useSettingsStore.getState();
-    state.setCloudTranscriptionForAllScopes({ useLocalWhisper: false, cloudTranscriptionMode: "openwhispr" });
+    state.setCloudTranscriptionForAllScopes({
+      useLocalWhisper: false,
+      cloudTranscriptionMode: "openwhispr",
+    });
     localStorage.setItem("transcriptionMode", "openwhispr");
     useSettingsStore.setState({ transcriptionMode: "openwhispr" });
     clearOnboardingProgress();
@@ -121,11 +148,30 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
 
   const progress = ONBOARDING_STEPS.map((id) => ({
     title: t(`desktop.onboarding.progress.${id}`),
-    icon: { welcome: Sparkles, mode: LogIn, "language-permissions": Languages, hotkey: Command, ready: CheckCircle2 }[id],
+    icon: {
+      welcome: Sparkles,
+      mode: LogIn,
+      "language-permissions": Languages,
+      hotkey: Command,
+      ready: CheckCircle2,
+    }[id],
   }));
 
+  if (isIntroVisible) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background text-foreground">
+        <img
+          src={wordmark}
+          alt="VoiceLab"
+          className="h-11 w-auto max-w-56 dark:invert animate-[onboarding-mark-sequence_3800ms_both]"
+          onAnimationEnd={() => setIsIntroVisible(false)}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
+    <div className="flex h-screen flex-col bg-background text-foreground animate-[onboarding-content-in_240ms_ease-out_both]">
       <div className="flex h-10 items-center justify-end border-b border-border px-2 [app-region:drag]">
         <div className="[app-region:no-drag]">
           <WindowControls />
@@ -136,14 +182,21 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
       </div>
       <main className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col overflow-y-auto px-6 py-7">
         {step === "welcome" && (
-          <div className="my-auto space-y-5 text-center">
-            <img src={logoIcon} alt="VoiceLab" className="mx-auto h-16 w-16 rounded-2xl" />
+          <div className="my-auto space-y-6 text-center">
+            <img
+              src={wordmark}
+              alt="VoiceLab"
+              className="mx-auto h-9 w-auto max-w-52 dark:invert"
+            />
             <div>
               <h1 className="text-2xl font-semibold leading-tight tracking-tight">
                 {t("desktop.onboarding.welcome.title")}
               </h1>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
                 {t("desktop.onboarding.welcome.description")}
+              </p>
+              <p className="mt-4 text-xs leading-5 text-muted-foreground">
+                {t("desktop.onboarding.welcome.preferences")}
               </p>
             </div>
           </div>
@@ -181,9 +234,17 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                 {t("desktop.onboarding.language.capabilitiesUnavailable")}
               </p>
             )}
-            <LanguageSelector value={preferredLanguage} onChange={setLanguage} options={languageOptions} provider={provider} />
+            <LanguageSelector
+              value={preferredLanguage}
+              onChange={setLanguage}
+              options={languageOptions}
+              provider={provider}
+            />
             {!selectedSupported && (
-              <p role="alert" className="rounded-lg border border-amber-500/25 bg-amber-500/8 p-3 text-sm text-amber-700 dark:text-amber-300">
+              <p
+                role="alert"
+                className="rounded-lg border border-amber-500/25 bg-amber-500/8 p-3 text-sm text-amber-700 dark:text-amber-300"
+              >
                 {t("desktop.onboarding.language.unsupported")}
               </p>
             )}
@@ -206,8 +267,24 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                 {t("desktop.onboarding.hotkey.description")}
               </p>
             </div>
-            <HotkeyInput value={hotkey} disabled={isRegistering} variant="hero" onChange={async (value) => { if (await registerHotkey(value)) { setHotkey(value); localStorage.setItem("hotkey", value); } }} />
-            <Textarea value={testText} onChange={(event) => setTestText(event.target.value)} placeholder={t("desktop.onboarding.hotkey.placeholder")} className="min-h-24" autoFocus />
+            <HotkeyInput
+              value={hotkey}
+              disabled={isRegistering}
+              variant="hero"
+              onChange={async (value) => {
+                if (await registerHotkey(value)) {
+                  setHotkey(value);
+                  localStorage.setItem("hotkey", value);
+                }
+              }}
+            />
+            <Textarea
+              value={testText}
+              onChange={(event) => setTestText(event.target.value)}
+              placeholder={t("desktop.onboarding.hotkey.placeholder")}
+              className="min-h-24"
+              autoFocus
+            />
           </div>
         )}
 
@@ -228,8 +305,27 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         )}
       </main>
       <footer className="flex shrink-0 items-center justify-between border-t border-border bg-background px-6 py-4">
-        <Button variant="ghost" disabled={stepIndex === 0} onClick={() => go(ONBOARDING_STEPS[Math.max(0, stepIndex - 1)])}>{t("common.back")}</Button>
-        {step === "ready" ? <Button onClick={finish}>{t("desktop.onboarding.ready.start")}</Button> : step === "mode" ? <span /> : <Button disabled={!canContinue} onClick={() => go(ONBOARDING_STEPS[Math.min(ONBOARDING_STEPS.length - 1, stepIndex + 1)])}>{t("common.next")}</Button>}
+        <Button
+          variant="ghost"
+          disabled={stepIndex === 0}
+          onClick={() => go(ONBOARDING_STEPS[Math.max(0, stepIndex - 1)])}
+        >
+          {t("common.back")}
+        </Button>
+        {step === "ready" ? (
+          <Button onClick={finish}>{t("desktop.onboarding.ready.start")}</Button>
+        ) : step === "mode" ? (
+          <span />
+        ) : (
+          <Button
+            disabled={!canContinue}
+            onClick={() =>
+              go(ONBOARDING_STEPS[Math.min(ONBOARDING_STEPS.length - 1, stepIndex + 1)])
+            }
+          >
+            {t("common.next")}
+          </Button>
+        )}
       </footer>
     </div>
   );

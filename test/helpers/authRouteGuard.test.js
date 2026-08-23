@@ -6,7 +6,7 @@ const path = require("node:path");
 const root = path.join(__dirname, "..", "..");
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
-test("control panel derives its reauthentication gate from live auth state", () => {
+test("new installations show onboarding before the live reauthentication gate", () => {
   const router = read("src/AppRouter.jsx");
 
   assert.doesNotMatch(router, /needsReauth|setNeedsReauth/);
@@ -15,23 +15,20 @@ test("control panel derives its reauthentication gate from live auth state", () 
   const authGate = router.indexOf("isControlPanel && authLoaded && !isSignedIn");
   const onboarding = router.indexOf("isControlPanel && showOnboarding");
   const dashboard = router.indexOf("<ControlPanel initialSettingsSection=");
-  assert.ok(authGate > -1 && authGate < onboarding, "auth gate must render before onboarding");
+  assert.ok(
+    onboarding > -1 && onboarding < authGate,
+    "onboarding must render before the auth gate"
+  );
   assert.ok(authGate > -1 && authGate < dashboard, "auth gate must render before dashboard");
 });
 
-test("expired sessions show the reauthentication reason without reopening the browser", () => {
+test("browser sign-in starts only after an explicit user action", () => {
   const authentication = read("src/components/AuthenticationStep.tsx");
 
-  assert.match(authentication, /AUTH_EXPIRED: "auth\.desktopUnauthorized"/);
-  assert.match(
-    authentication,
-    /authStatus === "signed-out"[\s\S]*authErrorCode \? localizedAuthError\(t, authErrorCode\) : null/
-  );
-  assert.match(authentication, /Boolean\(authErrorCode\)/);
-
-  const errorGuard = authentication.indexOf("Boolean(authErrorCode)");
-  const automaticStart = authentication.indexOf("void start()", errorGuard);
-  assert.ok(errorGuard > -1 && automaticStart > errorGuard);
+  assert.match(authentication, /onClick=\{start\}/);
+  assert.doesNotMatch(authentication, /autoStarted|void start\(\)/);
+  assert.doesNotMatch(authentication, /authErrorMessage|authErrorRequestId|authErrorFields/);
+  assert.match(authentication, /hasStarted/);
 });
 
 test("onboarding returns to account authorization when its session is lost", () => {

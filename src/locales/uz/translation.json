@@ -746,11 +746,11 @@
   },
   "auth": {
     "cloudNotConfigured": "Cloud Not Configured",
-    "desktopTitle": "VoiceLab Flow hisobiga kiring",
-    "desktopBrowserHint": "Xavfsiz kirish brauzerda ochiladi va tugagach ilovaga avtomatik qaytadi.",
+    "desktopTitle": "VoiceLab’ga kiring",
+    "desktopBrowserHint": "Kirish faqat o‘zingiz tanlaganingizda brauzerda ochiladi va tugagach ilovaga qaytadi.",
     "desktopWaiting": "Brauzerda kirishni yakunlang. VoiceLab Flow avtomatik davom etadi.",
     "desktopSecurity": "Parolingiz desktop ilovasiga kiritilmaydi. Refresh token shaxsiy lokal credential omborida shifrlanadi.",
-    "desktopOpenBrowser": "Brauzerda davom etish",
+    "desktopOpenBrowser": "Kirish",
     "desktopOpening": "Xavfsiz kirish ochilmoqda…",
     "desktopReopen": "Brauzerni qayta ochish",
     "desktopCancel": "Kirishni bekor qilish",
@@ -3176,8 +3176,9 @@
         "ready": "Tayyor"
       },
       "welcome": {
-        "title": "VoiceLab Flow",
-        "description": "Tabiiy gapiring. Matn kerakli joyda paydo bo‘ladi."
+        "title": "VoiceLab",
+        "description": "Qayerda ishlasangiz ham, aytganlaringizni matnga aylantiring. Tayyor bo‘lganingizda diktovni sozlash uchun kiring.",
+        "preferences": "VoiceLab tizimingizdagi ko‘rinish va tildan boshlaydi."
       },
       "advanced": {
         "title": "Qo‘shimcha sozlash",

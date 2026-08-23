@@ -3170,7 +3170,8 @@
       },
       "welcome": {
         "title": "VoiceLab 听写",
-        "description": "说话自然。您的文本将出现在您需要的地方。"
+        "description": "在您工作的任何地方，将说出的内容转为文字。准备好后，登录即可设置听写。",
+        "preferences": "VoiceLab 默认采用您的系统外观和语言。"
       },
       "advanced": {
         "title": "高级设置",

@@ -3175,7 +3175,8 @@
       },
       "welcome": {
         "title": "Dictée VoiceLab",
-        "description": "Parlez naturellement. Votre texte apparaît là où vous en avez besoin."
+        "description": "Transformez vos paroles en texte où que vous travailliez. Quand vous serez prêt, connectez-vous pour configurer la dictée.",
+        "preferences": "VoiceLab utilise d’abord l’apparence et la langue de votre système."
       },
       "advanced": {
         "title": "Configuration avancée",

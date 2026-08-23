@@ -3175,7 +3175,8 @@
       },
       "welcome": {
         "title": "VoiceLab Flow",
-        "description": "Sprechen Sie natürlich. Ihr Text erscheint dort, wo Sie ihn benötigen."
+        "description": "Verwandeln Sie gesprochene Worte überall bei der Arbeit in Text. Wenn Sie bereit sind, melden Sie sich an, um das Diktat einzurichten.",
+        "preferences": "VoiceLab übernimmt zunächst das Erscheinungsbild und die Sprache Ihres Systems."
       },
       "advanced": {
         "title": "Erweiterte Einrichtung",

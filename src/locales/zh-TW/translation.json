@@ -3170,7 +3170,8 @@
       },
       "welcome": {
         "title": "VoiceLab 聽寫",
-        "description": "說話自然。您的文字將出現在您需要的地方。"
+        "description": "在您工作的任何地方，將說出的內容轉為文字。準備好後，登入即可設定聽寫。",
+        "preferences": "VoiceLab 預設採用您的系統外觀和語言。"
       },
       "advanced": {
         "title": "進階設定",

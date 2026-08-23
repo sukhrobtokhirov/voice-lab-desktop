@@ -3175,7 +3175,8 @@
       },
       "welcome": {
         "title": "VoiceLab dettato",
-        "description": "Parla in modo naturale. Il tuo testo appare dove ne hai bisogno."
+        "description": "Trasforma le parole pronunciate in testo ovunque lavori. Quando sei pronto, accedi per configurare la dettatura.",
+        "preferences": "VoiceLab inizia con l’aspetto e la lingua del tuo sistema."
       },
       "advanced": {
         "title": "Configurazione avanzata",

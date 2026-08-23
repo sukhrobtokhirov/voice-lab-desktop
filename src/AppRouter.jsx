@@ -1,5 +1,4 @@
 import React, { Suspense, useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
 import App from "./App.jsx";
 import AuthenticationStep from "./components/AuthenticationStep.tsx";
 import MeetingNotificationOverlay from "./components/MeetingNotificationOverlay.tsx";
@@ -113,9 +112,19 @@ function MainApp() {
     return <LoadingFallback />;
   }
 
-  // Derive this gate directly from the authoritative auth state. A duplicated
-  // route flag allowed a failed/expired session to render an authenticated
-  // dashboard or a stale onboarding step while React effects caught up.
+  // First-run onboarding is intentionally shown before authentication. People
+  // should understand VoiceLab and choose to sign in, rather than being sent
+  // to a browser as soon as the app opens.
+  if (isControlPanel && showOnboarding) {
+    return (
+      <Suspense fallback={<LoadingFallback />}>
+        <OnboardingFlow onComplete={handleOnboardingComplete} />
+      </Suspense>
+    );
+  }
+
+  // Returning signed-out users still receive the account gate before the
+  // dashboard, based on the live main-process auth state.
   if (isControlPanel && authLoaded && !isSignedIn) {
     return (
       <div
@@ -134,7 +143,7 @@ function MainApp() {
         </div>
         <div className="flex-1 px-6 overflow-y-auto flex items-center">
           <div className="w-full max-w-sm mx-auto">
-            <Card className="bg-card/90 backdrop-blur-2xl border border-border/50 dark:border-white/5 shadow-lg rounded-xl overflow-hidden">
+            <Card className="border border-border bg-card shadow-sm">
               <CardContent className="p-6">
                 <AuthenticationStep onAuthComplete={() => {}} onNeedsVerification={() => {}} />
               </CardContent>
@@ -142,14 +151,6 @@ function MainApp() {
           </div>
         </div>
       </div>
-    );
-  }
-
-  if (isControlPanel && showOnboarding) {
-    return (
-      <Suspense fallback={<LoadingFallback />}>
-        <OnboardingFlow onComplete={handleOnboardingComplete} />
-      </Suspense>
     );
   }
 
@@ -163,25 +164,12 @@ function MainApp() {
 }
 
 function LoadingFallback({ message }) {
-  const { t } = useTranslation();
-  const fallbackMessage = message || t("common.loading");
+  const fallbackMessage = message || null;
 
   return (
-    <div className="min-h-screen bg-[#f6f1e9] dark:bg-[#171513] flex items-center justify-center">
+    <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
       <ConnectionStatus />
-      <div className="flex flex-col items-center gap-4 animate-[scale-in_300ms_ease-out]">
-        <svg
-          viewBox="0 0 1024 1024"
-          className="w-12 h-12 drop-shadow-[0_2px_8px_rgba(37,99,235,0.18)] dark:drop-shadow-[0_2px_12px_rgba(100,149,237,0.25)]"
-          aria-label="VoiceLab"
-        >
-          <rect width="1024" height="1024" rx="241" fill="#E55347" />
-          <circle cx="512" cy="512" r="314" fill="#E55347" stroke="white" strokeWidth="74" />
-          <path d="M512 383V641" stroke="white" strokeWidth="74" strokeLinecap="round" />
-          <path d="M627 457V568" stroke="white" strokeWidth="74" strokeLinecap="round" />
-          <path d="M397 457V568" stroke="white" strokeWidth="74" strokeLinecap="round" />
-        </svg>
-        <div className="w-7 h-7 rounded-full border-[2.5px] border-transparent border-t-primary animate-[spinner-rotate_0.8s_cubic-bezier(0.4,0,0.2,1)_infinite] motion-reduce:animate-none motion-reduce:border-t-muted-foreground motion-reduce:opacity-50" />
+      <div className="flex flex-col items-center gap-5" role="status" aria-live="polite">
         {fallbackMessage && (
           <p className="text-sm font-medium text-muted-foreground dark:text-foreground/60 tracking-tight">
             {fallbackMessage}

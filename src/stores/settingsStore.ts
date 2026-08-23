@@ -29,7 +29,6 @@ import type {
 import type { Snippet } from "../utils/snippets";
 import type { DesktopDictionaryEntry, DesktopDictionaryState } from "../types/electron";
 
-
 const isBrowser = typeof window !== "undefined";
 
 function readString(key: string, fallback: string): string {
@@ -55,6 +54,11 @@ function readStringArray(key: string, fallback: string[]): string[] {
   } catch {
     return fallback;
   }
+}
+
+function getSystemUiLanguage(): string {
+  if (!isBrowser) return "en";
+  return normalizeUiLanguage(navigator.languages?.[0] || navigator.language || "en");
 }
 
 // One-time migration for legacy `meetingFollows{Transcription,Reasoning}` flags.
@@ -223,8 +227,13 @@ function deriveTranscriptionMode(
 
 function readInferenceMode(key: string, fallback: InferenceMode): InferenceMode {
   const value = readString(key, fallback);
-  return value === "openwhispr" || value === "providers" || value === "local" ||
-    value === "self-hosted" || value === "enterprise" ? value : fallback;
+  return value === "openwhispr" ||
+    value === "providers" ||
+    value === "local" ||
+    value === "self-hosted" ||
+    value === "enterprise"
+    ? value
+    : fallback;
 }
 
 function migrateProviderSettings() {
@@ -760,12 +769,9 @@ function createBooleanSetter(key: string) {
     useSettingsStore.setState({ [key]: value });
     if (
       isBrowser &&
-      [
-        "autoPasteEnabled",
-        "useCleanupModel",
-        "audioCuesEnabled",
-        "pauseMediaOnDictation",
-      ].includes(key)
+      ["autoPasteEnabled", "useCleanupModel", "audioCuesEnabled", "pauseMediaOnDictation"].includes(
+        key
+      )
     ) {
       window.dispatchEvent(new Event("voicelab-portable-preference-changed"));
     }
@@ -851,15 +857,15 @@ function debouncedSaveSecret(provider: SecretProvider, key: string) {
   const timer = secretSaveTimers[provider];
   if (timer) clearTimeout(timer);
   secretSaveTimers[provider] = setTimeout(() => {
-    window.electronAPI.providerSaveCredential?.(SECRET_CREDENTIAL_IDS[provider], key)?.catch(
-      (err) => {
-      logger.warn(
-        "Failed to persist secret",
-        { provider, error: (err as Error).message },
-        "settings"
-      );
-      }
-    );
+    window.electronAPI
+      .providerSaveCredential?.(SECRET_CREDENTIAL_IDS[provider], key)
+      ?.catch((err) => {
+        logger.warn(
+          "Failed to persist secret",
+          { provider, error: (err as Error).message },
+          "settings"
+        );
+      });
   }, 250);
 }
 
@@ -892,11 +898,7 @@ const STALE_SECRET_LOCALSTORAGE_KEYS = [
 // Uniform BYOK key setter: persist to the secure store (debounced) and clear
 // the provider's cached key. cacheProvider is omitted where there is no scoped
 // cache to clear (xai), preserving prior behavior.
-function createSecretSetter(
-  storeKey: string,
-  saver: SecretProvider,
-  _cacheProvider?: string
-) {
+function createSecretSetter(storeKey: string, saver: SecretProvider, _cacheProvider?: string) {
   return (key: string) => {
     if (key === STORED_SECRET_PLACEHOLDER) return;
     useSettingsStore.setState({ [storeKey]: key });
@@ -907,7 +909,9 @@ function createSecretSetter(
 export const MAX_TRANSLATION_TARGETS = 5;
 
 export const useSettingsStore = create<SettingsState>()((set, get) => ({
-  uiLanguage: normalizeUiLanguage(isBrowser ? localStorage.getItem("uiLanguage") : null),
+  uiLanguage: normalizeUiLanguage(
+    isBrowser ? localStorage.getItem("uiLanguage") || getSystemUiLanguage() : "en"
+  ),
   whisperModel: readString("whisperModel", "base"),
   localTranscriptionProvider: (readString("localTranscriptionProvider", "whisper") === "nvidia"
     ? "nvidia"
@@ -1238,10 +1242,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setNoteFormattingCloudMode: createStringSetter("noteFormattingCloudMode"),
   setNoteFormattingCloudBaseUrl: createStringSetter("noteFormattingCloudBaseUrl"),
   setNoteFormattingRemoteUrl: createStringSetter("noteFormattingRemoteUrl"),
-  setNoteFormattingCustomApiKey: createSecretSetter(
-    "noteFormattingCustomApiKey",
-    "cleanupCustom"
-  ),
+  setNoteFormattingCustomApiKey: createSecretSetter("noteFormattingCustomApiKey", "cleanupCustom"),
 
   setTranslationMode: createStringSetter("translationMode") as (mode: InferenceMode) => void,
   setTranslationProvider: createStringSetter("translationProvider"),
@@ -1326,10 +1327,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setDictationAgentCloudMode: createStringSetter("dictationAgentCloudMode"),
   setDictationAgentCloudBaseUrl: createStringSetter("dictationAgentCloudBaseUrl"),
   setDictationAgentRemoteUrl: createStringSetter("dictationAgentRemoteUrl"),
-  setDictationAgentCustomApiKey: createSecretSetter(
-    "dictationAgentCustomApiKey",
-    "cleanupCustom"
-  ),
+  setDictationAgentCustomApiKey: createSecretSetter("dictationAgentCustomApiKey", "cleanupCustom"),
 
   setCleanupDisableThinking: createBooleanSetter("cleanupDisableThinking"),
   setDictationAgentDisableThinking: createBooleanSetter("dictationAgentDisableThinking"),
@@ -2289,7 +2287,6 @@ export async function initializeSettings(): Promise<void> {
       for (const key of STALE_SECRET_LOCALSTORAGE_KEYS) {
         localStorage.removeItem(key);
       }
-
     } catch (err) {
       logger.warn(
         "Failed to hydrate secrets from main process",
@@ -2526,7 +2523,6 @@ export async function initializeSettings(): Promise<void> {
         "settings"
       );
     }
-
 
     ensureAgentNameInDictionary();
   }
