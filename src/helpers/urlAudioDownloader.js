@@ -203,7 +203,9 @@ function detectUrlType(urlString) {
 
   const host = parsed.hostname.toLowerCase();
   if (YOUTUBE_HOSTS.has(host)) {
-    return "youtube";
+    const err = new Error("YouTube links are not supported");
+    err.code = "CONTENT_TYPE_INVALID";
+    throw err;
   }
 
   return "direct";

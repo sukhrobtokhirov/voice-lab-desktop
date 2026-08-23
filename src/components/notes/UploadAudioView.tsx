@@ -96,8 +96,7 @@ function parseBatchUrls(text: string): { valid: string[]; skipped: number } {
     try {
       const parsed = new URL(line);
       const httpsOk = parsed.protocol === "https:";
-      const httpYoutubeOk = parsed.protocol === "http:" && isYouTubeUrl(line);
-      if ((httpsOk || httpYoutubeOk) && !seen.has(line)) {
+      if (httpsOk && !isYouTubeUrl(line) && !seen.has(line)) {
         seen.add(line);
         valid.push(line);
       }
@@ -510,10 +509,8 @@ export default function UploadAudioView({ onNoteCreated }: UploadAudioViewProps)
       return;
     }
 
-    // Main enforces HTTPS for direct downloads (YouTube http URLs get coerced),
-    // so reject here instead of surfacing a misleading late failure.
-    if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && isYouTubeUrl(trimmed))) {
-      setError(t("notes.upload.urlInvalid"));
+    if (parsed.protocol !== "https:" || isYouTubeUrl(trimmed)) {
+      setError(t("notes.upload.urlContentTypeInvalid"));
       setState("error");
       return;
     }
@@ -722,15 +719,7 @@ export default function UploadAudioView({ onNoteCreated }: UploadAudioViewProps)
                 </div>
               ) : (
                 <div className="relative">
-                  {isYouTubeUrl(urlInput) ? (
-                    <svg
-                      viewBox="0 0 28 20"
-                      className="absolute left-2.5 top-1/2 -translate-y-1/2 w-[18px] h-[13px] z-10 pointer-events-none"
-                    >
-                      <rect width="28" height="20" rx="4" fill="#FF0000" />
-                      <polygon points="11,4 11,16 21,10" fill="white" />
-                    </svg>
-                  ) : /\.(mp3|wav|m4a|ogg|flac|aac|webm|opus)(\?|$)/i.test(urlInput) ? (
+                  {/\.(mp3|wav|m4a|ogg|flac|aac|webm|opus)(\?|$)/i.test(urlInput) ? (
                     <FileAudio
                       size={13}
                       className="absolute left-2.5 top-1/2 -translate-y-1/2 text-foreground/20 z-10 pointer-events-none"
@@ -743,6 +732,7 @@ export default function UploadAudioView({ onNoteCreated }: UploadAudioViewProps)
                   )}
                   <input
                     type="url"
+                    placeholder="https://example.com/audio.mp3"
                     value={urlInput}
                     onChange={(e) => setUrlInput(e.target.value)}
                     onKeyDown={(e) => {
@@ -762,7 +752,6 @@ export default function UploadAudioView({ onNoteCreated }: UploadAudioViewProps)
                         setUrlExpanded(true);
                       }
                     }}
-                    placeholder={t("notes.upload.urlPlaceholder")}
                     className={cn(uploadFieldClass, "w-full h-8 pl-8 pr-9")}
                   />
                   <button

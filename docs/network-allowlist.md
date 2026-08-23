@@ -46,8 +46,6 @@ private/internal addresses are rejected.
 
 | Host                                | Protocol | Port | Purpose                                                                    |
 | ----------------------------------- | -------- | ---- | -------------------------------------------------------------------------- |
-| `www.youtube.com`, `youtube.com`, `youtu.be`, `m.youtube.com`, `music.youtube.com` | HTTPS | 443 | YouTube page/metadata fetch for pasted YouTube links (bundled yt-dlp).     |
-| `*.googlevideo.com`                 | HTTPS    | 443  | YouTube media CDN — the actual audio stream download.                      |
 | _User-pasted hosts_                 | HTTPS    | 443  | Direct audio/video URL imports contact whatever public host the user pastes. |
 
 ## BYOK provider hosts (only if configured)

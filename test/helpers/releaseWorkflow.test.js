@@ -18,6 +18,27 @@ test("no workflow builds with direct electron-builder publication", () => {
   }
 });
 
+test("workflow actions use a Node 24-compatible runtime", () => {
+  const legacyActionRuntime =
+    /actions\/(?:checkout|setup-node|cache|upload-artifact|download-artifact)@v4|github\/codeql-action\/(?:init|autobuild|analyze)@v3|softprops\/action-gh-release@v2|microsoft\/setup-msbuild@v2|ilammy\/msvc-dev-cmd@v1/;
+
+  for (const [name, contents] of workflows) {
+    assert.doesNotMatch(contents, legacyActionRuntime, name);
+  }
+
+  assert.match(release, /actions\/checkout@v5/);
+  assert.match(release, /actions\/setup-node@v5/);
+  assert.match(release, /actions\/upload-artifact@v6/);
+  assert.match(release, /actions\/download-artifact@v7/);
+
+  const localMsvcAction = fs.readFileSync(
+    path.join(root, ".github", "actions", "setup-msvc", "action.yml"),
+    "utf8"
+  );
+  assert.match(localMsvcAction, /using: composite/);
+  assert.match(localMsvcAction, /VsDevCmd\.bat/);
+});
+
 test("release builds are private and promotion is the only writer", () => {
   assert.match(release, /permissions:\n\s+contents: read/);
   assert.match(release, /build-macos:[\s\S]*?--publish never/);

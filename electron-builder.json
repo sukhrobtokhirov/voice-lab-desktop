@@ -115,7 +115,6 @@
       "from": "resources/bin/",
       "to": "bin/",
       "filter": [
-        "yt-dlp-*",
         "macos-audio-tap",
         "macos-globe-listener",
         "macos-fast-paste",

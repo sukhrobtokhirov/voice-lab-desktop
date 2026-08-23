@@ -32,12 +32,12 @@ jobs:
       version: ${{ steps.contract.outputs.version }}
       source_sha: ${{ steps.contract.outputs.source_sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           ref: ${{ env.RELEASE_REF }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -61,11 +61,11 @@ jobs:
     needs: validate-release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.validate-release.outputs.source_sha }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -98,11 +98,11 @@ jobs:
       matrix:
         arch: [arm64, x64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.validate-release.outputs.source_sha }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -165,7 +165,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          node scripts/download-yt-dlp.js --current --platform darwin --arch ${{ matrix.arch }}
           node scripts/download-meeting-aec-helper.js --current --platform darwin --arch ${{ matrix.arch }}
           node scripts/download-whisper-vad-model.js
 
@@ -223,7 +222,7 @@ jobs:
             --out release-output
 
       - name: Upload verified private artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-macos-${{ matrix.arch }}
           path: release-output/
@@ -241,11 +240,11 @@ jobs:
     needs: [validate-release, test-gate]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.validate-release.outputs.source_sha }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -264,7 +263,6 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           npm run compile:native
-          node scripts/download-yt-dlp.js --current --platform linux --arch x64
           node scripts/download-meeting-aec-helper.js --current --platform linux --arch x64
           node scripts/download-whisper-vad-model.js
           resources/bin/linux-system-audio-helper probe | grep '"supportsNativeCapture":true'
@@ -296,7 +294,7 @@ jobs:
             --out release-output
 
       - name: Upload verified private artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-linux-x64
           path: release-output/
@@ -309,11 +307,11 @@ jobs:
     if: ${{ vars.ENABLE_WINDOWS_RELEASE == 'true' }}
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.validate-release.outputs.source_sha }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -341,7 +339,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          node scripts/download-yt-dlp.js --current --platform win32 --arch x64
           node scripts/download-meeting-aec-helper.js --current --platform win32 --arch x64
           node scripts/download-nircmd.js
           node scripts/download-windows-fast-paste.js
@@ -390,7 +387,7 @@ jobs:
             --out release-output
 
       - name: Upload verified private artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-windows-x64
           path: release-output/
@@ -423,16 +420,16 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.validate-release.outputs.source_sha }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Download all private verified artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: release-*
           path: staged-release

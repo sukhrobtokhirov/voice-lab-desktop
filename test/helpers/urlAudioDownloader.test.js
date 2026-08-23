@@ -35,31 +35,18 @@ const {
   safeDownloadLogMetadata,
 } = downloader;
 
-test("detectUrlType returns youtube for standard watch URL", () => {
-  assert.equal(detectUrlType("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), "youtube");
-});
-
-test("detectUrlType returns youtube for youtu.be short URL", () => {
-  assert.equal(detectUrlType("https://youtu.be/dQw4w9WgXcQ"), "youtube");
-});
-
-test("detectUrlType returns youtube for Shorts URL", () => {
-  assert.equal(detectUrlType("https://www.youtube.com/shorts/dQw4w9WgXcQ"), "youtube");
-});
-
-test("detectUrlType returns youtube for Music URL", () => {
-  assert.equal(detectUrlType("https://music.youtube.com/watch?v=dQw4w9WgXcQ"), "youtube");
-});
-
-test("detectUrlType returns youtube for URL with extra params", () => {
-  assert.equal(
-    detectUrlType("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=120&list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"),
-    "youtube"
-  );
-});
-
-test("detectUrlType returns youtube for embed URL", () => {
-  assert.equal(detectUrlType("https://www.youtube.com/embed/dQw4w9WgXcQ"), "youtube");
+test("detectUrlType rejects YouTube URLs", () => {
+  for (const url of [
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://youtu.be/dQw4w9WgXcQ",
+    "https://www.youtube.com/shorts/dQw4w9WgXcQ",
+    "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+  ]) {
+    assert.throws(
+      () => detectUrlType(url),
+      (error) => error.code === "CONTENT_TYPE_INVALID"
+    );
+  }
 });
 
 test("detectUrlType returns direct for a podcast mp3 URL", () => {
@@ -130,7 +117,10 @@ test("extractYouTubeVideoId extracts from embed URL", () => {
 });
 
 test("extractYouTubeVideoId extracts from Music URL", () => {
-  assert.equal(extractYouTubeVideoId("https://music.youtube.com/watch?v=dQw4w9WgXcQ"), "dQw4w9WgXcQ");
+  assert.equal(
+    extractYouTubeVideoId("https://music.youtube.com/watch?v=dQw4w9WgXcQ"),
+    "dQw4w9WgXcQ"
+  );
 });
 
 test("extractYouTubeVideoId returns null for playlist-only URL", () => {
@@ -142,7 +132,10 @@ test("isPlaylistUrl returns true for playlist-only URL", () => {
 });
 
 test("isPlaylistUrl returns false for watch URL with playlist param", () => {
-  assert.equal(isPlaylistUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLrAXtmErZgOe"), false);
+  assert.equal(
+    isPlaylistUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLrAXtmErZgOe"),
+    false
+  );
 });
 
 test("isPlaylistUrl returns false for non-YouTube URL", () => {
@@ -320,8 +313,7 @@ test("ssrfSafeLookup allows public IPs via callback", () => {
 test("ssrfSafeLookup blocks a private IP in the all:true array form", () => {
   return new Promise((resolve, reject) => {
     const original = dns.lookup;
-    dns.lookup = (_hostname, _opts, cb) =>
-      cb(null, [{ address: "169.254.169.254", family: 4 }]);
+    dns.lookup = (_hostname, _opts, cb) => cb(null, [{ address: "169.254.169.254", family: 4 }]);
     try {
       ssrfSafeLookup("metadata.evil.com", { all: true }, (err) => {
         dns.lookup = original;
@@ -426,7 +418,10 @@ test("extractYouTubeVideoId rejects youtu.be with non-standard ID", () => {
 function makeFakeChild() {
   const child = new EventEmitter();
   child.killCalled = false;
-  child.kill = () => { child.killCalled = true; return true; };
+  child.kill = () => {
+    child.killCalled = true;
+    return true;
+  };
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
   return child;
@@ -455,11 +450,15 @@ function ensureCacheBinary() {
   const binPath = path.join(cacheDir, name);
   fs.mkdirSync(cacheDir, { recursive: true });
   fs.writeFileSync(binPath, "#!/bin/sh\n");
-  try { fs.chmodSync(binPath, 0o755); } catch {}
+  try {
+    fs.chmodSync(binPath, 0o755);
+  } catch {}
   // The update path refuses unverified cache copies, so record the checksum.
   downloader._recordCacheChecksum();
   return () => {
-    try { fs.rmSync(cacheDir, { recursive: true, force: true }); } catch {}
+    try {
+      fs.rmSync(cacheDir, { recursive: true, force: true });
+    } catch {}
   };
 }
 
@@ -521,8 +520,12 @@ function makeFakeProxyRequest() {
   const req = new EventEmitter();
   req.abortCalled = false;
   req.followRedirectCalled = false;
-  req.abort = () => { req.abortCalled = true; };
-  req.followRedirect = () => { req.followRedirectCalled = true; };
+  req.abort = () => {
+    req.abortCalled = true;
+  };
+  req.followRedirect = () => {
+    req.followRedirectCalled = true;
+  };
   req.setHeader = () => {};
   req.end = () => {};
   return req;
@@ -563,13 +566,21 @@ test("downloadViaProxy restarts on redirect via abort, never calls followRedirec
     assert.equal(fs.readFileSync(tempPath, "utf8"), "audiodata");
     assert.equal(requests.length, 2, "must restart with a fresh request, not follow in place");
     assert.equal(requests[0].url, "https://93.184.216.34/file.mp3");
-    assert.equal(requests[1].url, "https://93.184.216.34/real.mp3", "restart must target the redirect URL");
+    assert.equal(
+      requests[1].url,
+      "https://93.184.216.34/real.mp3",
+      "restart must target the redirect URL"
+    );
     assert.equal(requests[0].abortCalled, true);
     assert.equal(requests[0].followRedirectCalled, false);
     assert.equal(requests[1].followRedirectCalled, false);
   } finally {
     downloader._setElectronNetForTests(null);
-    if (tempPath) { try { fs.unlinkSync(tempPath); } catch {} }
+    if (tempPath) {
+      try {
+        fs.unlinkSync(tempPath);
+      } catch {}
+    }
   }
 });
 
@@ -593,7 +604,11 @@ test("downloadViaProxy rejects a redirect to a private IP with SSRF_BLOCKED", as
       downloader.downloadViaProxy("https://93.184.216.34/file.mp3", null, null),
       { code: "SSRF_BLOCKED" }
     );
-    assert.equal(requests.length, 1, "must not re-request a redirect target rejected by assertPublicHost");
+    assert.equal(
+      requests.length,
+      1,
+      "must not re-request a redirect target rejected by assertPublicHost"
+    );
   } finally {
     downloader._setElectronNetForTests(null);
   }
@@ -752,11 +767,18 @@ test("downloadDirect streams a validated GET to a temp file", async () => {
         assert.equal(fs.readFileSync(tempPath, "utf8"), body);
         assert.equal(result.title, "interview");
         assert.equal(result.sizeBytes, body.length);
-        assert.deepEqual(calls.map((c) => c.method), ["HEAD", "GET"]);
+        assert.deepEqual(
+          calls.map((c) => c.method),
+          ["HEAD", "GET"]
+        );
       }
     );
   } finally {
-    if (tempPath) { try { fs.unlinkSync(tempPath); } catch {} }
+    if (tempPath) {
+      try {
+        fs.unlinkSync(tempPath);
+      } catch {}
+    }
   }
 });
 
@@ -940,15 +962,13 @@ test("downloadDirect defers a cancelled download's rejection until the write str
             },
       async () => {
         let settled = null;
-        const done = downloader
-          .download("https://93.184.216.34/file.mp3", null, ac.signal)
-          .then(
-            () => (settled = "resolved"),
-            (err) => {
-              order.push("rejected");
-              settled = err;
-            }
-          );
+        const done = downloader.download("https://93.184.216.34/file.mp3", null, ac.signal).then(
+          () => (settled = "resolved"),
+          (err) => {
+            order.push("rejected");
+            settled = err;
+          }
+        );
 
         await aborted;
         for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));

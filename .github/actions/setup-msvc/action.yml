@@ -1,0 +1,35 @@
+name: Configure MSVC
+description: Add the installed Visual Studio C++ toolchain to later workflow steps.
+inputs:
+  arch:
+    description: Target architecture for the C++ toolchain.
+    required: false
+    default: x64
+runs:
+  using: composite
+  steps:
+    - name: Export Visual Studio build environment
+      shell: pwsh
+      run: |
+        $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+        if (-not (Test-Path $vswhere)) { throw "Visual Studio locator not found: $vswhere" }
+
+        $installationPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        if ([string]::IsNullOrWhiteSpace($installationPath)) { throw "Visual Studio C++ build tools are not installed" }
+
+        $vsDevCmd = Join-Path $installationPath "Common7\Tools\VsDevCmd.bat"
+        if (-not (Test-Path $vsDevCmd)) { throw "Visual Studio developer command prompt not found: $vsDevCmd" }
+
+        $environmentLines = & cmd.exe /d /s /c "call `"$vsDevCmd`" -arch=$env:INPUT_ARCH -host_arch=x64 >nul && set"
+        $exportedNames = @(
+          "INCLUDE", "LIB", "LIBPATH", "PATH", "UCRTVersion", "VCINSTALLDIR",
+          "VCToolsInstallDir", "VCToolsRedistDir", "VisualStudioVersion", "WindowsSdkBinPath",
+          "WindowsSdkDir", "WindowsSDKLibVersion", "WindowsSDKVersion"
+        )
+
+        foreach ($line in $environmentLines) {
+          $name, $value = $line -split "=", 2
+          if ($exportedNames -contains $name -and -not [string]::IsNullOrWhiteSpace($value)) {
+            Add-Content -Path $env:GITHUB_ENV -Value "$name=$value"
+          }
+        }
