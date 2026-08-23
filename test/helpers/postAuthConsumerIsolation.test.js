@@ -121,7 +121,8 @@ test("usage UI uses the desktop entitlement and keeps website billing reachable"
     hook,
     /status: entitlement \? \(entitlement\.active \? "active" : "inactive"\) : "unknown"/
   );
-  assert.match(hook, /\[isSignedIn, user\?\.id, loadSubscription\]/);
+  assert.match(hook, /if \(isSignedIn && loadOnMount\) void loadSubscription\(\);/);
+  assert.match(hook, /\[isSignedIn, user\?\.id, loadOnMount, loadSubscription\]/);
   assert.match(display, /if \(!usage\) return null/);
   assert.doesNotMatch(display, /usage\.plans|planPrice|priceCompact/);
   assert.match(display, /usage\.openBillingPortal\(\)/);
