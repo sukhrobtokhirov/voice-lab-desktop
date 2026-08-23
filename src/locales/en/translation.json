@@ -3119,7 +3119,10 @@
     "wallet": {
       "title": "VoiceLab plan & usage",
       "shared": "Plan and billing are managed on VoiceLab.",
+      "balanceTitle": "Balance",
       "balance": "Used today",
+      "total": "Total",
+      "remaining": "Remaining",
       "available": "Remaining today",
       "reserved": "Daily allowance",
       "unavailable": "Usage is not available yet.",

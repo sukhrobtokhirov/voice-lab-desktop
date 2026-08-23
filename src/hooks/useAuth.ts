@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { VoiceLabUser } from "../lib/auth";
+import type { DesktopProfile } from "../types/electron";
 import { useSettingsStore } from "../stores/settingsStore";
 
 type DesktopAuthState = {
@@ -20,12 +21,36 @@ const initialState: DesktopAuthState = {
   errorMessage: null,
 };
 
+function mergeProfile(user: VoiceLabUser, profile: DesktopProfile): VoiceLabUser {
+  if (profile.user.id !== user.id) return user;
+  return {
+    ...user,
+    name: profile.user.displayName || user.name,
+    image: profile.user.avatarUrl || user.image || null,
+  };
+}
+
 export function useAuth() {
   const [authState, setAuthState] = useState<DesktopAuthState>(initialState);
 
   const applyAuthState = useCallback((next: DesktopAuthState) => {
     setAuthState(next);
     useSettingsStore.getState().setIsSignedIn(next.status === "authenticated");
+  }, []);
+
+  const hydrateUserProfile = useCallback(async (user: VoiceLabUser | null) => {
+    if (!user) return;
+    const profile = await window.electronAPI?.authGetProfile?.().catch(() => null);
+    if (!profile) return;
+    setAuthState((current) => {
+      if (current.status !== "authenticated" || !current.user || current.user.id !== user.id) {
+        return current;
+      }
+      const mergedUser = mergeProfile(current.user, profile);
+      return mergedUser.name === current.user.name && mergedUser.image === current.user.image
+        ? current
+        : { ...current, user: mergedUser };
+    });
   }, []);
 
   const refetch = useCallback(async () => {
@@ -37,8 +62,11 @@ export function useAuth() {
         errorMessage: next.errorMessage || null,
       });
     else applyAuthState({ status: "signed-out", user: null, errorCode: null, errorMessage: null });
+    if (next?.status === "authenticated") {
+      void hydrateUserProfile(next.user as VoiceLabUser | null);
+    }
     return next || null;
-  }, [applyAuthState]);
+  }, [applyAuthState, hydrateUserProfile]);
 
   useEffect(() => {
     let mounted = true;
@@ -51,6 +79,9 @@ export function useAuth() {
             user: next.user as VoiceLabUser | null,
             errorMessage: next.errorMessage || null,
           });
+          if (next.status === "authenticated") {
+            void hydrateUserProfile(next.user as VoiceLabUser | null);
+          }
         }
       })
       .catch(() => {
@@ -71,6 +102,9 @@ export function useAuth() {
           user: next.user as VoiceLabUser | null,
           errorMessage: next.errorMessage || null,
         });
+        if (next.status === "authenticated") {
+          void hydrateUserProfile(next.user as VoiceLabUser | null);
+        }
     });
     const unsubscribeProtocolError = window.electronAPI?.onDesktopProtocolError?.(
       (_event, payload) => {
@@ -90,7 +124,7 @@ export function useAuth() {
       unsubscribe?.();
       unsubscribeProtocolError?.();
     };
-  }, [applyAuthState]);
+  }, [applyAuthState, hydrateUserProfile]);
 
   const isSignedIn = authState.status === "authenticated";
   const isPending = [

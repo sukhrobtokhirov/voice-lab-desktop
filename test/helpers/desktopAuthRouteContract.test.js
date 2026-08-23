@@ -67,7 +67,11 @@ test("desktop VoiceLab data requests are limited to documented API routes", () =
     ...source.matchAll(/const\s+\w+_PATH\s*=\s*(\[[^\n]+\])\.join\(["']\/["']\)/g),
   ].map((match) => [...match[1].matchAll(/["']([^"']*)["']/g)].map((part) => part[1]).join("/"));
 
-  assert.deepEqual(endpointConstants.sort(), ["/v1/desktop/stt", "/v1/desktop/usage"]);
+  assert.deepEqual(endpointConstants.sort(), [
+    "/v1/desktop/me",
+    "/v1/desktop/stt",
+    "/v1/desktop/usage",
+  ]);
   assert.doesNotMatch(source, /\/api\/v1\/billing\/desktop\//);
   assert.doesNotMatch(source, /\/api\/v1\/desktop\/sync/);
   assert.doesNotMatch(source, /\/approve(?:["'/?]|$)/);

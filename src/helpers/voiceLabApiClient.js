@@ -20,6 +20,8 @@ const CANONICAL_AUDIO_UPLOADS = new Map([
 ]);
 const DESKTOP_STT_PATH = ["", "v1", "desktop", "stt"].join("/");
 const DESKTOP_USAGE_PATH = ["", "v1", "desktop", "usage"].join("/");
+const DESKTOP_PROFILE_PATH = ["", "v1", "desktop", "me"].join("/");
+const PROFILE_CACHE_TTL_MS = 20 * 60 * 1000;
 const MAX_JSON_RESPONSE_BYTES = 1024 * 1024;
 const REQUEST_ID_PATTERN = /^req_[A-Za-z0-9_-]{1,256}$/;
 const STATUS_CODE = {
@@ -184,6 +186,28 @@ function safeRequestId(value) {
   return typeof value === "string" && REQUEST_ID_PATTERN.test(value) ? value : null;
 }
 
+function safeProfileText(value, maxLength) {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const normalized = String(value)
+    .normalize("NFKC")
+    .replace(/[\p{Cc}\p{Cf}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized && normalized.length <= maxLength ? normalized : null;
+}
+
+function safeProfileAvatarUrl(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 2_048) return null;
+  try {
+    const url = new URL(normalized);
+    return url.protocol === "https:" && !url.username && !url.password ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 function validRfc3339(value) {
   if (typeof value !== "string" || value.length > 64) return null;
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)) return null;
@@ -329,6 +353,23 @@ function normalizeDesktopUsage(payload) {
   };
 }
 
+function normalizeDesktopProfile(payload) {
+  const root = record(payload);
+  const user = record(root.user);
+  const requestId = safeRequestId(root.request_id);
+  const id = safeProfileText(user.id, 256);
+  if (!id || !requestId) return invalidResponse("desktop profile", requestId);
+
+  return {
+    user: {
+      id,
+      displayName: safeProfileText(user.display_name, 256),
+      avatarUrl: safeProfileAvatarUrl(user.avatar_url),
+    },
+    requestId,
+  };
+}
+
 function composeSignal(externalSignals, timeoutMs) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -358,6 +399,8 @@ class VoiceLabApiClient {
     this.billingOrigin = billingOrigin.replace(/\/+$/, "");
     this.activeDictationOperations = new Map();
     this.sessionAccountId = null;
+    this.profileCache = null;
+    this.profileRequest = null;
   }
 
   handleAuthStatus(status) {
@@ -370,6 +413,8 @@ class VoiceLabApiClient {
         operation.abortController?.abort();
       }
       this.activeDictationOperations.clear();
+      this.profileCache = null;
+      this.profileRequest = null;
     }
     this.sessionAccountId = nextAccountId;
   }
@@ -385,7 +430,8 @@ class VoiceLabApiClient {
     const method = String(options.method || "GET").toUpperCase();
     const isDesktopStt = method === "POST" && pathname === DESKTOP_STT_PATH;
     const isDesktopUsage = method === "GET" && pathname === DESKTOP_USAGE_PATH;
-    const isCanonicalDesktopBoundary = isDesktopStt || isDesktopUsage;
+    const isDesktopProfile = method === "GET" && pathname === DESKTOP_PROFILE_PATH;
+    const isCanonicalDesktopBoundary = isDesktopStt || isDesktopUsage || isDesktopProfile;
     if (isDesktopStt && options.idempotencyKey) {
       throw new VoiceLabApiError({
         code: "INVALID_REQUEST",
@@ -618,6 +664,50 @@ class VoiceLabApiClient {
       });
     }
     return normalizeDesktopUsage(body);
+  }
+
+  async getDesktopProfile() {
+    const requestContext = authSessionContext(this.authManager);
+    const accountKey = requestContext.accountId || requestContext.sessionId;
+    if (!accountKey) {
+      throw new VoiceLabApiError({
+        code: "AUTH_REQUIRED",
+        message: "Authentication required.",
+        status: 401,
+      });
+    }
+    if (
+      this.profileCache?.accountKey === accountKey &&
+      Date.now() - this.profileCache.cachedAt < PROFILE_CACHE_TTL_MS
+    ) {
+      return this.profileCache.profile;
+    }
+    if (this.profileRequest?.accountKey === accountKey) return this.profileRequest.promise;
+
+    const request = (async () => {
+      const body = await this.authenticatedFetch(DESKTOP_PROFILE_PATH, {
+        method: "GET",
+        timeoutMs: 15_000,
+        cache: "no-store",
+      });
+      if (!sameAuthSessionContext(requestContext, authSessionContext(this.authManager))) {
+        throw new VoiceLabApiError({
+          code: "AUTH_ACCOUNT_CHANGED",
+          message: "The active VoiceLab session changed during this request.",
+          status: 409,
+        });
+      }
+      const profile = normalizeDesktopProfile(body);
+      // Presentation-only data; credentials and usage are never cached here.
+      this.profileCache = { accountKey, profile, cachedAt: Date.now() };
+      return profile;
+    })();
+    this.profileRequest = { accountKey, promise: request };
+    try {
+      return await request;
+    } finally {
+      if (this.profileRequest?.promise === request) this.profileRequest = null;
+    }
   }
 
   async beginDictation({ audioBuffer, source = "dictate", durationMs = null, language = null }) {

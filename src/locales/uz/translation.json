@@ -3121,7 +3121,10 @@
     "wallet": {
       "title": "VoiceLab tarifi va foydalanish",
       "shared": "Tarif va billing VoiceLab saytida boshqariladi.",
+      "balanceTitle": "Balans",
       "balance": "Bugun ishlatilgan",
+      "total": "Jami",
+      "remaining": "Qolgan",
       "available": "Bugun qolgan",
       "reserved": "Kunlik limit",
       "unavailable": "Foydalanish maʼlumoti hali yoʻq.",

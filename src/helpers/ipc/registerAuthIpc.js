@@ -37,6 +37,16 @@ function registerAuthIpc({ handle, host }) {
       errorCode: "AUTH_MANAGER_UNAVAILABLE",
     }
   );
+  handle("auth-get-profile", async () => {
+    if (!host.desktopAuthManager || !host.voiceLabApiClient) return null;
+    try {
+      return await host.voiceLabApiClient.getDesktopProfile();
+    } catch {
+      // Profile data only enhances the UI. An unavailable avatar must never
+      // interrupt a valid desktop session.
+      return null;
+    }
+  });
   handle("auth-reopen-browser", async () =>
     host.desktopAuthManager
       ? host.desktopAuthManager.reopenAuthorization()

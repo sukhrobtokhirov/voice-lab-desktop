@@ -34,6 +34,15 @@ export type DesktopAuthStatus = {
   retryAfterSeconds?: number | null;
 };
 
+export type DesktopProfile = {
+  user: {
+    id: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+  };
+  requestId: string;
+};
+
 export type TranscriptionErrorCode =
   | "TIMEOUT"
   | "NETWORK"
@@ -1056,6 +1065,7 @@ declare global {
       authReopenBrowser?: () => Promise<DesktopAuthStatus>;
       authCancelBrowser?: () => Promise<DesktopAuthStatus>;
       authGetStatus?: () => Promise<DesktopAuthStatus>;
+      authGetProfile?: () => Promise<DesktopProfile | null>;
       authRefreshSession?: () => Promise<DesktopAuthStatus>;
       authLogout?: () => Promise<{ success: boolean; revoked: boolean }>;
       authDeleteAccount?: () => Promise<{ success: boolean }>;

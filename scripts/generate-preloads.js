@@ -98,6 +98,7 @@ const controlOnly = new Set([
   "getVertexLocation",
   "saveVertexLocation",
   "authStartBrowser",
+  "authGetProfile",
   "authRefreshSession",
   "authLogout",
   "authDeleteAccount",

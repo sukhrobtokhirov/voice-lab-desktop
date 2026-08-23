@@ -100,6 +100,16 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
   const calls = [];
   installFetch(t, async (url, init) => {
     calls.push({ url, init });
+    if (url.endsWith("/desktop/me")) {
+      return jsonResponse({
+        user: {
+          id: "account-7",
+          display_name: "Ilyosjon Karimov",
+          avatar_url: "https://cdn.voicelab.uz/avatars/account-7.png",
+        },
+        request_id: "req_profile",
+      });
+    }
     if (url.endsWith("/desktop/usage")) {
       return jsonResponse({
         desktop_stt: {
@@ -134,6 +144,7 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
     return jsonResponse({ ok: true, request_id: `req_sync_${calls.length}` });
   });
 
+  const profile = await client.getDesktopProfile();
   await client.getDesktopUsage();
   await client.sendDictationChunk(
     {
@@ -146,17 +157,26 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
     Buffer.from("audio"),
     { contentType: "audio/mpeg" }
   );
-  assert.equal(calls.length, 2);
+  assert.deepEqual(profile, {
+    user: {
+      id: "account-7",
+      displayName: "Ilyosjon Karimov",
+      avatarUrl: "https://cdn.voicelab.uz/avatars/account-7.png",
+    },
+    requestId: "req_profile",
+  });
+  assert.equal(calls.length, 3);
   assert.deepEqual(
     calls.map(({ url, init }) => [url, init.method]),
     [
+      [`${API_ORIGIN}/v1/desktop/me`, "GET"],
       [`${API_ORIGIN}/v1/desktop/usage`, "GET"],
       [`${API_ORIGIN}/v1/desktop/stt`, "POST"],
     ]
   );
 
   for (const { init } of calls) assertNoBrowserCredentials(init);
-  assert.equal(authManager.state.accessTokenCalls, 2);
+  assert.equal(authManager.state.accessTokenCalls, 3);
 
   for (const { init } of calls) {
     const headers = new Headers(init.headers);
@@ -169,9 +189,58 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
   }
   assert.equal(new Headers(calls[0].init.headers).has("content-type"), false);
   assert.equal(new Headers(calls[1].init.headers).has("content-type"), false);
-  assert.ok(calls[1].init.body instanceof FormData);
+  assert.equal(new Headers(calls[2].init.headers).has("content-type"), false);
+  assert.ok(calls[2].init.body instanceof FormData);
   assert.equal(authManager.state.refreshCalls, 0);
   assert.equal(authManager.state.invalidations, 0);
+});
+
+test("desktop profile is cached for twenty minutes while usage remains live", async (t) => {
+  const { client } = createClient(t);
+  const calls = [];
+  installFetch(t, async (url, init) => {
+    calls.push({ url, init });
+    if (url.endsWith("/desktop/me")) {
+      return jsonResponse({
+        user: {
+          id: "account-7",
+          display_name: "Ilyosjon Karimov",
+          avatar_url: "https://cdn.voicelab.uz/avatars/account-7.png",
+        },
+        request_id: `req_profile_${calls.length}`,
+      });
+    }
+    if (url.endsWith("/desktop/usage")) {
+      return jsonResponse({
+        desktop_stt: {
+          enabled: true,
+          plan_id: "plan_pro",
+          plan_name: "Pro",
+          usage_window: "day",
+          usage_limit_seconds: 28_800,
+          used_seconds: 0,
+          reserved_seconds: 0,
+          remaining_seconds: 28_800,
+          window_starts_at: "2026-08-22T00:00:00Z",
+          resets_at: "2026-08-23T00:00:00Z",
+        },
+        request_id: `req_usage_${calls.length}`,
+      });
+    }
+    return jsonResponse({ ok: true });
+  });
+
+  await client.getDesktopProfile();
+  await client.getDesktopProfile();
+  assert.equal(calls.filter(({ url }) => url.endsWith("/desktop/me")).length, 1);
+
+  client.profileCache.cachedAt = Date.now() - 20 * 60 * 1000;
+  await client.getDesktopProfile();
+  assert.equal(calls.filter(({ url }) => url.endsWith("/desktop/me")).length, 2);
+
+  await client.getDesktopUsage();
+  await client.getDesktopUsage();
+  assert.equal(calls.filter(({ url }) => url.endsWith("/desktop/usage")).length, 2);
 });
 
 test("retired desktop sync methods fail closed without making a network request", async (t) => {

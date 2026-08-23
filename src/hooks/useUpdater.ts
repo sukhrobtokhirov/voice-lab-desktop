@@ -41,6 +41,16 @@ const stateListeners = new Set<(state: UpdateState) => void>();
 let listenersRegistered = false;
 const cleanupFunctions: Array<() => void> = [];
 
+function getDevelopmentProgressPreview(): number | null {
+  if (!import.meta.env.DEV) return null;
+
+  const value = new URLSearchParams(window.location.search).get("update-progress-preview");
+  if (!value) return null;
+
+  const progress = Number(value);
+  return Number.isFinite(progress) ? Math.min(99, Math.max(0, progress)) : 62;
+}
+
 function notifyListeners() {
   stateListeners.forEach((listener) => listener({ ...globalState }));
 }
@@ -134,6 +144,25 @@ export function useUpdater() {
 
   useEffect(() => {
     stateListeners.add(setState);
+
+    const previewProgress = getDevelopmentProgressPreview();
+    if (previewProgress !== null) {
+      updateGlobalState({
+        status: { updateAvailable: true, updateDownloaded: false, isDevelopment: false },
+        info: { version: "0.1.15" },
+        downloadProgress: previewProgress,
+        isChecking: false,
+        isDownloading: true,
+        isInstalling: false,
+        error: null,
+      });
+
+      return () => {
+        stateListeners.delete(setState);
+        cleanup();
+      };
+    }
+
     registerEventListeners();
 
     const initializeUpdateStatus = async () => {

@@ -440,6 +440,7 @@ const fullElectronAPI = {
   authReopenBrowser: () => ipcRenderer.invoke("auth-reopen-browser"),
   authCancelBrowser: () => ipcRenderer.invoke("auth-cancel-browser"),
   authGetStatus: () => ipcRenderer.invoke("auth-get-status"),
+  authGetProfile: () => ipcRenderer.invoke("auth-get-profile"),
   authRefreshSession: () => ipcRenderer.invoke("auth-refresh-session"),
   authLogout: () => ipcRenderer.invoke("auth-logout"),
   authDeleteAccount: () => ipcRenderer.invoke("auth-delete-account"),

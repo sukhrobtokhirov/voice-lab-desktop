@@ -49,6 +49,10 @@ interface UseUsageResult extends DesktopUsageData {
   openBillingPortal: () => Promise<{ success: boolean; error?: string }>;
 }
 
+type UseUsageOptions = {
+  loadOnMount?: boolean;
+};
+
 type SubscriptionState = {
   entitlement: DesktopEntitlement | null;
   isLoading: boolean;
@@ -186,7 +190,7 @@ function fetchDesktopSubscription(accountKey: string) {
   return request;
 }
 
-export function useUsage(): UseUsageResult | null {
+export function useUsage({ loadOnMount = true }: UseUsageOptions = {}): UseUsageResult | null {
   const { isSignedIn, user } = useAuth();
   const accountKey = user?.id || "desktop-session";
   const [sttUsage, setSttUsage] = useState<DesktopSttUsage | null>(null);
@@ -360,12 +364,12 @@ export function useUsage(): UseUsageResult | null {
     billingReturnArmed.current = false;
     setIsWaitingForBillingReturn(false);
     setIsPollingSubscription(false);
-    if (isSignedIn) void loadSubscription();
+    if (isSignedIn && loadOnMount) void loadSubscription();
     return () => {
       subscriptionRequest.current += 1;
       billingPoll.current += 1;
     };
-  }, [isSignedIn, user?.id, loadSubscription]);
+  }, [isSignedIn, user?.id, loadOnMount, loadSubscription]);
 
   // The synchronous desktop STT response is authoritative for today's usage.
   useEffect(() => {

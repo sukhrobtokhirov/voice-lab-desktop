@@ -2,9 +2,6 @@ import React, { Suspense, useState, useEffect, useRef, useCallback } from "react
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
 import {
-  Download,
-  RefreshCw,
-  Loader2,
   AlertTriangle,
   Zap,
   ChevronLeft,
@@ -148,7 +145,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   const { toast } = useToast();
   const { useCleanupModel, setUseLocalWhisper, setCloudTranscriptionMode } = useSettings();
   const { isSignedIn, isLoaded: authLoaded, user } = useAuth();
-  const usage = useUsage();
+  const usage = useUsage({ loadOnMount: activeView === "integrations" });
 
   const {
     status: updateStatus,
@@ -635,42 +632,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     }
   };
 
-  const getUpdateButtonContent = () => {
-    if (isInstalling) {
-      return (
-        <>
-          <Loader2 size={14} className="animate-spin" />
-          <span>{t("controlPanel.update.installing")}</span>
-        </>
-      );
-    }
-    if (isDownloading) {
-      return (
-        <>
-          <Loader2 size={14} className="animate-spin" />
-          <span>{Math.round(downloadProgress)}%</span>
-        </>
-      );
-    }
-    if (updateStatus.updateDownloaded) {
-      return (
-        <>
-          <RefreshCw size={14} />
-          <span>{t("controlPanel.update.installButton")}</span>
-        </>
-      );
-    }
-    if (updateStatus.updateAvailable) {
-      return (
-        <>
-          <Download size={14} />
-          <span>{t("controlPanel.update.availableButton")}</span>
-        </>
-      );
-    }
-    return null;
-  };
-
   return (
     <div className="h-screen bg-background flex flex-col">
       <ConnectionStatus />
@@ -786,7 +747,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               setShowSettings(true);
             }}
             userName={user?.name}
-            userEmail={user?.email}
             userImage={user?.image}
             isSignedIn={isSignedIn}
             authLoaded={authLoaded}
@@ -795,17 +755,16 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               (updateStatus.updateAvailable ||
                 updateStatus.updateDownloaded ||
                 isDownloading ||
-                isInstalling) ? (
-                <Button
-                  variant={updateStatus.updateDownloaded ? "default" : "outline"}
-                  size="sm"
-                  onClick={handleUpdateClick}
-                  disabled={isInstalling || isDownloading}
-                  className="h-7 w-full gap-1.5 text-2xs"
-                >
-                  {getUpdateButtonContent()}
-                </Button>
-              ) : undefined
+                isInstalling)
+                ? {
+                    label: updateStatus.updateDownloaded
+                      ? t("controlPanel.update.installButton")
+                      : t("controlPanel.update.availableButton"),
+                    progress: updateStatus.updateDownloaded || isInstalling ? 100 : downloadProgress,
+                    disabled: isInstalling,
+                    onClick: () => void handleUpdateClick(),
+                  }
+                : undefined
             }
           />
         </div>

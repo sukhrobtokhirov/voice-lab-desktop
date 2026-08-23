@@ -56,7 +56,12 @@ class DevServerManager {
 
   static getAppUrl(isControlPanel = false) {
     if (process.env.NODE_ENV === "development") {
-      return isControlPanel ? `${DEV_SERVER_URL}?panel=true` : DEV_SERVER_URL;
+      if (!isControlPanel) return DEV_SERVER_URL;
+
+      const previewProgress = process.env.VOICELAB_UPDATE_PROGRESS_PREVIEW;
+      const query = new URLSearchParams({ panel: "true" });
+      if (previewProgress) query.set("update-progress-preview", previewProgress);
+      return `${DEV_SERVER_URL}?${query}`;
     } else {
       // For production, return null - caller should use loadFile() instead
       return null;

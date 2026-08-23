@@ -78,7 +78,7 @@ test("billing handoff URL contains only the fixed desktop source", () => {
   );
 });
 
-test("sidebar and settings show server plan limits and manual refresh", () => {
+test("profile usage menu and settings show server plan limits and manual refresh", () => {
   const display = read("src/components/UsageDisplay.tsx");
   const sidebar = read("src/components/ControlPanelSidebar.tsx");
   const hook = read("src/hooks/useUsage.ts");
@@ -86,7 +86,10 @@ test("sidebar and settings show server plan limits and manual refresh", () => {
   const compactEnd = display.indexOf("\n  }\n\n  return (", compactStart);
   const compactDisplay = display.slice(compactStart, compactEnd);
 
-  assert.match(sidebar, /<UsageDisplay compact \/>/);
+  assert.match(sidebar, /<PopoverContent[\s\S]*side="top"/);
+  assert.match(sidebar, /<UsageDisplay surface="profile" autoRefresh \/>/);
+  assert.match(display, /window\.setInterval\(\(\) => void refreshUsage\(\), 10_000\)/);
+  assert.match(sidebar, /usedUsagePercentage/);
   assert.doesNotMatch(display, /usage\.plans|planPrice|formatPrice|priceCompact/);
   assert.match(display, /entitlement\.usageLimitSeconds/);
   assert.match(display, /entitlement\?\.resetsAt/);

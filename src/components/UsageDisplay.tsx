@@ -1,6 +1,8 @@
 import { RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useUsage } from "../hooks/useUsage";
+import { signOut } from "../lib/auth";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 
@@ -23,6 +25,16 @@ function formatDuration(seconds: number, language: string) {
     }
   ).DurationFormat;
   if (DurationFormat) return new DurationFormat(language, { style: "short" }).format(duration);
+  if (hours) return `${hours}h${minutes ? ` ${minutes}m` : ""}`;
+  if (minutes) return `${minutes}m${remainder ? ` ${remainder}s` : ""}`;
+  return `${remainder}s`;
+}
+
+function formatCompactDuration(seconds: number) {
+  const safeSeconds = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const remainder = safeSeconds % 60;
   if (hours) return `${hours}h${minutes ? ` ${minutes}m` : ""}`;
   if (minutes) return `${minutes}m${remainder ? ` ${remainder}s` : ""}`;
   return `${remainder}s`;
@@ -51,9 +63,28 @@ function formatResetAt(value: string | null, language: string) {
   }).format(date);
 }
 
-export default function UsageDisplay({ compact = false }: { compact?: boolean }) {
+type UsageDisplayProps = {
+  compact?: boolean;
+  surface?: "settings" | "profile";
+  autoRefresh?: boolean;
+};
+
+export default function UsageDisplay({
+  compact = false,
+  surface = "settings",
+  autoRefresh = false,
+}: UsageDisplayProps) {
   const { t, i18n } = useTranslation();
   const usage = useUsage();
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const refreshUsage = usage?.refetch;
+
+  useEffect(() => {
+    if (!autoRefresh || !refreshUsage) return;
+    const interval = window.setInterval(() => void refreshUsage(), 10_000);
+    return () => window.clearInterval(interval);
+  }, [autoRefresh, refreshUsage]);
+
   if (!usage) return null;
 
   const entitlement = usage.entitlement;
@@ -74,6 +105,54 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
     : active
       ? 100
       : null;
+
+  if (surface === "profile") {
+    if (!usage.hasLoaded) {
+      return <ProfileUsageSkeleton />;
+    }
+
+    return (
+      <div className="space-y-5 py-1">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-base font-semibold leading-5 text-foreground">
+            {t("desktop.wallet.balanceTitle")}
+          </p>
+          <Button
+            size="sm"
+            variant="default"
+            className="h-8 shrink-0 rounded-lg px-3 text-xs"
+            onClick={() => void usage.openBillingPortal()}
+            disabled={!usage.billingAvailable || usage.checkoutLoading}
+          >
+            {active ? t("desktop.wallet.upgradePlan") : t("desktop.wallet.choosePlan")}
+          </Button>
+        </div>
+
+        {active && entitlement ? (
+          <>
+            <dl className="space-y-3 text-sm">
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-muted-foreground">{t("desktop.wallet.total")}</dt>
+                <dd className="shrink-0 text-right font-medium tabular-nums text-foreground">
+                  {formatCompactDuration(entitlement.usageLimitSeconds)}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-muted-foreground">{t("desktop.wallet.remaining")}</dt>
+                <dd className="shrink-0 text-right font-medium tabular-nums text-foreground">
+                  {formatCompactDuration(entitlement.remainingSeconds)}
+                </dd>
+              </div>
+            </dl>
+          </>
+        ) : (
+          <p className="text-sm leading-5 text-muted-foreground">
+            {t("desktop.wallet.inactiveDescription")}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   if (compact) {
     const needsEntitlementRefresh = !hasAuthoritativeEntitlement;
@@ -163,31 +242,7 @@ export default function UsageDisplay({ compact = false }: { compact?: boolean })
   }
 
   return (
-    <div className="space-y-4 border-y border-border/60 bg-transparent py-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-foreground">{t("desktop.wallet.title")}</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {!hasAuthoritativeEntitlement
-              ? usage.isLoading || usage.isRefreshing || !usage.hasLoaded
-                ? t("desktop.wallet.checking")
-                : t("desktop.wallet.unavailable")
-              : active
-                ? t("desktop.wallet.activeDescription")
-                : t("desktop.wallet.inactiveDescription")}
-          </p>
-        </div>
-        <Badge variant={hasAuthoritativeEntitlement && active ? "success" : "outline"}>
-          {!hasAuthoritativeEntitlement
-            ? usage.isLoading || usage.isRefreshing || !usage.hasLoaded
-              ? t("desktop.wallet.checking")
-              : t("desktop.wallet.unavailable")
-            : active
-              ? t("desktop.wallet.active")
-              : t("desktop.wallet.inactive")}
-        </Badge>
-      </div>
-
+    <div className="space-y-3 bg-transparent py-4">
       {active && entitlement && (
         <div className="space-y-3 rounded-xl border border-border/60 p-3">
           <div className="flex items-center justify-between gap-3">
@@ -279,6 +334,26 @@ function UsageValue({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-base font-semibold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+function ProfileUsageSkeleton() {
+  return (
+    <div className="space-y-5 py-1" aria-busy="true" aria-label="Loading plan usage">
+      <div className="flex items-center justify-between">
+        <span className="h-5 w-16 animate-pulse rounded bg-foreground/10" />
+        <span className="h-8 w-20 animate-pulse rounded-lg bg-foreground/10" />
+      </div>
+      <div className="space-y-3">
+        {[0, 1].map((index) => (
+          <div key={index} className="flex items-center justify-between gap-4">
+            <span className="h-4 w-16 animate-pulse rounded bg-foreground/10" />
+            <span className="h-4 w-14 animate-pulse rounded bg-foreground/10" />
+          </div>
+        ))}
+      </div>
+      <span className="block h-4 w-44 animate-pulse rounded bg-foreground/10" />
     </div>
   );
 }
