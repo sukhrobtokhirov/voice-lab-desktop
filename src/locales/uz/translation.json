@@ -3046,7 +3046,27 @@
   "updateNotification": {
     "title": "VoiceLab yangilanishi mavjud",
     "body": "{{version}} versiyasi yuklab olishga tayyor",
-    "cta": "Hozir yangilash"
+    "cta": "Hozir yangilash",
+    "later": "Keyinroq",
+    "update": "Yangilash",
+    "messages": {
+      "betterListener": {
+        "title": "Yaxshiroq tinglovchi keldi.",
+        "description": "Mayda joylar o‘zini tuzatdi."
+      },
+      "listenHarder": {
+        "title": "VoiceLab yaxshiroq tinglaydi.",
+        "description": "“Nima demoqchi edim?” kamroq bo‘ladi."
+      },
+      "improveItself": {
+        "title": "So‘radik. VoiceLab tingladi.",
+        "description": "Silliqroq matnlar. Kamroq syujetlar."
+      },
+      "fixedEarly": {
+        "title": "Muammoni funksiyadan oldin tuzatdik.",
+        "description": "Dag‘al qirralar jim ketdi."
+      }
+    }
   },
   "permissionsGate": {
     "title": "Ruxsatlar kerak",

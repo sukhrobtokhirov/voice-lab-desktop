@@ -96,8 +96,8 @@ const CONTROL_PANEL_CONFIG = {
 };
 
 const NOTIFICATION_WINDOW_CONFIG = {
-  width: 392,
-  height: 92,
+  width: 320,
+  height: 95,
   frame: false,
   transparent: true,
   alwaysOnTop: true,
@@ -106,6 +106,10 @@ const NOTIFICATION_WINDOW_CONFIG = {
   focusable: false,
   hasShadow: false,
   show: false,
+  ...(process.platform === "darwin" && {
+    vibrancy: "under-window",
+    visualEffectState: "active",
+  }),
   webPreferences: {
     preload: path.join(__dirname, "..", "..", "preloads", "notification.js"),
     nodeIntegration: false,

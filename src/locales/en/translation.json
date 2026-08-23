@@ -3044,7 +3044,27 @@
   "updateNotification": {
     "title": "VoiceLab Update Available",
     "body": "Version {{version}} is ready to download",
-    "cta": "Update Now"
+    "cta": "Update Now",
+    "later": "Later",
+    "update": "Update",
+    "messages": {
+      "betterListener": {
+        "title": "A better listener arrived.",
+        "description": "A few loose wires grew up."
+      },
+      "listenHarder": {
+        "title": "VoiceLab listens harder.",
+        "description": "Less \"you know what I meant.\""
+      },
+      "improveItself": {
+        "title": "We asked. VoiceLab listened.",
+        "description": "Fewer surprise plot twists."
+      },
+      "fixedEarly": {
+        "title": "Fixed before it became a feature.",
+        "description": "The rough edges left quietly."
+      }
+    }
   },
   "permissionsGate": {
     "title": "Permissions Required",

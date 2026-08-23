@@ -1,17 +1,24 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
+import voiceLabMark from "../assets/logo.svg";
 
 interface UpdateNotificationData {
   version: string;
   releaseDate?: string;
 }
 
+const UPDATE_MESSAGE_IDS = ["betterListener", "listenHarder", "improveItself", "fixedEarly"];
+
+function getRandomUpdateMessageId() {
+  return UPDATE_MESSAGE_IDS[Math.floor(Math.random() * UPDATE_MESSAGE_IDS.length)];
+}
+
 export default function UpdateNotificationOverlay() {
   const { t } = useTranslation();
   const [data, setData] = useState<UpdateNotificationData | null>(null);
+  const [messageId, setMessageId] = useState(UPDATE_MESSAGE_IDS[0]);
   const [isVisible, setIsVisible] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
 
   useEffect(() => {
     let shown = false;
@@ -20,6 +27,7 @@ export default function UpdateNotificationOverlay() {
       if (shown) return;
       shown = true;
       setData(d);
+      setMessageId(getRandomUpdateMessageId());
       setTimeout(() => {
         setIsVisible(true);
         window.electronAPI?.updateNotificationReady?.();
@@ -50,27 +58,20 @@ export default function UpdateNotificationOverlay() {
   );
 
   const handleMouseEnter = useCallback(() => {
-    setIsHovered(true);
     window.electronAPI?.setNotificationInteractivity?.(true);
   }, []);
 
   const handleMouseLeave = useCallback(() => {
-    setIsHovered(false);
     window.electronAPI?.setNotificationInteractivity?.(false);
   }, []);
 
   return (
-    <div className="meeting-notification-window w-full h-full bg-transparent p-3">
+    <div className="update-notification-window h-full w-full bg-transparent p-2">
       <div
         className={[
-          "relative",
-          "bg-card/95 dark:bg-surface-2/95 backdrop-blur-xl",
-          "border border-border/40 dark:border-border-subtle/40",
-          "rounded-xl shadow-lg p-2.5",
-          "transition-all duration-300 ease-out",
-          isVisible
-            ? "translate-x-0 opacity-100 scale-100"
-            : "translate-x-[120%] opacity-0 scale-95",
+          "relative flex h-full items-start gap-2 rounded-xl bg-transparent px-1 py-1 pb-2 pt-1.5 backdrop-blur-2xl",
+          "transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none",
+          isVisible ? "translate-x-0 opacity-100" : "translate-x-2 opacity-0",
         ].join(" ")}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -78,44 +79,37 @@ export default function UpdateNotificationOverlay() {
         <button
           onClick={() => respond("dismiss")}
           aria-label={t("common.dismiss")}
-          className={[
-            "absolute -left-2.5 -top-2.5 z-10 size-6 rounded-full",
-            "flex items-center justify-center",
-            "bg-card dark:bg-surface-2 border border-border/40 dark:border-border-subtle/40 shadow-sm",
-            "text-muted-foreground/70 hover:text-foreground hover:bg-muted",
-            "transition-all duration-150",
-            isHovered ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none",
-          ].join(" ")}
+          className="absolute right-0.5 top-0 flex size-4 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <X className="size-3" />
+          <X className="size-3.5" />
         </button>
 
-        <div className="flex items-center gap-2.5">
-          <div className="shrink-0 bg-primary/10 rounded-md p-1">
-            <svg viewBox="0 0 1024 1024" className="w-4.5 h-4.5">
-              <rect width="1024" height="1024" rx="241" fill="#2056DF" />
-              <circle cx="512" cy="512" r="314" fill="#2056DF" stroke="white" strokeWidth="74" />
-              <path d="M512 383V641" stroke="white" strokeWidth="74" strokeLinecap="round" />
-              <path d="M627 457V568" stroke="white" strokeWidth="74" strokeLinecap="round" />
-              <path d="M397 457V568" stroke="white" strokeWidth="74" strokeLinecap="round" />
-            </svg>
-          </div>
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-white p-1.5">
+          <img src={voiceLabMark} alt="" className="h-full w-full" />
+        </div>
 
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold leading-snug text-foreground break-words">
-              {t("updateNotification.title")}
-            </p>
-            <p className="mt-0.5 text-xs leading-snug text-muted-foreground break-words">
-              {t("updateNotification.body", { version: data?.version ?? "" })}
-            </p>
-          </div>
+        <div className="flex min-w-0 flex-1 flex-col self-stretch ">
+          <p className="pr-1 text-sm font-semibold leading-4 text-foreground">
+            {t(`updateNotification.messages.${messageId}.title`)}
+          </p>
+          <p className="mt-1 text-xs leading-4 text-muted-foreground">
+            {t(`updateNotification.messages.${messageId}.description`)}
+          </p>
 
-          <button
-            onClick={() => respond("update")}
-            className="shrink-0 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 active:bg-primary/80"
-          >
-            {t("updateNotification.cta")}
-          </button>
+          <div className="mt-auto flex items-center justify-end gap-1 pt-1">
+            <button
+              onClick={() => respond("dismiss")}
+              className="inline-flex h-6 items-center rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+            >
+              {t("updateNotification.later")}
+            </button>
+            <button
+              onClick={() => respond("update")}
+              className="inline-flex h-6 items-center rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 active:bg-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card cursor-pointer"
+            >
+              {t("updateNotification.update")}
+            </button>
+          </div>
         </div>
       </div>
     </div>
