@@ -94,14 +94,15 @@ test("manual and tag releases resolve immutable version provenance", () => {
   assert.match(contract, /const releaseTargets = includeWindows \? TARGETS : CORE_TARGETS/);
 });
 
-test("promotion stays private until every uploaded asset is counted", () => {
-  const draftIndex = release.indexOf("--draft");
+test("promotion uses GitHub CLI's atomic asset upload and publication flow", () => {
+  const createIndex = release.indexOf('gh release create "$TAG" "${assets[@]}"');
   const countIndex = release.indexOf("actual_count=");
-  const publicIndex = release.indexOf('gh release edit "$TAG" --draft=false');
-  assert.ok(draftIndex > 0);
-  assert.ok(countIndex > draftIndex);
-  assert.ok(publicIndex > countIndex);
-  assert.match(release, /trap cleanup_draft EXIT/);
+  assert.ok(createIndex > 0);
+  assert.ok(countIndex > createIndex);
+  assert.match(release, /gh release create "\$TAG" "\$\{assets\[@\]\}"[\s\S]*?--verify-tag/);
+  assert.doesNotMatch(release, /gh release create[\s\S]*?--draft/);
+  assert.doesNotMatch(release, /gh release edit/);
+  assert.doesNotMatch(release, /cleanup_draft/);
 });
 
 test("package verification covers signing, notarization, preloads, and secrets", () => {
