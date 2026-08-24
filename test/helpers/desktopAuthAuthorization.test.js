@@ -716,6 +716,28 @@ test("rejects oversized identities and unsafe avatar URLs from auth responses", 
   );
 });
 
+test("uses first and last name together when the auth response provides both", () => {
+  const { DesktopAuthManager } = loadDesktopAuthManager();
+
+  assert.deepEqual(
+    DesktopAuthManager.normalizedUser({
+      user: {
+        id: "full-name-user",
+        email: "full-name@example.com",
+        name: "Ilyosjon",
+        given_name: "Ilyosjon",
+        family_name: "Tursunov",
+      },
+    }),
+    {
+      id: "full-name-user",
+      email: "full-name@example.com",
+      name: "Ilyosjon Tursunov",
+      image: null,
+    }
+  );
+});
+
 test("logout prevents a late authorization exchange from restoring credentials", async (t) => {
   const originalFetch = global.fetch;
   t.after(() => {

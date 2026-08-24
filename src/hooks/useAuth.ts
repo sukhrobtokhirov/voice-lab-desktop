@@ -21,11 +21,26 @@ const initialState: DesktopAuthState = {
   errorMessage: null,
 };
 
+function wordCount(value: string | null | undefined): number {
+  return value?.trim().split(/\s+/).filter(Boolean).length ?? 0;
+}
+
+function preferredName(currentName: string, profileName: string | null): string {
+  const normalizedProfileName = profileName?.trim();
+  if (!normalizedProfileName) return currentName;
+
+  // The desktop profile can contain a shorter display name. Keep a complete
+  // authenticated name (for example, first and last name) when it is available.
+  return wordCount(currentName) > wordCount(normalizedProfileName)
+    ? currentName
+    : normalizedProfileName;
+}
+
 function mergeProfile(user: VoiceLabUser, profile: DesktopProfile): VoiceLabUser {
   if (profile.user.id !== user.id) return user;
   return {
     ...user,
-    name: profile.user.displayName || user.name,
+    name: preferredName(user.name, profile.user.displayName),
     image: profile.user.avatarUrl || user.image || null,
   };
 }

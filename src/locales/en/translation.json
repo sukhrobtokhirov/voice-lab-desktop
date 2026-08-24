@@ -3324,7 +3324,7 @@
       "localAudioDescription": "Choose how long recordings remain on this device."
     },
     "settings": {
-      "account": "Account & Credits",
+      "account": "Account",
       "accountDescription": "Profile, secure session and billing",
       "dictation": "Dictation",
       "dictationDescription": "Language, microphone and paste behavior",

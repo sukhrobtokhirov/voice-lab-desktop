@@ -11,7 +11,6 @@ import {
   LoaderCircle,
   Pencil,
   Plus,
-  Sparkles,
   TriangleAlert,
   Upload,
   X,
@@ -377,14 +376,6 @@ export default function DictionaryView() {
               </div>
             </div>
           )}
-
-          <div className="rounded-lg bg-primary/5 px-3.5 py-2.5 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <Sparkles size={12} className="text-primary shrink-0" />
-              <span className="text-xs font-medium text-primary truncate">{agentName}</span>
-            </div>
-            <span className="text-xs text-foreground/40">{t("dictionary.agentDefault")}</span>
-          </div>
 
           <div className="rounded-lg border border-foreground/10 bg-background px-3.5 py-3">
             {dictionaryEntries.length > 0 && (

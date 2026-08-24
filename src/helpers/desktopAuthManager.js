@@ -196,7 +196,14 @@ function canonicalUser(value) {
   const id = boundedIdentity(rawId, USER_ID_MAX_LENGTH);
   const email = boundedIdentity(rawEmail, USER_EMAIL_MAX_LENGTH);
   if (!id || !email) return null;
-  const rawName = value.name ?? value.full_name ?? value.display_name ?? value.username ?? email;
+  const givenName = value.given_name ?? value.first_name;
+  const familyName = value.family_name ?? value.last_name;
+  const combinedName =
+    typeof givenName === "string" && typeof familyName === "string"
+      ? `${givenName} ${familyName}`
+      : null;
+  const rawName =
+    value.full_name ?? combinedName ?? value.name ?? value.display_name ?? value.username ?? email;
   const rawImage = value.image ?? value.avatar ?? value.avatar_url ?? value.picture;
   return {
     id,

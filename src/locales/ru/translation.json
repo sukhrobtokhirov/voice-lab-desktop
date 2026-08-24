@@ -3328,7 +3328,7 @@
       "localAudioDescription": "Выберите срок хранения записей на этом устройстве."
     },
     "settings": {
-      "account": "Аккаунт и кредиты",
+      "account": "Аккаунт",
       "accountDescription": "Профиль, защищённая сессия и оплата",
       "dictation": "Диктовка",
       "dictationDescription": "Язык, микрофон и вставка текста",

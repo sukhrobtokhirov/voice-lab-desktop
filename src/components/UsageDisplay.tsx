@@ -1,8 +1,7 @@
 import { RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useUsage } from "../hooks/useUsage";
-import { signOut } from "../lib/auth";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 
@@ -40,16 +39,6 @@ function formatCompactDuration(seconds: number) {
   return `${remainder}s`;
 }
 
-function formatUpdatedAt(value: string | null, language: string) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat(language, {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
 function formatResetAt(value: string | null, language: string) {
   if (!value) return null;
   const date = new Date(value);
@@ -76,7 +65,6 @@ export default function UsageDisplay({
 }: UsageDisplayProps) {
   const { t, i18n } = useTranslation();
   const usage = useUsage();
-  const [isSigningOut, setIsSigningOut] = useState(false);
   const refreshUsage = usage?.refetch;
 
   useEffect(() => {
@@ -98,7 +86,6 @@ export default function UsageDisplay({
       : t("desktop.wallet.choosePlan")
     : t("desktop.wallet.manage");
   const stt = usage.sttUsage;
-  const updatedAt = formatUpdatedAt(usage.updatedAt, i18n.language);
   const resetsAt = formatResetAt(entitlement?.resetsAt || null, i18n.language);
   const percentage = stt?.limit_seconds
     ? Math.min(100, Math.max(0, (stt.remaining_seconds / stt.limit_seconds) * 100))
@@ -244,43 +231,63 @@ export default function UsageDisplay({
   return (
     <div className="space-y-3 bg-transparent py-4">
       {active && entitlement && (
-        <div className="space-y-3 rounded-xl border border-border/60 p-3">
-          <div className="flex items-center justify-between gap-3">
-            <p className="font-medium text-foreground">
+        <div className="space-y-4 rounded-xl border border-border/60 p-4">
+          <div className="flex items-center">
+            <Badge
+              variant="outline"
+              className={
+                isFreePlan
+                  ? "border-border bg-muted/70 text-muted-foreground"
+                  : "border-coral/30 bg-coral/10 text-coral dark:border-coral/35 dark:bg-coral/15"
+              }
+            >
               {entitlement.planName || usage.plan || t("desktop.wallet.activePlan")}
-            </p>
-            <Badge variant="success">{t("desktop.wallet.active")}</Badge>
+            </Badge>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <UsageValue
-              label={t("desktop.wallet.balance")}
-              value={formatDuration(entitlement.usedSeconds, i18n.language)}
-            />
-            <UsageValue
-              label={t("desktop.wallet.available")}
-              value={formatDuration(entitlement.remainingSeconds, i18n.language)}
-            />
-            <UsageValue
-              label={t("desktop.wallet.dailyLimit")}
-              value={formatDuration(entitlement.usageLimitSeconds, i18n.language)}
-            />
+          <div className="space-y-2.5">
+            <div className="flex items-end justify-between gap-6">
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  {t("desktop.wallet.available")}
+                </p>
+                <p className="mt-1 text-xl font-semibold leading-none tabular-nums text-foreground">
+                  {formatDuration(entitlement.remainingSeconds, i18n.language)}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">
+                  {t("desktop.wallet.dailyLimit")}
+                </p>
+                <p className="mt-1 text-sm font-medium tabular-nums text-foreground">
+                  {formatDuration(entitlement.usageLimitSeconds, i18n.language)}
+                </p>
+              </div>
+            </div>
+            <div
+              className="h-1.5 overflow-hidden rounded-full bg-foreground/10 dark:bg-foreground/15"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={entitlement.usageLimitSeconds}
+              aria-valuenow={entitlement.usedSeconds}
+              aria-label={t("desktop.wallet.balance")}
+            >
+              <div
+                className="h-full rounded-full bg-foreground/70 transition-[width] duration-200 dark:bg-foreground/80"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    Math.max(0, (entitlement.usedSeconds / entitlement.usageLimitSeconds) * 100)
+                  )}%`,
+                }}
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span>
+                {t("desktop.wallet.balance")} {formatDuration(entitlement.usedSeconds, i18n.language)}
+              </span>
+              {resetsAt && <span>{t("desktop.wallet.resetsOn", { date: resetsAt })}</span>}
+            </div>
           </div>
-          {resetsAt && (
-            <p className="text-xs text-muted-foreground">
-              {t("desktop.wallet.resetsOn", { date: resetsAt })}
-            </p>
-          )}
-        </div>
-      )}
-
-      {stt && (
-        <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-          <div
-            className="h-full rounded-full bg-primary transition-[width] duration-300"
-            style={{
-              width: `${Math.min(100, Math.max(0, (stt.remaining_seconds / stt.limit_seconds) * 100))}%`,
-            }}
-          />
         </div>
       )}
 
@@ -293,47 +300,17 @@ export default function UsageDisplay({
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">
-          {usage.checkoutLoading
-            ? t("desktop.wallet.checking")
-            : updatedAt
-              ? t("desktop.wallet.updated", { time: updatedAt })
-              : t("desktop.wallet.refreshHint")}
-        </p>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => void usage.refetch()}
-            disabled={usage.isLoading || usage.isRefreshing || usage.checkoutLoading}
-          >
-            <RefreshCw
-              className={`mr-1.5 h-3.5 w-3.5 ${usage.isLoading || usage.isRefreshing || usage.checkoutLoading ? "animate-spin" : ""}`}
-            />
-            {usage.isLoading || usage.isRefreshing || usage.checkoutLoading
-              ? t("desktop.wallet.refreshing")
-              : t("desktop.wallet.refresh")}
-          </Button>
-          <Button
-            size="sm"
-            variant="default"
-            onClick={() => void usage.openBillingPortal()}
-            disabled={!usage.billingAvailable || usage.checkoutLoading}
-          >
-            {billingActionLabel}
-          </Button>
-        </div>
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          variant="default"
+          className="h-8 px-3 text-xs"
+          onClick={() => void usage.openBillingPortal()}
+          disabled={!usage.billingAvailable || usage.checkoutLoading}
+        >
+          {usage.checkoutLoading ? t("desktop.wallet.checking") : billingActionLabel}
+        </Button>
       </div>
-    </div>
-  );
-}
-
-function UsageValue({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-base font-semibold tabular-nums">{value}</p>
     </div>
   );
 }

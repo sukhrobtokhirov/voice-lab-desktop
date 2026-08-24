@@ -3282,7 +3282,7 @@
       "localAudioDescription": "Elija cuánto tiempo permanecerán las grabaciones en este dispositivo."
     },
     "settings": {
-      "account": "Cuenta y créditos",
+      "account": "Cuenta",
       "accountDescription": "Perfil, sesión segura y facturación",
       "dictation": "Dictado",
       "dictationDescription": "Comportamiento de lenguaje, micrófono y pegado",

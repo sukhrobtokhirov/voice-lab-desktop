@@ -61,11 +61,8 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
     () => [
       {
         id: "account",
-        label: t("desktop.settings.account", { defaultValue: "Account & Credits" }),
+        label: t("desktop.settings.account", { defaultValue: "Account" }),
         icon: UserCircle,
-        description: t("desktop.settings.accountDescription", {
-          defaultValue: "Profile, secure session and billing",
-        }),
         group: t("settingsModal.groups.account", { defaultValue: "VoiceLab" }),
       },
       {

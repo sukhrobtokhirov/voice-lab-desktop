@@ -8,7 +8,6 @@ import {
   RefreshCw,
   Download,
   Mic,
-  LogOut,
   UserCircle,
   Sun,
   Moon,
@@ -1282,92 +1281,56 @@ export default function SettingsPage({
       case "plansBilling":
         return (
           <div className="space-y-5">
-            <SectionHeader
-              title={t("desktop.settings.account", { defaultValue: "Account & Credits" })}
-              description={t("desktop.settings.accountDescription", {
-                defaultValue: "Your VoiceLab profile, secure desktop session and billing.",
-              })}
-            />
-
             {!isLoaded ? (
-              <SettingsPanel>
-                <SettingsPanelRow>
-                  <div className="flex items-center gap-3">
-                    <Skeleton className="h-11 w-11 rounded-full" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-4 w-36" />
-                      <Skeleton className="h-3 w-52" />
-                    </div>
-                  </div>
-                </SettingsPanelRow>
-              </SettingsPanel>
+              <div className="flex items-center gap-3 py-1">
+                <Skeleton className="h-11 w-11 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-36" />
+                  <Skeleton className="h-3 w-52" />
+                </div>
+              </div>
             ) : isSignedIn ? (
               <>
-                <SettingsPanel>
-                  <SettingsPanelRow>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#e55347]/10">
-                        {user?.image ? (
-                          <img
-                            src={user.image}
-                            alt=""
-                            className="h-11 w-11 rounded-full object-cover"
-                          />
-                        ) : (
-                          <UserCircle className="h-6 w-6 text-[#e55347]" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-foreground">
-                          {user?.name ||
-                            t("settingsPage.account.user", { defaultValue: "VoiceLab user" })}
-                        </p>
-                        {user?.email && (
-                          <p className="truncate text-sm text-muted-foreground">{user.email}</p>
-                        )}
-                      </div>
-                      <Badge variant="success">
-                        {t("desktop.session.active", { defaultValue: "Signed in" })}
-                      </Badge>
-                    </div>
-                  </SettingsPanelRow>
-                  <SettingsPanelRow>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-lg bg-muted/45 p-3">
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          {t("desktop.session.device", { defaultValue: "Device" })}
-                        </p>
-                        <p className="mt-1 text-sm font-medium">
-                          {t("desktop.session.thisDevice", {
-                            defaultValue: "This VoiceLab Flow desktop",
-                          })}
-                        </p>
-                      </div>
-                      <div className="rounded-lg bg-muted/45 p-3">
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          {t("desktop.session.status", { defaultValue: "Session" })}
-                        </p>
-                        <p className="mt-1 text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                          {t("desktop.session.protected", { defaultValue: "Active and protected" })}
-                        </p>
-                      </div>
-                    </div>
-                  </SettingsPanelRow>
-                </SettingsPanel>
+                <div className="flex items-center gap-3 py-1">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#e55347]/10">
+                    {user?.image ? (
+                      <img
+                        src={user.image}
+                        alt=""
+                        className="h-11 w-11 rounded-full object-cover"
+                      />
+                    ) : (
+                      <UserCircle className="h-6 w-6 text-[#e55347]" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {user?.name ||
+                        t("settingsPage.account.user", { defaultValue: "VoiceLab user" })}
+                    </p>
+                    {user?.email && (
+                      <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+                    )}
+                  </div>
+                </div>
 
                 <UsageDisplay />
 
-                <Button
-                  onClick={handleSignOut}
-                  variant="outline"
-                  disabled={isSigningOut}
-                  className="w-full"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  {isSigningOut
-                    ? t("settingsPage.account.signOut.signingOut", { defaultValue: "Signing out…" })
-                    : t("settingsPage.account.signOut.signOut", { defaultValue: "Sign out" })}
-                </Button>
+                <div className="flex justify-end">
+                  <Button
+                    onClick={handleSignOut}
+                    variant="ghost"
+                    size="sm"
+                    disabled={isSigningOut}
+                    className="h-8 px-2 text-xs text-muted-foreground hover:bg-transparent hover:text-destructive"
+                  >
+                    {isSigningOut
+                      ? t("settingsPage.account.signOut.signingOut", {
+                          defaultValue: "Signing out…",
+                        })
+                      : t("settingsPage.account.signOut.signOut", { defaultValue: "Sign out" })}
+                  </Button>
+                </div>
               </>
             ) : (
               <SettingsPanel>

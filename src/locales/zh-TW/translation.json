@@ -3277,7 +3277,7 @@
       "localAudioDescription": "選擇錄音在此裝置上保留的時間。"
     },
     "settings": {
-      "account": "帳戶及積分",
+      "account": "帳戶",
       "accountDescription": "個人資料、安全工作階段和帳單",
       "dictation": "聽寫",
       "dictationDescription": "語言、麥克風和貼上行為",

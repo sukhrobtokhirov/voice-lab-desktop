@@ -798,34 +798,39 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
           />
         </div>
         <main className="flex-1 flex flex-col overflow-hidden">
-          <div
-            className="flex h-12 w-full shrink-0 items-center justify-between border-b border-black/10 bg-white dark:border-white/12 dark:bg-[#0f0f0f]"
-            style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
-          >
-            {isSidePanelLayout && (
-              <div
-                className={platform === "darwin" ? "ml-[84px] mt-[16px]" : "ml-2"}
-                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-              >
-                <Button
-                  variant="outline-flat"
-                  size="sm"
-                  onClick={handleExitMeetingMode}
-                  className="h-7 px-2.5 pl-1.5 gap-1"
+          {(isSidePanelLayout || platform !== "darwin") && (
+            <div
+              className="flex h-12 w-full shrink-0 items-center justify-between border-b border-black/10 bg-white dark:border-white/12 dark:bg-[#0f0f0f]"
+              style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+            >
+              {isSidePanelLayout && (
+                <div
+                  className={platform === "darwin" ? "ml-[84px] mt-[16px]" : "ml-2"}
+                  style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
                 >
-                  <ChevronLeft size={14} strokeWidth={1.8} />
-                  {t("controlPanel.backToNotes")}
-                </Button>
-              </div>
-            )}
-            <div className="flex-1" />
-            {platform !== "darwin" && (
-              <div className="pr-1" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
-                <WindowControls />
-              </div>
-            )}
-          </div>
-          <div className="flex-1 overflow-y-auto pt-1">
+                  <Button
+                    variant="outline-flat"
+                    size="sm"
+                    onClick={handleExitMeetingMode}
+                    className="h-7 px-2.5 pl-1.5 gap-1"
+                  >
+                    <ChevronLeft size={14} strokeWidth={1.8} />
+                    {t("controlPanel.backToNotes")}
+                  </Button>
+                </div>
+              )}
+              <div className="flex-1" />
+              {platform !== "darwin" && (
+                <div
+                  className="pr-1"
+                  style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+                >
+                  <WindowControls />
+                </div>
+              )}
+            </div>
+          )}
+          <div className="flex-1 overflow-y-auto">
             {gpuAccelAvailable && activeView === "home" && !gpuBannerDismissed && (
               <div className="max-w-3xl mx-auto w-full mb-3">
                 <div className="rounded-lg border border-primary/20 dark:border-primary/15 bg-primary/5 p-3">

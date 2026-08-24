@@ -3282,7 +3282,7 @@
       "localAudioDescription": "このデバイスに録音を残す期間を選択します。"
     },
     "settings": {
-      "account": "アカウントとクレジット",
+      "account": "アカウント",
       "accountDescription": "プロフィール、安全なセッション、請求",
       "dictation": "ディクテーション",
       "dictationDescription": "言語、マイク、およびペーストの動作",
