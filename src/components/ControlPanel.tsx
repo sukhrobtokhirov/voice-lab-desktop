@@ -43,6 +43,7 @@ import ConnectionStatus from "./ConnectionStatus";
 import { Skeleton } from "./ui/skeleton";
 
 import { getCachedPlatform } from "../utils/platform";
+import { writeTextToClipboard } from "../utils/writeClipboard";
 import {
   setActiveNoteId,
   setActiveFolderId,
@@ -113,6 +114,10 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   const [showSearch, setShowSearch] = useState(false);
   const showDiscarded = useShowDiscarded();
   const [showCloudMigrationBanner, setShowCloudMigrationBanner] = useState(false);
+  const [savedDictationPage, setSavedDictationPage] = useState(0);
+  const [hasMoreSavedDictations, setHasMoreSavedDictations] = useState(false);
+  const [isLoadingMoreSavedDictations, setIsLoadingMoreSavedDictations] = useState(false);
+  const [savedDictationsError, setSavedDictationsError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<ControlPanelView>("home");
   const {
     collapsed: sidebarCollapsed,
@@ -145,6 +150,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   const { toast } = useToast();
   const { useCleanupModel, setUseLocalWhisper, setCloudTranscriptionMode } = useSettings();
   const { isSignedIn, isLoaded: authLoaded, user } = useAuth();
+  const dataRetentionEnabled = useSettingsStore((state) => state.dataRetentionEnabled);
   const usage = useUsage({ loadOnMount: activeView === "integrations" });
 
   const {
@@ -186,6 +192,41 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   useEffect(() => {
     loadTranscriptions();
   }, [loadTranscriptions]);
+
+  const loadSavedDictations = useCallback(
+    async (page: number) => {
+      if (
+        !authLoaded ||
+        !isSignedIn ||
+        !dataRetentionEnabled ||
+        !window.electronAPI?.desktopListTranscriptions
+      ) {
+        return;
+      }
+      setIsLoadingMoreSavedDictations(true);
+      setSavedDictationsError(null);
+      try {
+        const result = await window.electronAPI.desktopListTranscriptions(page, 50);
+        if (!result.success) {
+          setSavedDictationsError(result.code || "SERVICE_UNAVAILABLE");
+          return;
+        }
+        await initializeTranscriptions(Math.max(50, page * 50), showDiscarded);
+        setSavedDictationPage(result.page || page);
+        setHasMoreSavedDictations(result.hasMore === true);
+      } catch {
+        setSavedDictationsError("SERVICE_UNAVAILABLE");
+      } finally {
+        setIsLoadingMoreSavedDictations(false);
+      }
+    },
+    [authLoaded, dataRetentionEnabled, isSignedIn, showDiscarded]
+  );
+
+  useEffect(() => {
+    if (activeView !== "home") return;
+    void loadSavedDictations(1);
+  }, [activeView, loadSavedDictations]);
 
   useEffect(() => {
     const { noteFilesEnabled, noteFilesPath } = useSettingsStore.getState();
@@ -363,19 +404,15 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   const copyToClipboard = useCallback(
     async (text: string) => {
       try {
-        await navigator.clipboard.writeText(text);
-        toast({
-          title: t("controlPanel.history.copiedTitle"),
-          description: t("controlPanel.history.copiedDescription"),
-          variant: "success",
-          duration: 2000,
-        });
+        await writeTextToClipboard(text);
+        return true;
       } catch (err) {
         toast({
           title: t("controlPanel.history.couldNotCopyTitle"),
           description: t("controlPanel.history.couldNotCopyDescription"),
           variant: "destructive",
         });
+        return false;
       }
     },
     [toast, t]
@@ -855,6 +892,13 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
                 onRetryTranscription={retryTranscription}
                 showDiscarded={showDiscarded}
                 onToggleDiscarded={toggleShowDiscarded}
+                hasMoreSavedDictations={hasMoreSavedDictations}
+                isLoadingMoreSavedDictations={isLoadingMoreSavedDictations}
+                savedDictationsError={savedDictationsError}
+                onRetrySavedDictations={() => void loadSavedDictations(1)}
+                onLoadMoreSavedDictations={() => void loadSavedDictations(savedDictationPage + 1)}
+                onUpdateTranscription={updateInStore}
+                onRemoveTranscription={removeFromStore}
                 onOpenSettings={(section) => {
                   setSettingsSection(section);
                   setShowSettings(true);

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img">
+  <title>Subtitles</title>
+  <g
+    fill="none"
+    stroke="currentColor"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="40"
+  >
+    <rect x="48" y="92" width="416" height="328" rx="82" />
+    <path d="M140 238h170M380 238h34M140 318h60M270 318h144" />
+  </g>
+</svg>

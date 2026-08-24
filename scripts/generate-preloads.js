@@ -105,6 +105,9 @@ const controlOnly = new Set([
   "desktopPricing",
   "desktopSubscription",
   "onDictationComplete",
+  "desktopListTranscriptions",
+  "desktopGetTranscription",
+  "desktopUpdateTranscription",
 ]);
 
 const agent = new Set([

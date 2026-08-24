@@ -2,6 +2,7 @@ import { createElement, useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import AudioManager from "../helpers/audioManager";
 import logger from "../utils/logger";
+import { writeTextToClipboard } from "../utils/writeClipboard";
 import { playStartCue, playStopCue } from "../utils/dictationCues";
 import { getSettings } from "../stores/settingsStore";
 import { expandSnippets } from "../utils/snippets";
@@ -241,11 +242,14 @@ export const useAudioRecording = (toast, options = {}) => {
               "streaming"
             );
           } else if (keepTranscriptionInClipboard) {
-            await navigator.clipboard.writeText(result.text);
+            await writeTextToClipboard(result.text);
           }
 
           audioManagerRef.current.saveTranscription(result.text, result.rawText ?? result.text, {
             clientTranscriptionId: result.clientTranscriptionId,
+            desktopTranscriptionId: result.desktopTranscriptionId,
+            desktopRevision: result.desktopRevision,
+            desktopAudioAvailable: result.desktopAudioAvailable === true,
           });
           if (textWasPlaced) {
             setWasPlaced(true);

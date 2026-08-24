@@ -64,6 +64,10 @@ export type TranscriptionErrorCode =
   | "INVALID_REQUEST"
   | "CANCELLED"
   | "IDEMPOTENCY_CONFLICT"
+  | "DESKTOP_TRANSCRIPT_CONFLICT"
+  | "DESKTOP_TRANSCRIPTION_NOT_FOUND"
+  | "DESKTOP_TRANSCRIPTIONS_UNAVAILABLE"
+  | "VALIDATION_ERROR"
   | "SERVICE_UNAVAILABLE"
   | "PASTE_ACCESSIBILITY_REQUIRED"
   | "VOICELAB_STREAMING_DISABLED"
@@ -91,6 +95,9 @@ export interface TranscriptionItem {
   cloud_id: string | null;
   sync_status: "synced" | "pending" | "error";
   deleted_at: string | null;
+  desktop_transcription_id?: string | null;
+  desktop_revision?: number | null;
+  desktop_audio_available?: number;
 }
 
 export interface NoteItem {
@@ -538,6 +545,9 @@ declare global {
           errorMessage?: string | null;
           errorCode?: TranscriptionErrorCode;
           clientTranscriptionId?: string;
+          desktopTranscriptionId?: string | null;
+          desktopRevision?: number | null;
+          desktopAudioAvailable?: boolean;
         }
       ) => Promise<{ id: number; success: boolean; transcription?: TranscriptionItem }>;
       getTranscriptions: (
@@ -581,6 +591,40 @@ declare global {
         text: string,
         rawText: string
       ) => Promise<{ success: boolean; transcription?: TranscriptionItem; error?: string }>;
+      desktopListTranscriptions?: (
+        page?: number,
+        pageSize?: number
+      ) => Promise<{
+        success: boolean;
+        transcriptions?: TranscriptionItem[];
+        page?: number;
+        pageSize?: number;
+        hasMore?: boolean;
+        nextPage?: number | null;
+        error?: string;
+        code?: TranscriptionErrorCode;
+        status?: number | null;
+      }>;
+      desktopGetTranscription?: (id: string) => Promise<{
+        success: boolean;
+        transcription?: TranscriptionItem;
+        audioUrl?: string | null;
+        error?: string;
+        code?: TranscriptionErrorCode;
+        status?: number | null;
+      }>;
+      desktopUpdateTranscription?: (
+        id: string,
+        transcript: string,
+        expectedRevision: number
+      ) => Promise<{
+        success: boolean;
+        transcription?: TranscriptionItem;
+        removed?: boolean;
+        error?: string;
+        code?: TranscriptionErrorCode;
+        status?: number | null;
+      }>;
 
       // Dictionary operations
       getDictionary: () => Promise<string[]>;

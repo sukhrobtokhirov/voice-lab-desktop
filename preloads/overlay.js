@@ -56,6 +56,11 @@ const fullElectronAPI = {
   updateTranscriptionText: (id, text, rawText) =>
     ipcRenderer.invoke("update-transcription-text", id, text, rawText),
   getTranscriptionById: (id) => ipcRenderer.invoke("get-transcription-by-id", id),
+  desktopListTranscriptions: (page, pageSize) =>
+    ipcRenderer.invoke("desktop-list-transcriptions", page, pageSize),
+  desktopGetTranscription: (id) => ipcRenderer.invoke("desktop-get-transcription", id),
+  desktopUpdateTranscription: (id, transcript, expectedRevision) =>
+    ipcRenderer.invoke("desktop-update-transcription", id, transcript, expectedRevision),
 
   // Dictionary functions
   getDictionary: () => ipcRenderer.invoke("db-get-dictionary"),

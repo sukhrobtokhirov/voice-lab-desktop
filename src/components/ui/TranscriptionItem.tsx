@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./button";
 import { Tooltip } from "./tooltip";
 import {
   Copy,
+  Check,
   Trash2,
-  FileText,
+  Pencil,
   FolderOpen,
   RotateCcw,
   Loader2,
@@ -30,11 +31,12 @@ function getShowInFolderKey(): string {
 
 interface TranscriptionItemProps {
   item: TranscriptionItemType;
-  onCopy: (text: string) => void;
+  onCopy: (text: string) => Promise<boolean>;
   onDelete: (id: number) => void;
   onShowAudioInFolder?: (id: number) => void;
   onRetryTranscription?: (id: number, options?: { isRecover?: boolean }) => Promise<void>;
   onOpenSettings?: () => void;
+  onEdit?: (item: TranscriptionItemType) => void;
 }
 
 export default function TranscriptionItem({
@@ -44,11 +46,20 @@ export default function TranscriptionItem({
   onShowAudioInFolder,
   onRetryTranscription,
   onOpenSettings,
+  onEdit,
 }: TranscriptionItemProps) {
   const { t, i18n } = useTranslation();
   const [isHovered, setIsHovered] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [copiedTarget, setCopiedTarget] = useState<"text" | null>(null);
+  const copiedResetTimerRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (copiedResetTimerRef.current) clearTimeout(copiedResetTimerRef.current);
+    },
+    []
+  );
 
   const timestampSource = item.timestamp.endsWith("Z") ? item.timestamp : `${item.timestamp}Z`;
   const timestampDate = new Date(timestampSource);
@@ -69,16 +80,23 @@ export default function TranscriptionItem({
     }
   };
 
+  const handleCopy = async (text: string) => {
+    if (!(await onCopy(text))) return;
+    setCopiedTarget("text");
+    if (copiedResetTimerRef.current) clearTimeout(copiedResetTimerRef.current);
+    copiedResetTimerRef.current = window.setTimeout(() => setCopiedTarget(null), 1500);
+  };
+
   const isFailed = item.status === "failed";
   const isDiscarded = item.status === "discarded";
   const discardedDuration =
     item.audio_duration_ms && item.audio_duration_ms > 0
       ? formatMmSs(Math.round(item.audio_duration_ms / 1000))
       : null;
-  const rawText = item.raw_text;
-  const hasRawText = rawText !== null;
   const hasAudio = item.has_audio === 1;
-  const showUtilityGroup = hasRawText || hasAudio;
+  const hasSavedDictation =
+    typeof item.desktop_transcription_id === "string" && item.desktop_revision != null;
+  const showUtilityGroup = hasSavedDictation || hasAudio;
 
   const errorCode = item.error_code as TranscriptionErrorCode;
   const isConfigError =
@@ -90,28 +108,17 @@ export default function TranscriptionItem({
 
   return (
     <div
-      className={cn(
-        "group rounded-md border border-l-2 px-3 py-2.5 transition-colors duration-150",
-        isFailed
-          ? "border-destructive/30 bg-destructive/5 hover:bg-destructive/10"
-          : isDiscarded
-            ? "border-border/30 bg-muted/20 hover:bg-muted/30 opacity-80"
-            : "border-border/40 dark:border-border-subtle/60 bg-card/50 dark:bg-surface-2/60 hover:bg-muted/30 dark:hover:bg-surface-2/80",
-        // Subtle left accent for translation records; transparent keeps others pixel-aligned.
-        item.route_kind === "translation"
-          ? "border-l-primary/70 dark:border-l-primary/70"
-          : "border-l-transparent dark:border-l-transparent"
-      )}
+      className="group relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className="flex items-start gap-3">
-        {formattedTime && (
-          <span className="shrink-0 text-2xs text-muted-foreground tabular-nums pt-0.5">
-            {formattedTime}
-          </span>
+      <div
+        className={cn(
+          "rounded-sm bg-white/[0.035] p-3 backdrop-blur-xl",
+          isDiscarded && "opacity-70"
         )}
-
+      >
+        <div className="flex items-start gap-2">
         {isFailed ? (
           <div className="flex-1 min-w-0 flex items-start gap-2">
             <AlertCircle size={14} className="shrink-0 text-destructive mt-0.5" />
@@ -179,7 +186,7 @@ export default function TranscriptionItem({
 
         <div
           className={cn(
-            "flex items-center gap-0.5 shrink-0 transition-opacity duration-150",
+            "flex shrink-0 items-center gap-0.5 pt-0.5 transition-opacity duration-150",
             isFailed || isDiscarded ? "opacity-100" : isHovered ? "opacity-100" : "opacity-0"
           )}
         >
@@ -223,18 +230,15 @@ export default function TranscriptionItem({
               </Button>
             </Tooltip>
           )}
-          {!isFailed && !isDiscarded && hasRawText && (
-            <Tooltip content={t("controlPanel.history.viewRawTranscript")}>
+          {!isFailed && !isDiscarded && hasSavedDictation && (
+            <Tooltip content={t("controlPanel.history.edit")}>
               <Button
                 size="icon"
                 variant="ghost"
-                onClick={() => setIsExpanded(!isExpanded)}
-                className={cn(
-                  "h-6 w-6 rounded-sm text-muted-foreground hover:text-primary hover:bg-primary/10",
-                  isExpanded && "text-primary"
-                )}
+                onClick={() => onEdit?.(item)}
+                className="h-6 w-6 rounded-sm text-muted-foreground hover:text-primary hover:bg-primary/10"
               >
-                <FileText size={12} />
+                <Pencil size={9} />
               </Button>
             </Tooltip>
           )}
@@ -246,7 +250,7 @@ export default function TranscriptionItem({
                 onClick={() => onShowAudioInFolder?.(item.id)}
                 className="h-6 w-6 rounded-sm text-muted-foreground hover:text-primary hover:bg-primary/10"
               >
-                <FolderOpen size={12} />
+                <FolderOpen size={9} />
               </Button>
             </Tooltip>
           )}
@@ -266,9 +270,9 @@ export default function TranscriptionItem({
                 className="h-6 w-6 rounded-sm text-muted-foreground hover:text-primary hover:bg-primary/10"
               >
                 {isRetrying ? (
-                  <Loader2 size={12} className="animate-spin" />
+                  <Loader2 size={9} className="animate-spin" />
                 ) : (
-                  <RotateCcw size={12} />
+                  <RotateCcw size={9} />
                 )}
               </Button>
             </Tooltip>
@@ -279,10 +283,10 @@ export default function TranscriptionItem({
               <Button
                 size="icon"
                 variant="ghost"
-                onClick={() => onCopy(item.text)}
+                onClick={() => void handleCopy(item.text)}
                 className="h-6 w-6 rounded-sm text-muted-foreground hover:text-foreground hover:bg-foreground/10"
               >
-                <Copy size={12} />
+                {copiedTarget === "text" ? <Check size={9} /> : <Copy size={9} />}
               </Button>
             </Tooltip>
           )}
@@ -293,45 +297,16 @@ export default function TranscriptionItem({
               onClick={() => onDelete(item.id)}
               className="h-6 w-6 rounded-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10"
             >
-              <Trash2 size={12} />
+              <Trash2 size={9} />
             </Button>
           </Tooltip>
         </div>
+        </div>
       </div>
 
-      {!isFailed && !isDiscarded && rawText !== null && (
-        <div
-          inert={!isExpanded}
-          className={cn(
-            "grid transition-[grid-template-rows] duration-200",
-            isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-          )}
-        >
-          <div className="min-h-0 overflow-hidden">
-            <div className="border-t border-border/20 mt-2 pt-2">
-              <div className="flex items-center justify-between">
-                <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wider">
-                  {t("controlPanel.history.rawTranscript")}
-                </span>
-                <Tooltip content={t("controlPanel.history.copyRawTranscript")}>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => onCopy(rawText)}
-                    className="h-5 w-5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-foreground/10"
-                  >
-                    <Copy size={10} />
-                  </Button>
-                </Tooltip>
-              </div>
-              <p className="text-xs text-muted-foreground/80 leading-relaxed mt-1">{rawText}</p>
-              {rawText === item.text && (
-                <p className="text-2xs text-muted-foreground/50 italic mt-1">
-                  {t("controlPanel.history.noAiProcessing")}
-                </p>
-              )}
-            </div>
-          </div>
+      {formattedTime && (
+        <div className="mt-1.5 pr-0.5 text-right text-2xs tabular-nums text-muted-foreground/60">
+          {formattedTime}
         </div>
       )}
     </div>

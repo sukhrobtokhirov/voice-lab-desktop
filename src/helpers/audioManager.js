@@ -1158,6 +1158,9 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           : Math.round(performance.now() - pipelineStart),
         provider: result?.source || mode,
         model: activeModel || null,
+        desktopTranscriptionId: result?.desktopTranscriptionId ?? null,
+        desktopRevision: result?.desktopRevision ?? null,
+        desktopAudioAvailable: result?.desktopAudioAvailable === true,
       };
       this.onTranscriptionComplete?.(result);
       if (result?.source === VOICELAB_PROVIDER && !result?.text?.trim()) {
@@ -1876,6 +1879,9 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       wordsUsed: result.wordsUsed,
       wordsRemaining: result.wordsRemaining,
       clientTranscriptionId: result.clientTranscriptionId,
+      desktopTranscriptionId: result.desktopTranscriptionId ?? null,
+      desktopRevision: result.desktopRevision ?? null,
+      desktopAudioAvailable: result.desktopAudioAvailable === true,
       ...(result.warning ? { warning: result.warning } : {}),
     };
   }
@@ -2061,7 +2067,12 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     }
   }
 
-  async saveTranscription(text, rawText = null, { clientTranscriptionId } = {}) {
+  async saveTranscription(text, rawText = null, {
+      clientTranscriptionId,
+      desktopTranscriptionId = null,
+      desktopRevision = null,
+      desktopAudioAvailable = false,
+  } = {}) {
     if (!getSettings().dataRetentionEnabled) {
       logger.debug("Skipping transcription save — data retention disabled", {}, "audio");
       this.lastAudioBlob = null;
@@ -2085,6 +2096,11 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         provider: provider || null,
         model: capturedAudioMetadata?.model || null,
         audioDurationMs: capturedAudioMetadata?.durationMs || null,
+        desktopTranscriptionId:
+          desktopTranscriptionId ?? capturedAudioMetadata?.desktopTranscriptionId ?? null,
+        desktopRevision: desktopRevision ?? capturedAudioMetadata?.desktopRevision ?? null,
+        desktopAudioAvailable:
+          desktopAudioAvailable || capturedAudioMetadata?.desktopAudioAvailable === true,
       });
       if (result?.id) syncService.debouncedPush("transcription", result.id);
 

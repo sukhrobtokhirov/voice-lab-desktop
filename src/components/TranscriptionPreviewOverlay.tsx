@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Copy, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { writeTextToClipboard } from "../utils/writeClipboard";
 
 type PreviewPhase = "listening" | "live" | "cleanup" | "final";
 
@@ -194,15 +195,10 @@ export default function TranscriptionPreviewOverlay() {
     if (!textToCopy) return;
 
     try {
-      const result = await window.electronAPI?.writeClipboard?.(textToCopy);
-      if (result?.success === false) throw new Error("clipboard-write-failed");
+      await writeTextToClipboard(textToCopy);
     } catch {
-      try {
-        await navigator.clipboard.writeText(textToCopy);
-      } catch {
-        setCopied(false);
-        return;
-      }
+      setCopied(false);
+      return;
     }
 
     setCopied(true);

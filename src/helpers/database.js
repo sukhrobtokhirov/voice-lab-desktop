@@ -613,6 +613,22 @@ class DatabaseManager {
       this.db.exec(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_transcriptions_sync_identity ON transcriptions(sync_account_id, sync_record_id) WHERE sync_account_id IS NOT NULL AND sync_record_id IS NOT NULL"
       );
+      // The desktop STT API owns these identities. Keep only stable metadata
+      // locally; short-lived audio playback URLs are intentionally never saved.
+      for (const [column, definition] of [
+        ["desktop_transcription_id", "TEXT"],
+        ["desktop_revision", "INTEGER"],
+        ["desktop_audio_available", "INTEGER NOT NULL DEFAULT 0"],
+      ]) {
+        try {
+          this.db.exec(`ALTER TABLE transcriptions ADD COLUMN ${column} ${definition}`);
+        } catch (err) {
+          if (!err.message.includes("duplicate column")) throw err;
+        }
+      }
+      this.db.exec(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_transcriptions_desktop_identity ON transcriptions(privacy_scope_id, desktop_transcription_id) WHERE desktop_transcription_id IS NOT NULL"
+      );
 
       // Sync columns for custom_dictionary
       try {
@@ -860,6 +876,9 @@ class DatabaseManager {
       errorCode = null,
       routeKind = null,
       clientTranscriptionId = randomUUID(),
+      desktopTranscriptionId = null,
+      desktopRevision = null,
+      desktopAudioAvailable = false,
     } = {}
   ) {
     try {
@@ -867,7 +886,7 @@ class DatabaseManager {
         throw new Error("Database not initialized");
       }
       const stmt = this.db.prepare(
-        "INSERT INTO transcriptions (text, raw_text, status, error_message, error_code, route_kind, client_transcription_id, privacy_scope_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO transcriptions (text, raw_text, status, error_message, error_code, route_kind, client_transcription_id, privacy_scope_id, desktop_transcription_id, desktop_revision, desktop_audio_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       );
       const result = stmt.run(
         this._protectTranscriptionField(clientTranscriptionId, "text", text),
@@ -881,7 +900,10 @@ class DatabaseManager {
         errorCode,
         routeKind,
         clientTranscriptionId,
-        this._activePrivacyScope()
+        this._activePrivacyScope(),
+        desktopTranscriptionId,
+        desktopRevision,
+        desktopAudioAvailable ? 1 : 0
       );
 
       const fetchStmt = this.db.prepare("SELECT * FROM transcriptions WHERE id = ?");
@@ -911,6 +933,114 @@ class DatabaseManager {
       return transcriptions.map((row) => this._decodeTranscription(row));
     } catch (error) {
       debugLogger.error("Error getting transcriptions", { error: error.message }, "database");
+      throw error;
+    }
+  }
+
+  upsertDesktopTranscription({
+    id: desktopTranscriptionId,
+    transcript,
+    revision,
+    language = null,
+    durationMs = null,
+    createdAt = null,
+    audioAvailable = false,
+  }) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      if (typeof desktopTranscriptionId !== "string" || !desktopTranscriptionId) {
+        throw new Error("Desktop transcription id is required");
+      }
+      if (typeof transcript !== "string") throw new Error("Desktop transcript is required");
+      const privacyScope = this._activePrivacyScope();
+      const existing = this.db
+        .prepare(
+          "SELECT * FROM transcriptions WHERE privacy_scope_id = ? AND desktop_transcription_id = ? LIMIT 1"
+        )
+        .get(privacyScope, desktopTranscriptionId);
+
+      if (existing) {
+        const identity = this._transcriptionIdentity(existing);
+        this.db
+          .prepare(
+            `UPDATE transcriptions
+             SET text = ?, raw_text = ?, status = 'completed', error_message = NULL, error_code = NULL,
+                 provider = 'voicelab', desktop_revision = ?, desktop_audio_available = ?,
+                 audio_duration_ms = COALESCE(?, audio_duration_ms),
+                 timestamp = COALESCE(?, timestamp)
+             WHERE id = ? AND privacy_scope_id = ?`
+          )
+          .run(
+            this._protectTranscriptionField(identity, "text", transcript),
+            this._protectTranscriptionField(identity, "raw_text", transcript),
+            revision,
+            audioAvailable ? 1 : 0,
+            durationMs,
+            createdAt,
+            existing.id,
+            privacyScope
+          );
+        return this._decodeTranscription(
+          this.db.prepare("SELECT * FROM transcriptions WHERE id = ?").get(existing.id)
+        );
+      }
+
+      const clientTranscriptionId = randomUUID();
+      const now = createdAt || new Date().toISOString();
+      const result = this.db
+        .prepare(
+          `INSERT INTO transcriptions (
+             text, raw_text, timestamp, created_at, status, provider, client_transcription_id,
+             privacy_scope_id, desktop_transcription_id, desktop_revision,
+             desktop_audio_available, audio_duration_ms
+           ) VALUES (?, ?, ?, ?, 'completed', 'voicelab', ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          this._protectTranscriptionField(clientTranscriptionId, "text", transcript),
+          this._protectTranscriptionField(clientTranscriptionId, "raw_text", transcript),
+          now,
+          now,
+          clientTranscriptionId,
+          privacyScope,
+          desktopTranscriptionId,
+          revision,
+          audioAvailable ? 1 : 0,
+          durationMs
+        );
+      return this._decodeTranscription(
+        this.db.prepare("SELECT * FROM transcriptions WHERE id = ?").get(result.lastInsertRowid)
+      );
+    } catch (error) {
+      debugLogger.error(
+        "Error upserting desktop transcription",
+        { error: error.message },
+        "database"
+      );
+      throw error;
+    }
+  }
+
+  removeDesktopTranscriptionById(desktopTranscriptionId) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const row = this.db
+        .prepare(
+          "SELECT id FROM transcriptions WHERE privacy_scope_id = ? AND desktop_transcription_id = ?"
+        )
+        .get(this._activePrivacyScope(), desktopTranscriptionId);
+      if (!row) return { success: false, id: null };
+      const result = this.db
+        .prepare(
+          "DELETE FROM transcriptions WHERE privacy_scope_id = ? AND desktop_transcription_id = ?"
+        )
+        .run(this._activePrivacyScope(), desktopTranscriptionId);
+      return { success: result.changes > 0, id: row.id };
+    } catch (error) {
+      debugLogger.error(
+        "Error removing desktop transcription",
+        { error: error.message },
+        "database"
+      );
       throw error;
     }
   }

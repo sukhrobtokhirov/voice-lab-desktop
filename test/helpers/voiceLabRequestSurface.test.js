@@ -6,6 +6,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const API_ORIGIN = "https://api.voicelab.test";
+const DESKTOP_TRANSCRIPTIONS_URL = `${API_ORIGIN}/v1/desktop/transcriptions`;
 const INSTALLATION_ID = "c3050f2f-6f09-46e1-a50c-b7aa7e12ca54";
 const AUTHORIZATION_ID = `dau_${"a".repeat(43)}`;
 const AUTHORIZATION_CODE = `dac_${"c".repeat(43)}`;
@@ -141,6 +142,58 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
         request_id: "req_stt",
       });
     }
+    if (url === `${DESKTOP_TRANSCRIPTIONS_URL}?page=1&page_size=50`) {
+      return jsonResponse({
+        transcriptions: [
+          {
+            id: "dst_saved_1",
+            transcript: "Saved dictation",
+            revision: 1,
+            language: "en",
+            duration_ms: 1_250,
+            created_at: "2026-08-24T12:00:00Z",
+            audio_available: true,
+          },
+        ],
+        page: 1,
+        page_size: 50,
+        has_more: false,
+        request_id: "req_transcriptions",
+      });
+    }
+    if (url === `${DESKTOP_TRANSCRIPTIONS_URL}/dst_saved_1` && init.method === "GET") {
+      return jsonResponse({
+        transcription: {
+          id: "dst_saved_1",
+          transcript: "Saved dictation",
+          revision: 1,
+          language: "en",
+          duration_ms: 1_250,
+          created_at: "2026-08-24T12:00:00Z",
+          audio_available: true,
+          audio_url: "https://cdn.voicelab.test/audio/dst_saved_1?expires=600",
+        },
+        request_id: "req_transcription",
+      });
+    }
+    if (url === `${DESKTOP_TRANSCRIPTIONS_URL}/dst_saved_1` && init.method === "PATCH") {
+      assert.deepEqual(JSON.parse(init.body), {
+        transcript: "Corrected dictation",
+        expected_revision: 1,
+      });
+      return jsonResponse({
+        transcription: {
+          id: "dst_saved_1",
+          transcript: "Corrected dictation",
+          revision: 2,
+          language: "en",
+          duration_ms: 1_250,
+          created_at: "2026-08-24T12:00:00Z",
+          audio_available: true,
+        },
+        request_id: "req_transcription_updated",
+      });
+    }
     return jsonResponse({ ok: true, request_id: `req_sync_${calls.length}` });
   });
 
@@ -157,6 +210,13 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
     Buffer.from("audio"),
     { contentType: "audio/mpeg" }
   );
+  const history = await client.listDesktopTranscriptions();
+  const detail = await client.getDesktopTranscription("dst_saved_1");
+  const updated = await client.updateDesktopTranscription(
+    "dst_saved_1",
+    "Corrected dictation",
+    1
+  );
   assert.deepEqual(profile, {
     user: {
       id: "account-7",
@@ -165,18 +225,43 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
     },
     requestId: "req_profile",
   });
-  assert.equal(calls.length, 3);
+  assert.deepEqual(history, {
+    items: [
+      {
+        id: "dst_saved_1",
+        transcript: "Saved dictation",
+        revision: 1,
+        language: "en",
+        durationMs: 1_250,
+        createdAt: "2026-08-24T12:00:00Z",
+        audioAvailable: true,
+        audioUrl: null,
+      },
+    ],
+    page: 1,
+    pageSize: 50,
+    hasMore: false,
+    nextPage: null,
+    requestId: "req_transcriptions",
+  });
+  assert.equal(detail.audioUrl, "https://cdn.voicelab.test/audio/dst_saved_1?expires=600");
+  assert.equal(updated.transcript, "Corrected dictation");
+  assert.equal(updated.revision, 2);
+  assert.equal(calls.length, 6);
   assert.deepEqual(
     calls.map(({ url, init }) => [url, init.method]),
     [
       [`${API_ORIGIN}/v1/desktop/me`, "GET"],
       [`${API_ORIGIN}/v1/desktop/usage`, "GET"],
       [`${API_ORIGIN}/v1/desktop/stt`, "POST"],
+      [`${DESKTOP_TRANSCRIPTIONS_URL}?page=1&page_size=50`, "GET"],
+      [`${DESKTOP_TRANSCRIPTIONS_URL}/dst_saved_1`, "GET"],
+      [`${DESKTOP_TRANSCRIPTIONS_URL}/dst_saved_1`, "PATCH"],
     ]
   );
 
   for (const { init } of calls) assertNoBrowserCredentials(init);
-  assert.equal(authManager.state.accessTokenCalls, 3);
+  assert.equal(authManager.state.accessTokenCalls, 6);
 
   for (const { init } of calls) {
     const headers = new Headers(init.headers);
@@ -190,6 +275,9 @@ test("every supported VoiceLab data endpoint has an exact method, URL, and crede
   assert.equal(new Headers(calls[0].init.headers).has("content-type"), false);
   assert.equal(new Headers(calls[1].init.headers).has("content-type"), false);
   assert.equal(new Headers(calls[2].init.headers).has("content-type"), false);
+  assert.equal(new Headers(calls[3].init.headers).has("content-type"), false);
+  assert.equal(new Headers(calls[4].init.headers).has("content-type"), false);
+  assert.equal(new Headers(calls[5].init.headers).get("content-type"), "application/json");
   assert.ok(calls[2].init.body instanceof FormData);
   assert.equal(authManager.state.refreshCalls, 0);
   assert.equal(authManager.state.invalidations, 0);
@@ -241,6 +329,50 @@ test("desktop profile is cached for twenty minutes while usage remains live", as
   await client.getDesktopUsage();
   await client.getDesktopUsage();
   assert.equal(calls.filter(({ url }) => url.endsWith("/desktop/usage")).length, 2);
+});
+
+test("saved dictations refresh the desktop token once and surface revision conflicts", async (t) => {
+  const { client, authManager } = createClient(t);
+  let calls = 0;
+  installFetch(t, async (url, init) => {
+    calls += 1;
+    if (calls === 1) {
+      assert.equal(url, `${DESKTOP_TRANSCRIPTIONS_URL}?page=1&page_size=50`);
+      return jsonResponse(
+        { error: { code: "invalid_desktop_token" }, request_id: "req_expired" },
+        401
+      );
+    }
+    if (calls === 2) {
+      return jsonResponse({
+        transcriptions: [],
+        page: 1,
+        page_size: 50,
+        has_more: false,
+        request_id: "req_refreshed",
+      });
+    }
+    assert.equal(url, `${DESKTOP_TRANSCRIPTIONS_URL}/dst_saved_1`);
+    assert.equal(init.method, "PATCH");
+    return jsonResponse(
+      { error: { code: "desktop_transcript_conflict" }, request_id: "req_conflict" },
+      409
+    );
+  });
+
+  const list = await client.listDesktopTranscriptions();
+  assert.equal(list.requestId, "req_refreshed");
+  assert.equal(authManager.state.refreshCalls, 1);
+  assert.equal(authManager.state.invalidations, 0);
+
+  await assert.rejects(
+    client.updateDesktopTranscription("dst_saved_1", "Corrected dictation", 1),
+    (error) =>
+      error.code === "DESKTOP_TRANSCRIPT_CONFLICT" &&
+      error.status === 409 &&
+      error.toPublic().requestId === "req_conflict"
+  );
+  assert.equal(calls, 3);
 });
 
 test("retired desktop sync methods fail closed without making a network request", async (t) => {

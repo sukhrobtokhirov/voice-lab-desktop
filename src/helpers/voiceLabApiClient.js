@@ -21,6 +21,7 @@ const CANONICAL_AUDIO_UPLOADS = new Map([
 const DESKTOP_STT_PATH = ["", "v1", "desktop", "stt"].join("/");
 const DESKTOP_USAGE_PATH = ["", "v1", "desktop", "usage"].join("/");
 const DESKTOP_PROFILE_PATH = ["", "v1", "desktop", "me"].join("/");
+const DESKTOP_TRANSCRIPTIONS_PATH = ["", "v1", "desktop", "transcriptions"].join("/");
 const PROFILE_CACHE_TTL_MS = 20 * 60 * 1000;
 const MAX_JSON_RESPONSE_BYTES = 1024 * 1024;
 const REQUEST_ID_PATTERN = /^req_[A-Za-z0-9_-]{1,256}$/;
@@ -68,6 +69,9 @@ function normalizeErrorCode(status, body) {
     STT_NOT_AVAILABLE: "ENTITLEMENT_REQUIRED",
     STT_UNAVAILABLE: "SERVICE_UNAVAILABLE",
     LONG_STT_UNAVAILABLE: "SERVICE_UNAVAILABLE",
+    DESKTOP_TRANSCRIPT_CONFLICT: "DESKTOP_TRANSCRIPT_CONFLICT",
+    DESKTOP_TRANSCRIPTION_NOT_FOUND: "DESKTOP_TRANSCRIPTION_NOT_FOUND",
+    DESKTOP_TRANSCRIPTIONS_UNAVAILABLE: "DESKTOP_TRANSCRIPTIONS_UNAVAILABLE",
   }[serverCode];
   if (goCode) return goCode;
   if (serverCode.startsWith("SYNC_")) return serverCode;
@@ -208,6 +212,27 @@ function safeProfileAvatarUrl(value) {
   }
 }
 
+// These URLs are short-lived playback capabilities. They are validated before
+// use but deliberately never passed to the database or other persistent state.
+function safeDesktopAudioUrl(value) {
+  return safeProfileAvatarUrl(value);
+}
+
+function safeDesktopTranscriptionId(value) {
+  return typeof value === "string" && /^dst_[A-Za-z0-9_-]{1,256}$/.test(value)
+    ? value
+    : null;
+}
+
+function safeTranscriptText(value) {
+  return typeof value === "string" &&
+    value.length <= 1_000_000 &&
+    value.trim().length > 0 &&
+    !value.includes("\0")
+    ? value
+    : null;
+}
+
 function validRfc3339(value) {
   if (typeof value !== "string" || value.length > 64) return null;
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)) return null;
@@ -268,15 +293,85 @@ function normalizeDesktopSttResponse(payload) {
     usage &&
     requestId;
   if (canonical) {
+    const id = root.id == null ? null : safeDesktopTranscriptionId(root.id);
+    const revision = root.revision == null ? null : safeInteger(root.revision, { min: 1 });
+    if ((root.id != null && !id) || (root.revision != null && revision == null) || Boolean(id) !== Boolean(revision)) {
+      return invalidResponse("transcription", requestId);
+    }
+    const audioAvailable = root.audio_available === true;
+    const savedDictation = id
+      ? {
+          id,
+          revision,
+          audio_available: audioAvailable,
+          audio_url: audioAvailable ? safeDesktopAudioUrl(root.audio_url) : null,
+        }
+      : {};
     return {
       text: root.text,
       language: root.language,
       duration_ms: root.duration_ms,
       usage,
       request_id: requestId,
+      ...savedDictation,
     };
   }
   return invalidResponse("transcription", requestId);
+}
+
+function normalizeDesktopTranscriptionRecord(payload, requestId = null) {
+  const root = record(payload);
+  const id = safeDesktopTranscriptionId(root.id);
+  const transcript = safeTranscriptText(root.transcript ?? root.text);
+  const revision = safeInteger(root.revision, { min: 1 });
+  const audioAvailable = root.audio_available === true;
+  const durationMs =
+    root.duration_ms == null ? null : safeInteger(root.duration_ms, { min: 0, max: 86_400_000 });
+  const language = root.language == null ? null : safeString(root.language);
+  const createdAt = validRfc3339(root.created_at ?? root.timestamp);
+  if (!id || !transcript || revision == null || (root.duration_ms != null && durationMs == null)) {
+    return invalidResponse("saved transcription", requestId);
+  }
+  return {
+    id,
+    transcript,
+    revision,
+    language,
+    durationMs,
+    createdAt,
+    audioAvailable,
+    // Only retained in memory by the caller which opens this one dictation.
+    audioUrl: audioAvailable ? safeDesktopAudioUrl(root.audio_url) : null,
+  };
+}
+
+function desktopRecordBody(payload) {
+  const root = record(payload);
+  const nested = record(root.transcription);
+  if (Object.keys(nested).length) return nested;
+  const data = record(root.data);
+  return Object.keys(data).length ? data : root;
+}
+
+function normalizeDesktopTranscriptionList(payload, { page, pageSize }) {
+  const root = record(payload);
+  const collection = [root.transcriptions, root.items, root.data].find(Array.isArray);
+  const requestId = safeRequestId(root.request_id);
+  if (!collection) return invalidResponse("transcription history", requestId);
+  const pagination = record(root.pagination);
+  const normalizedPage = safeInteger(root.page ?? pagination.page, { min: 1 }) ?? page;
+  const normalizedPageSize =
+    safeInteger(root.page_size ?? pagination.page_size, { min: 1, max: 50 }) ?? pageSize;
+  const nextPage = safeInteger(root.next_page ?? pagination.next_page, { min: normalizedPage + 1 });
+  const explicitHasMore = root.has_more ?? pagination.has_more;
+  return {
+    items: collection.map((item) => normalizeDesktopTranscriptionRecord(item, requestId)),
+    page: normalizedPage,
+    pageSize: normalizedPageSize,
+    hasMore: typeof explicitHasMore === "boolean" ? explicitHasMore : Boolean(nextPage),
+    nextPage,
+    requestId,
+  };
 }
 
 function normalizeDesktopUsage(payload) {
@@ -428,10 +523,14 @@ class VoiceLabApiClient {
 
   async authenticatedFetch(pathname, options = {}) {
     const method = String(options.method || "GET").toUpperCase();
-    const isDesktopStt = method === "POST" && pathname === DESKTOP_STT_PATH;
-    const isDesktopUsage = method === "GET" && pathname === DESKTOP_USAGE_PATH;
-    const isDesktopProfile = method === "GET" && pathname === DESKTOP_PROFILE_PATH;
-    const isCanonicalDesktopBoundary = isDesktopStt || isDesktopUsage || isDesktopProfile;
+    const routePath = String(pathname).split("?", 1)[0];
+    const isDesktopStt = method === "POST" && routePath === DESKTOP_STT_PATH;
+    const isDesktopUsage = method === "GET" && routePath === DESKTOP_USAGE_PATH;
+    const isDesktopProfile = method === "GET" && routePath === DESKTOP_PROFILE_PATH;
+    const isDesktopTranscriptions = routePath === DESKTOP_TRANSCRIPTIONS_PATH ||
+      routePath.startsWith(`${DESKTOP_TRANSCRIPTIONS_PATH}/`);
+    const isCanonicalDesktopBoundary =
+      isDesktopStt || isDesktopUsage || isDesktopProfile || isDesktopTranscriptions;
     if (isDesktopStt && options.idempotencyKey) {
       throw new VoiceLabApiError({
         code: "INVALID_REQUEST",
@@ -560,10 +659,10 @@ class VoiceLabApiClient {
       }
       if (response.ok) return body;
 
-      const serverAuthCode = body?.error?.code;
+      const serverAuthCode = body?.error?.code || body?.code || null;
       const refreshableDesktopToken =
         response.status === 401 &&
-        (isDesktopStt || isDesktopUsage) &&
+        (isDesktopStt || isDesktopUsage || isDesktopProfile || isDesktopTranscriptions) &&
         serverAuthCode === "invalid_desktop_token";
       if (refreshableDesktopToken && !authRetried) {
         if (!sameAuthSessionContext(initialAuthContext, authSessionContext(this.authManager))) {
@@ -708,6 +807,95 @@ class VoiceLabApiClient {
     } finally {
       if (this.profileRequest?.promise === request) this.profileRequest = null;
     }
+  }
+
+  async listDesktopTranscriptions({ page = 1, pageSize = 50 } = {}) {
+    const validPage = safeInteger(page, { min: 1, max: 1_000_000 });
+    const validPageSize = safeInteger(pageSize, { min: 1, max: 50 });
+    if (!validPage || !validPageSize) {
+      throw new VoiceLabApiError({
+        code: "INVALID_REQUEST",
+        message: "Invalid transcription history page.",
+        status: 400,
+      });
+    }
+    const requestContext = authSessionContext(this.authManager);
+    const body = await this.authenticatedFetch(
+      `${DESKTOP_TRANSCRIPTIONS_PATH}?page=${validPage}&page_size=${validPageSize}`,
+      { method: "GET", timeoutMs: 15_000, cache: "no-store" }
+    );
+    if (!sameAuthSessionContext(requestContext, authSessionContext(this.authManager))) {
+      throw new VoiceLabApiError({
+        code: "AUTH_ACCOUNT_CHANGED",
+        message: "The active VoiceLab session changed during this request.",
+        status: 409,
+      });
+    }
+    return normalizeDesktopTranscriptionList(body, { page: validPage, pageSize: validPageSize });
+  }
+
+  async getDesktopTranscription(id) {
+    const transcriptionId = safeDesktopTranscriptionId(id);
+    if (!transcriptionId) {
+      throw new VoiceLabApiError({
+        code: "INVALID_REQUEST",
+        message: "Invalid saved transcription.",
+        status: 400,
+      });
+    }
+    const requestContext = authSessionContext(this.authManager);
+    const body = await this.authenticatedFetch(
+      `${DESKTOP_TRANSCRIPTIONS_PATH}/${encodeURIComponent(transcriptionId)}`,
+      { method: "GET", timeoutMs: 15_000, cache: "no-store" }
+    );
+    if (!sameAuthSessionContext(requestContext, authSessionContext(this.authManager))) {
+      throw new VoiceLabApiError({
+        code: "AUTH_ACCOUNT_CHANGED",
+        message: "The active VoiceLab session changed during this request.",
+        status: 409,
+      });
+    }
+    const root = record(body);
+    return {
+      ...normalizeDesktopTranscriptionRecord(desktopRecordBody(root), safeRequestId(root.request_id)),
+      requestId: safeRequestId(root.request_id),
+    };
+  }
+
+  async updateDesktopTranscription(id, transcript, expectedRevision) {
+    const transcriptionId = safeDesktopTranscriptionId(id);
+    const validatedTranscript = safeTranscriptText(transcript);
+    const revision = safeInteger(expectedRevision, { min: 1 });
+    if (!transcriptionId || !validatedTranscript || revision == null) {
+      throw new VoiceLabApiError({
+        code: "INVALID_REQUEST",
+        message: "Invalid transcription edit.",
+        status: 400,
+      });
+    }
+    const requestContext = authSessionContext(this.authManager);
+    const body = await this.authenticatedFetch(
+      `${DESKTOP_TRANSCRIPTIONS_PATH}/${encodeURIComponent(transcriptionId)}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript: validatedTranscript, expected_revision: revision }),
+        timeoutMs: 20_000,
+        cache: "no-store",
+      }
+    );
+    if (!sameAuthSessionContext(requestContext, authSessionContext(this.authManager))) {
+      throw new VoiceLabApiError({
+        code: "AUTH_ACCOUNT_CHANGED",
+        message: "The active VoiceLab session changed during this request.",
+        status: 409,
+      });
+    }
+    const root = record(body);
+    return {
+      ...normalizeDesktopTranscriptionRecord(desktopRecordBody(root), safeRequestId(root.request_id)),
+      requestId: safeRequestId(root.request_id),
+    };
   }
 
   async beginDictation({ audioBuffer, source = "dictate", durationMs = null, language = null }) {
@@ -894,6 +1082,12 @@ class VoiceLabApiClient {
         (result.duration_seconds != null
           ? Math.round(Number(result.duration_seconds) * 1000)
           : null),
+      desktopTranscriptionId: result.id || null,
+      desktopRevision: result.revision ?? null,
+      desktopAudioAvailable: result.audio_available === true,
+      // This expires quickly and must never be persisted. It is not used by
+      // the current recording flow; playback always gets a fresh URL instead.
+      audioUrl: result.audio_url || null,
     };
   }
 }

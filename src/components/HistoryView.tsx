@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
 import { Sparkles, Cloud, X, Mic, Trash2, Archive } from "lucide-react";
@@ -12,6 +12,7 @@ import { useUpcomingEvents } from "../hooks/useUpcomingEvents";
 import UpcomingMeetings from "./UpcomingMeetings";
 import { useSettingsStore } from "../stores/settingsStore";
 import { VOICELAB_AI_ENABLED } from "../lib/features";
+import SavedDictationDialog from "./SavedDictationDialog";
 
 interface HistoryViewProps {
   history: TranscriptionItemType[];
@@ -22,7 +23,7 @@ interface HistoryViewProps {
   aiCTADismissed: boolean;
   setAiCTADismissed: (dismissed: boolean) => void;
   useCleanupModel: boolean;
-  copyToClipboard: (text: string) => void;
+  copyToClipboard: (text: string) => Promise<boolean>;
   deleteTranscription: (id: number) => void;
   clearAllTranscriptions: () => void;
   onOpenSettings: (section?: string) => void;
@@ -30,6 +31,13 @@ interface HistoryViewProps {
   onRetryTranscription: (id: number, options?: { isRecover?: boolean }) => Promise<void>;
   showDiscarded: boolean;
   onToggleDiscarded: () => void;
+  hasMoreSavedDictations: boolean;
+  isLoadingMoreSavedDictations: boolean;
+  savedDictationsError: string | null;
+  onRetrySavedDictations: () => void;
+  onLoadMoreSavedDictations: () => void;
+  onUpdateTranscription: (item: TranscriptionItemType) => void;
+  onRemoveTranscription: (id: number) => void;
 }
 
 function TranscriptionHistorySkeleton() {
@@ -63,10 +71,29 @@ export default function HistoryView({
   onRetryTranscription,
   showDiscarded,
   onToggleDiscarded,
+  hasMoreSavedDictations,
+  isLoadingMoreSavedDictations,
+  savedDictationsError,
+  onRetrySavedDictations,
+  onLoadMoreSavedDictations,
+  onUpdateTranscription,
+  onRemoveTranscription,
 }: HistoryViewProps) {
   const { t } = useTranslation();
   const dataRetentionEnabled = useSettingsStore((s) => s.dataRetentionEnabled);
   const { events, isLoading: eventsLoading, isConnected } = useUpcomingEvents();
+  const [editingItem, setEditingItem] = useState<TranscriptionItemType | null>(null);
+  const handleSavedDictationUpdated = useCallback(
+    (item: TranscriptionItemType) => onUpdateTranscription(item),
+    [onUpdateTranscription]
+  );
+  const handleSavedDictationRemoved = useCallback(
+    (id: number) => {
+      onRemoveTranscription(id);
+      setEditingItem(null);
+    },
+    [onRemoveTranscription]
+  );
 
   const groupedHistory = useMemo(() => {
     if (history.length === 0) return [];
@@ -304,6 +331,25 @@ export default function HistoryView({
                     ))}
                     <span>{t("controlPanel.history.toStart")}</span>
                   </div>
+                  {savedDictationsError && (
+                    <div className="mt-5 flex flex-col items-center gap-2 text-center">
+                      <p className="text-xs text-muted-foreground">
+                        {t("controlPanel.history.savedDictation.unavailable")}
+                      </p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={isLoadingMoreSavedDictations}
+                        onClick={onRetrySavedDictations}
+                        className="text-muted-foreground hover:bg-transparent hover:text-foreground"
+                      >
+                        {isLoadingMoreSavedDictations && (
+                          <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        )}
+                        {t("controlPanel.history.savedDictation.retry")}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -315,7 +361,7 @@ export default function HistoryView({
                         {group.label}
                       </span>
                       {index === 0 && (
-                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200">
+                        <div className="flex items-center gap-1.5">
                           {discardedToggle}
                           <button
                             onClick={clearAllTranscriptions}
@@ -337,11 +383,28 @@ export default function HistoryView({
                           onShowAudioInFolder={onShowAudioInFolder}
                           onRetryTranscription={onRetryTranscription}
                           onOpenSettings={() => onOpenSettings("transcription")}
+                          onEdit={setEditingItem}
                         />
                       ))}
                     </div>
                   </div>
                 ))}
+                {(savedDictationsError || hasMoreSavedDictations) && (
+                  <div className="flex justify-center pt-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={isLoadingMoreSavedDictations}
+                      onClick={savedDictationsError ? onRetrySavedDictations : onLoadMoreSavedDictations}
+                      className="text-muted-foreground hover:bg-transparent hover:text-foreground"
+                    >
+                      {isLoadingMoreSavedDictations && <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+                      {savedDictationsError
+                        ? t("controlPanel.history.savedDictation.retry")
+                        : t("controlPanel.history.savedDictation.loadMore")}
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -355,6 +418,15 @@ export default function HistoryView({
           )}
         </div>
       </div>
+      <SavedDictationDialog
+        item={editingItem}
+        open={editingItem !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingItem(null);
+        }}
+        onUpdated={handleSavedDictationUpdated}
+        onRemoved={handleSavedDictationRemoved}
+      />
     </div>
   );
 }

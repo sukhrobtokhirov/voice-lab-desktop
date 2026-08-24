@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="512"
+  height="512"
+  viewBox="0 0 24 24"
+  role="img"
+  fill="none"
+>
+  <title>Back</title>
+  <path
+    d="M9.5 6.75 4.75 11.5l4.75 4.75"
+    stroke="#111111"
+    stroke-width="2.6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M5.25 11.5h8.1A5.65 5.65 0 0 1 19 17.15V20"
+    stroke="#111111"
+    stroke-width="2.6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

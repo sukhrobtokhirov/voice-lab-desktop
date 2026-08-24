@@ -817,6 +817,119 @@ class IPCHandlers {
       return this.databaseManager.getTranscriptions(limit, options);
     });
 
+    const desktopErrorCode = (error) =>
+      String(error?.code || error?.details?.error?.code || error?.details?.code || "").toUpperCase();
+    const persistDesktopTranscription = (record) => {
+      const { audioUrl: _audioUrl, requestId: _requestId, ...stableRecord } = record;
+      // `audioUrl` is a ten-minute capability URL and must not reach SQLite.
+      return this.databaseManager.upsertDesktopTranscription(stableRecord);
+    };
+    const broadcastDesktopTranscription = (transcription) => {
+      if (!transcription) return;
+      setImmediate(() => this.broadcastToWindows("transcription-updated", transcription));
+    };
+    const removeMissingDesktopTranscription = (desktopTranscriptionId) => {
+      const removed = this.databaseManager.removeDesktopTranscriptionById(desktopTranscriptionId);
+      if (removed.success) {
+        setImmediate(() => this.broadcastToWindows("transcription-deleted", { id: removed.id }));
+      }
+      return removed;
+    };
+
+    this._handle("desktop-list-transcriptions", async (_event, page = 1, pageSize = 50) => {
+      try {
+        if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
+        const result = await this.voiceLabApiClient.listDesktopTranscriptions({ page, pageSize });
+        const transcriptions = result.items.map((item) => {
+          const transcription = persistDesktopTranscription(item);
+          broadcastDesktopTranscription(transcription);
+          return transcription;
+        });
+        return {
+          success: true,
+          transcriptions,
+          page: result.page,
+          pageSize: result.pageSize,
+          hasMore: result.hasMore,
+          nextPage: result.nextPage,
+        };
+      } catch (error) {
+        return typeof error?.toPublic === "function"
+          ? error.toPublic()
+          : { success: false, error: "Saved dictations are unavailable.", code: "SERVICE_UNAVAILABLE" };
+      }
+    });
+
+    this._handle("desktop-get-transcription", async (_event, desktopTranscriptionId) => {
+      try {
+        if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
+        const result = await this.voiceLabApiClient.getDesktopTranscription(desktopTranscriptionId);
+        const transcription = persistDesktopTranscription(result);
+        broadcastDesktopTranscription(transcription);
+        return { success: true, transcription, audioUrl: result.audioUrl || null };
+      } catch (error) {
+        if (desktopErrorCode(error) === "DESKTOP_TRANSCRIPTION_NOT_FOUND") {
+          removeMissingDesktopTranscription(desktopTranscriptionId);
+        }
+        return typeof error?.toPublic === "function"
+          ? error.toPublic()
+          : { success: false, error: "Saved dictation is unavailable.", code: "SERVICE_UNAVAILABLE" };
+      }
+    });
+
+    this._handle(
+      "desktop-update-transcription",
+      async (_event, desktopTranscriptionId, transcript, expectedRevision) => {
+        try {
+          if (!this.voiceLabApiClient) throw new Error("VoiceLab client unavailable");
+          const result = await this.voiceLabApiClient.updateDesktopTranscription(
+            desktopTranscriptionId,
+            transcript,
+            expectedRevision
+          );
+          const updated = persistDesktopTranscription(result);
+          broadcastDesktopTranscription(updated);
+          return { success: true, transcription: updated };
+        } catch (error) {
+          const code = desktopErrorCode(error);
+          if (code === "DESKTOP_TRANSCRIPT_CONFLICT") {
+            try {
+              const newer = await this.voiceLabApiClient.getDesktopTranscription(desktopTranscriptionId);
+              const transcription = persistDesktopTranscription(newer);
+              broadcastDesktopTranscription(transcription);
+              return {
+                success: false,
+                code: "DESKTOP_TRANSCRIPT_CONFLICT",
+                transcription,
+              };
+            } catch (refreshError) {
+              if (desktopErrorCode(refreshError) === "DESKTOP_TRANSCRIPTION_NOT_FOUND") {
+                const removed = removeMissingDesktopTranscription(desktopTranscriptionId);
+                return {
+                  success: false,
+                  code: "DESKTOP_TRANSCRIPTION_NOT_FOUND",
+                  removed: removed.success,
+                };
+              }
+              return typeof refreshError?.toPublic === "function"
+                ? refreshError.toPublic()
+                : { success: false, error: "Saved dictation is unavailable.", code: "SERVICE_UNAVAILABLE" };
+            }
+          }
+          if (code === "DESKTOP_TRANSCRIPTION_NOT_FOUND") {
+            const removed = removeMissingDesktopTranscription(desktopTranscriptionId);
+            return { success: false, code, removed: removed.success };
+          }
+          if (Number(error?.status) === 422 || code === "VALIDATION_ERROR") {
+            return { success: false, code: "VALIDATION_ERROR" };
+          }
+          return typeof error?.toPublic === "function"
+            ? error.toPublic()
+            : { success: false, error: "Saved dictation is unavailable.", code: "SERVICE_UNAVAILABLE" };
+        }
+      }
+    );
+
     this._handle("db-clear-transcriptions", async (event) => {
       this.databaseManager.getDesktopSyncStore().deleteAllLocalTranscripts();
       this.audioStorageManager.deleteAllAudio();
