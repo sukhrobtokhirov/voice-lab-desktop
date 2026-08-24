@@ -19,8 +19,9 @@ import searchIcon from "../assets/icons/search.svg";
 
 const platform = getCachedPlatform();
 
-export const CONTROL_PANEL_SIDEBAR_WIDTH_PX = 256;
-export const CONTROL_PANEL_SIDEBAR_RAIL_WIDTH_PX = 64;
+export const CONTROL_PANEL_SIDEBAR_WIDTH_PX = 240;
+// Leave room for macOS window controls when the navigation is collapsed.
+export const CONTROL_PANEL_SIDEBAR_RAIL_WIDTH_PX = 88;
 
 export type ControlPanelView =
   "home" | "chat" | "personal-notes" | "dictionary" | "upload" | "integrations";
@@ -364,7 +365,7 @@ export default function ControlPanelSidebar({
         title={collapsed ? label : undefined}
         className={cn(
           navButton,
-          collapsed && "size-10 min-h-0 justify-center px-0",
+          collapsed && "mx-auto size-10 min-h-0 justify-center px-0",
           active
             ? "bg-black/[0.055] font-medium text-foreground dark:bg-white/[0.08]"
             : "text-foreground/60 hover:bg-black/[0.035] hover:text-foreground dark:text-foreground/65 dark:hover:bg-white/[0.06]"
@@ -457,12 +458,12 @@ export default function ControlPanelSidebar({
         <div className="relative size-full">
           <div
             className={cn(
-              "absolute transition-[left,top,width] duration-200 ease-out",
+              "absolute transition-[left,top,width,transform] duration-200 ease-out",
               collapsed
-                ? "left-[calc(50%-1.25rem)] top-0 w-10"
+                ? "left-1/2 top-0 w-10 -translate-x-1/2"
                 : updateAction
-                  ? "left-2.5 top-0 w-[calc(100%-6.75rem)]"
-                  : "left-2.5 top-0 w-[calc(100%-4.5rem)]"
+                  ? "left-2.5 top-0 w-[calc(100%-6.75rem)] translate-x-0"
+                  : "left-2.5 top-0 w-[calc(100%-4.5rem)] translate-x-0"
             )}
           >
             {isProfileLoading ? (
@@ -504,12 +505,12 @@ export default function ControlPanelSidebar({
             aria-label={t("sidebar.settings", { defaultValue: "Settings" })}
             title={t("sidebar.settings", { defaultValue: "Settings" })}
             className={cn(
-              "absolute flex size-8 items-center justify-center rounded-md text-foreground/55 outline-none transition-[left,top,color,background-color] duration-200 ease-out hover:bg-black/[0.05] hover:text-foreground focus-visible:ring-2 focus-visible:ring-foreground/20 dark:text-foreground/65 dark:hover:bg-white/[0.08]",
+              "absolute flex size-8 items-center justify-center rounded-md text-foreground/55 outline-none transition-[left,top,transform,color,background-color] duration-200 ease-out hover:bg-black/[0.05] hover:text-foreground focus-visible:ring-2 focus-visible:ring-foreground/20 dark:text-foreground/65 dark:hover:bg-white/[0.08]",
               collapsed
-                ? "left-2 top-11"
+                ? "left-1/2 top-11 -translate-x-1/2"
                 : updateAction
-                  ? "left-[calc(100%-6.5rem)] top-1"
-                  : "left-[calc(100%-4.25rem)] top-1"
+                  ? "left-[calc(100%-6.5rem)] top-1 translate-x-0"
+                  : "left-[calc(100%-4.25rem)] top-1 translate-x-0"
             )}
           >
             <VoiceLabIcon source={settingsIcon} className="size-[18px]" />
@@ -518,8 +519,10 @@ export default function ControlPanelSidebar({
           {updateAction && (
             <div
               className={cn(
-                "absolute transition-[left,top] duration-200 ease-out",
-                collapsed ? "left-2 top-20" : "left-[calc(100%-4.25rem)] top-1"
+                "absolute transition-[left,top,transform] duration-200 ease-out",
+                collapsed
+                  ? "left-1/2 top-20 -translate-x-1/2"
+                  : "left-[calc(100%-4.25rem)] top-1 translate-x-0"
               )}
             >
               <UpdateActionButton {...updateAction} />
@@ -532,16 +535,16 @@ export default function ControlPanelSidebar({
             aria-label={t(collapsed ? "sidebar.expand" : "sidebar.collapse")}
             title={t(collapsed ? "sidebar.expand" : "sidebar.collapse")}
             className={cn(
-              "absolute flex size-8 items-center justify-center rounded-md text-foreground/55 outline-none transition-[left,top,color,background-color] duration-200 ease-out hover:bg-black/[0.05] hover:text-foreground focus-visible:ring-2 focus-visible:ring-foreground/20 dark:text-foreground/65 dark:hover:bg-white/[0.08]",
+              "absolute flex size-8 items-center justify-center rounded-md text-foreground/55 outline-none transition-[left,top,transform,color,background-color] duration-200 ease-out hover:bg-black/[0.05] hover:text-foreground focus-visible:ring-2 focus-visible:ring-foreground/20 dark:text-foreground/65 dark:hover:bg-white/[0.08]",
               collapsed
                 ? updateAction
-                  ? "left-2 top-[7.75rem]"
-                  : "left-2 top-20"
-                : "left-[calc(100%-2rem)] top-1"
+                  ? "left-1/2 top-[7.75rem] -translate-x-1/2"
+                  : "left-1/2 top-20 -translate-x-1/2"
+                : "left-[calc(100%-2rem)] top-1 translate-x-0"
             )}
           >
             <VoiceLabIcon
-              source={collapsed ? sidebarOpenIcon : sidebarClosedIcon}
+              source={collapsed ? sidebarClosedIcon : sidebarOpenIcon}
               className="size-[18px]"
             />
           </button>

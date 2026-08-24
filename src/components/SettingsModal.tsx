@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Mic, UserCircle, Wrench, SlidersHorizontal } from "lucide-react";
+import { UserCircle, Wrench, SlidersHorizontal } from "lucide-react";
 import SidebarModal, { type SidebarItem } from "./ui/SidebarModal";
 import SettingsPage, { SettingsSectionType } from "./SettingsPage";
 import keyboardIcon from "../assets/icons/keyboard.svg";
@@ -8,9 +8,7 @@ import shieldIcon from "../assets/icons/shield.svg";
 
 export type { SettingsSectionType };
 
-// The old AI Models sidebar had four items (transcription, meetings,
-// intelligence, agentMode) — they now collapse into two: speechToText + llms.
-// Legacy deep-links land on the matching sub-tab via LEGACY_SUB_TAB.
+// Legacy deep-links land on the matching visible settings section via SECTION_ALIASES.
 const SECTION_ALIASES: Record<string, SettingsSectionType> = {
   aiModels: "llms",
   agentConfig: "llms",
@@ -18,8 +16,6 @@ const SECTION_ALIASES: Record<string, SettingsSectionType> = {
   intelligence: "llms",
   meetings: "llms",
   prompts: "llms",
-  transcription: "speechToText",
-  uploadTranscription: "speechToText",
   softwareUpdates: "system",
   privacy: "privacyData",
   permissions: "privacyData",
@@ -32,15 +28,12 @@ const SECTION_ALIASES: Record<string, SettingsSectionType> = {
 const CANONICAL_SECTIONS = new Set<SettingsSectionType>([
   "account",
   "general",
-  "speechToText",
   "hotkeys",
   "privacyData",
   "system",
 ]);
 
 const LEGACY_SUB_TAB: Record<string, string> = {
-  transcription: "dictation",
-  uploadTranscription: "upload",
   meetings: "noteFormatting",
   intelligence: "dictationCleanup",
   agentMode: "chatIntelligence",
@@ -71,15 +64,6 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         icon: SlidersHorizontal,
         description: t("settingsModal.sections.general.description", {
           defaultValue: "Appearance, language and app behavior",
-        }),
-        group: t("settingsModal.groups.app", { defaultValue: "Flow" }),
-      },
-      {
-        id: "speechToText",
-        label: t("desktop.settings.dictation", { defaultValue: "Dictation" }),
-        icon: Mic,
-        description: t("desktop.settings.dictationDescription", {
-          defaultValue: "Language, microphone and paste behavior",
         }),
         group: t("settingsModal.groups.app", { defaultValue: "Flow" }),
       },

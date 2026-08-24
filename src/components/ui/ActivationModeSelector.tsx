@@ -24,8 +24,8 @@ export function ActivationModeSelector({
   return (
     <div
       className={`
-        relative flex rounded-md border p-0.5 transition-colors duration-200
-        bg-surface-1 border-border-subtle
+        relative flex rounded-md p-0.5 transition-colors duration-150
+        bg-muted/60 dark:bg-white/[0.06]
         ${disabled ? "opacity-50 cursor-not-allowed" : ""}
       `}
     >
@@ -33,8 +33,8 @@ export function ActivationModeSelector({
       <div
         className={`
           absolute top-0.5 bottom-0.5 w-[calc(50%-2px)] rounded
-          bg-surface-raised border border-border-subtle
-          transition-transform duration-200 ease-out
+          bg-background dark:bg-white/[0.12]
+          transition-transform duration-150 ease-out
           ${value === "push" ? "translate-x-[calc(100%+4px)]" : "translate-x-0"}
         `}
       />
@@ -45,6 +45,7 @@ export function ActivationModeSelector({
           type="button"
           disabled={disabled}
           onClick={() => onChange(mode)}
+          aria-pressed={value === mode}
           className={`
             relative z-10 flex-1 flex items-center justify-center gap-1 rounded px-2.5 py-1
             transition-colors duration-150

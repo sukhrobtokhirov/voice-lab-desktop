@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import * as Popover from "@radix-ui/react-popover";
 import { useTranslation } from "react-i18next";
-import { Check, ChevronDown, Search, X } from "lucide-react";
+import { Check, ChevronDown, X } from "lucide-react";
 import { useSettingsStore } from "../../stores/settingsStore";
+import searchIcon from "../../assets/icons/search.svg";
 import type { DesktopLanguageProvider } from "../../config/desktopLanguages";
 import {
   getDesktopLanguageOptions,
   type LanguageOption,
 } from "../../config/desktopLanguageOptions";
+import VoiceLabIcon from "./VoiceLabIcon";
 
 interface LanguageSelectorProps {
   value: string;
@@ -17,12 +19,6 @@ interface LanguageSelectorProps {
   className?: string;
   placeholder?: string;
 }
-
-const GROUP_LABEL_KEYS: Record<string, string> = {
-  automatic: "desktop.languages.groups.automatic",
-  "central-asia": "desktop.languages.groups.centralAsia",
-  other: "desktop.languages.groups.other",
-};
 
 export default function LanguageSelector({
   value,
@@ -48,8 +44,6 @@ export default function LanguageSelector({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlighted, setHighlighted] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listboxId = useId();
@@ -88,16 +82,10 @@ export default function LanguageSelector({
 
   useEffect(() => {
     if (!open) return;
-    const first = selectableIndexes[0] ?? 0;
-    setHighlighted(first);
+    const selectedIndex = selectableIndexes.find((index) => filtered[index]?.value === value);
+    setHighlighted(selectedIndex ?? selectableIndexes[0] ?? 0);
     requestAnimationFrame(() => searchRef.current?.focus());
-    const onPointerDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (!containerRef.current?.contains(target) && !menuRef.current?.contains(target)) close();
-    };
-    document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [close, open, selectableIndexes]);
+  }, [filtered, open, selectableIndexes, value]);
 
   const move = (direction: 1 | -1) => {
     if (!selectableIndexes.length) return;
@@ -125,108 +113,91 @@ export default function LanguageSelector({
     }
   };
 
-  let lastGroup = "";
-  const menu = open ? (
-    <div
-      ref={menuRef}
-      className="fixed z-[10000] w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-popover shadow-2xl"
-      style={(() => {
-        const rect = triggerRef.current?.getBoundingClientRect();
-        return {
-          top: (rect?.bottom ?? 0) + 6,
-          left: Math.min(rect?.left ?? 16, window.innerWidth - 368),
-        };
-      })()}
-      onKeyDown={onKeyDown}
-    >
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <Search className="h-4 w-4 text-muted-foreground" />
-        <input
-          ref={searchRef}
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setHighlighted(0);
-          }}
-          role="combobox"
-          aria-controls={listboxId}
-          aria-expanded="true"
-          aria-activedescendant={`${listboxId}-${highlighted}`}
-          aria-label={t("desktop.languages.search")}
-          placeholder={t("desktop.languages.searchPlaceholder")}
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-        />
-        {query && (
-          <button
-            type="button"
-            aria-label={t("desktop.languages.clearSearch")}
-            onClick={() => setQuery("")}
-          >
-            <X className="h-4 w-4 text-muted-foreground" />
-          </button>
-        )}
+  const menu = (
+    <Popover.Portal>
+      <Popover.Content
+        className="z-[100] w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-border/80 bg-popover shadow-[0_4px_14px_rgba(0,0,0,0.14)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]"
+        side="bottom"
+        align="end"
+        sideOffset={6}
+        collisionPadding={16}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          requestAnimationFrame(() => searchRef.current?.focus());
+        }}
+        onKeyDown={onKeyDown}
+      >
+      <div className="p-2">
+        <div className="flex h-8 items-center gap-2 rounded-md border border-border bg-background px-2.5">
+          <VoiceLabIcon source={searchIcon} className="h-4 w-4 text-muted-foreground" />
+          <input
+            ref={searchRef}
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setHighlighted(0);
+            }}
+            role="combobox"
+            aria-controls={listboxId}
+            aria-expanded="true"
+            aria-activedescendant={`${listboxId}-${highlighted}`}
+            aria-label={t("desktop.languages.search")}
+            placeholder={t("desktop.languages.searchPlaceholder")}
+            className="input-inline min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+          {query && (
+            <button
+              type="button"
+              aria-label={t("desktop.languages.clearSearch")}
+              onClick={() => setQuery("")}
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
-      <div id={listboxId} role="listbox" className="max-h-72 overflow-y-auto p-1.5">
+      <div id={listboxId} role="listbox" className="max-h-64 overflow-y-auto px-1.5 pb-1.5">
         {filtered.map((item, index) => {
-          const group = item.group ?? "other";
-          const showGroup = group !== lastGroup;
-          lastGroup = group;
           return (
-            <React.Fragment key={item.value}>
-              {showGroup && (
-                <div className="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  {GROUP_LABEL_KEYS[group] ? t(GROUP_LABEL_KEYS[group]) : group}
-                </div>
-              )}
-              <button
-                id={`${listboxId}-${index}`}
-                type="button"
-                role="option"
-                aria-selected={item.value === value}
-                aria-disabled={item.disabled || undefined}
-                disabled={item.disabled}
-                title={
-                  item.disabled
-                    ? t(
-                        item.value === "auto"
-                          ? "desktop.languages.autoUnsupported"
-                          : "desktop.languages.languageUnsupported"
-                      )
-                    : undefined
-                }
-                onMouseEnter={() => !item.disabled && setHighlighted(index)}
-                onClick={() => select(item)}
-                className={`flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors ${
-                  item.disabled
-                    ? "cursor-not-allowed opacity-45"
-                    : highlighted === index
-                      ? "bg-accent"
-                      : "hover:bg-accent/70"
-                }`}
-              >
-                <span className="text-base" aria-hidden="true">
-                  {item.flag}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-baseline gap-2 text-sm font-medium">
-                    {item.localizedName || item.label}
-                    <span className="font-mono text-xs uppercase text-muted-foreground">
-                      {item.value}
-                    </span>
-                  </span>
-                  {item.disabled && (
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {t(
-                        item.value === "auto"
-                          ? "desktop.languages.autoUnsupported"
-                          : "desktop.languages.languageUnsupported"
-                      )}
-                    </span>
-                  )}
-                </span>
-                {item.value === value && <Check className="h-4 w-4 text-primary" />}
-              </button>
-            </React.Fragment>
+            <button
+              key={item.value}
+              id={`${listboxId}-${index}`}
+              type="button"
+              role="option"
+              aria-selected={item.value === value}
+              aria-disabled={item.disabled || undefined}
+              disabled={item.disabled}
+              title={
+                item.disabled
+                  ? t(
+                      item.value === "auto"
+                        ? "desktop.languages.autoUnsupported"
+                        : "desktop.languages.languageUnsupported"
+                    )
+                  : undefined
+              }
+              onMouseEnter={() => !item.disabled && setHighlighted(index)}
+              onClick={() => select(item)}
+              className={`flex min-h-9 w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left transition-colors ${
+                item.disabled
+                  ? "cursor-not-allowed opacity-45"
+                  : highlighted === index
+                    ? "bg-accent"
+                    : "hover:bg-accent/70"
+              }`}
+            >
+              <span className="text-sm" aria-hidden="true">
+                {item.flag}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                {item.localizedName || item.label}
+              </span>
+              <span className="text-[11px] font-medium uppercase text-muted-foreground">
+                {item.value}
+              </span>
+              {item.value === value && <Check className="h-4 w-4 shrink-0 text-foreground" />}
+            </button>
           );
         })}
         {!filtered.length && (
@@ -235,34 +206,44 @@ export default function LanguageSelector({
           </p>
         )}
       </div>
-    </div>
-  ) : null;
+      </Popover.Content>
+    </Popover.Portal>
+  );
 
   return (
-    <div ref={containerRef} className={className} onKeyDown={onKeyDown}>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={listboxId}
-        onClick={() => setOpen((value) => !value)}
-        className="flex h-10 w-full items-center gap-2 rounded-lg border border-border bg-background px-3 text-left text-sm outline-none transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <span aria-hidden="true">{selected?.flag ?? "🌐"}</span>
-        <span className="min-w-0 flex-1 truncate">
-          {selected?.localizedName ||
-            selected?.label ||
-            (placeholder === "Choose language" ? t("desktop.languages.choose") : placeholder)}
-        </span>
-        {selected && (
-          <span className="font-mono text-xs uppercase text-muted-foreground">
-            {selected.value}
-          </span>
-        )}
-        <ChevronDown className="h-4 w-4 text-muted-foreground" />
-      </button>
-      {menu && createPortal(menu, document.body)}
-    </div>
+    <Popover.Root
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setQuery("");
+      }}
+    >
+      <div className={className} onKeyDown={onKeyDown}>
+        <Popover.Trigger asChild>
+          <button
+            ref={triggerRef}
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-controls={listboxId}
+            className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md border border-border/80 bg-background/70 px-3 text-left text-sm outline-none transition-colors hover:border-border-hover hover:bg-accent/50 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+          >
+            <span aria-hidden="true">{selected?.flag ?? "🌐"}</span>
+            <span className="min-w-0 flex-1 truncate">
+              {selected?.localizedName ||
+                selected?.label ||
+                (placeholder === "Choose language" ? t("desktop.languages.choose") : placeholder)}
+            </span>
+            {selected && (
+              <span className="font-mono text-xs uppercase text-muted-foreground">
+                {selected.value}
+              </span>
+            )}
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </Popover.Trigger>
+        {menu}
+      </div>
+    </Popover.Root>
   );
 }

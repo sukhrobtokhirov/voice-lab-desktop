@@ -179,7 +179,7 @@ function mapKeyboardEventToHotkey(e: KeyboardEvent): string | null {
 }
 
 export interface HotkeyInputVariant {
-  variant?: "default" | "hero" | "onboarding";
+  variant?: "default" | "hero" | "onboarding" | "settings";
 }
 
 function MacFnKeycap() {
@@ -483,6 +483,7 @@ export function HotkeyInput({
   const displayValue = formatHotkeyLabel(value);
   const isGlobe = isGlobeLikeHotkey(value);
   const isOnboarding = variant === "onboarding";
+  const isSettings = variant === "settings";
   const hotkeyParts = value?.includes("+")
     ? displayValue.split("+").map((part) => part.trim())
     : [];
@@ -634,16 +635,28 @@ export function HotkeyInput({
       onKeyUp={handleKeyUp}
       onMouseDown={handleMouseDown}
       onFocus={handleFocus}
+      onClick={handleFocus}
       onBlur={handleBlur}
       className={`
-        relative group overflow-hidden rounded-md border
+        relative group overflow-hidden rounded-md
         transition-colors duration-150 cursor-pointer select-none focus:outline-none
         ${
+          isSettings
+            ? "border border-dashed border-border/80 hover:border-foreground/35 focus-visible:border-foreground/45"
+            : ""
+        }
+        ${
           disabled
-            ? "bg-muted/30 border-border cursor-not-allowed opacity-50"
+            ? isSettings
+              ? "cursor-not-allowed opacity-50"
+              : "bg-muted/30 border-border cursor-not-allowed opacity-50"
             : isCapturing
-              ? "bg-primary/5 border-primary/30 shadow-[0_0_0_2px_rgba(37,99,212,0.1)]"
-              : "bg-surface-1 border-border hover:border-border-hover hover:bg-surface-2"
+              ? isSettings
+                ? "bg-primary/8"
+                : "bg-primary/5 border border-primary/30 shadow-[0_0_0_2px_rgba(37,99,212,0.1)]"
+              : isSettings
+                ? "hover:bg-muted/55 focus-visible:bg-muted/55"
+                : "bg-surface-1 border border-border hover:border-border-hover hover:bg-surface-2"
         }
       `}
     >

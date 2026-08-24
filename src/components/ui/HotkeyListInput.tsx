@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { Button } from "./button";
-import { HotkeyInput } from "./HotkeyInput";
+import { HotkeyInput, type HotkeyInputVariant } from "./HotkeyInput";
 import { parseHotkeyList, serializeHotkeyList } from "../../utils/hotkeys";
 import { normalizeHotkey } from "../../utils/hotkeyValidator";
 import { getPlatform } from "../../utils/platform";
@@ -26,6 +26,8 @@ export interface HotkeyListInputProps {
   validate?: (hotkey: string) => string | null | undefined;
   /** Optional content shown on the right of the action row (e.g. a "Reset" link). */
   footerEnd?: ReactNode;
+  /** Visual treatment for each editable hotkey row. */
+  variant?: HotkeyInputVariant["variant"];
 }
 
 /**
@@ -43,6 +45,7 @@ export function HotkeyListInput({
   maxHotkeys = Infinity,
   validate,
   footerEnd,
+  variant,
 }: HotkeyListInputProps) {
   const { t } = useTranslation();
   const [items, setItems] = useState<string[]>(() => parseHotkeyList(value));
@@ -115,6 +118,7 @@ export function HotkeyListInput({
           onClear={canRemove ? () => void removeAt(index) : undefined}
           disabled={disabled}
           validate={makeValidate(index)}
+          variant={variant}
         />
       ))}
 
@@ -126,6 +130,7 @@ export function HotkeyListInput({
           onBlur={() => setAdding(false)}
           disabled={disabled}
           validate={makeValidate(-1)}
+          variant={variant}
         />
       )}
 

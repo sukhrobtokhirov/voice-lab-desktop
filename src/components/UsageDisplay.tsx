@@ -1,5 +1,5 @@
 import { RefreshCw } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useUsage } from "../hooks/useUsage";
 import { Badge } from "./ui/badge";
@@ -56,12 +56,14 @@ type UsageDisplayProps = {
   compact?: boolean;
   surface?: "settings" | "profile";
   autoRefresh?: boolean;
+  footerAction?: ReactNode;
 };
 
 export default function UsageDisplay({
   compact = false,
   surface = "settings",
   autoRefresh = false,
+  footerAction,
 }: UsageDisplayProps) {
   const { t, i18n } = useTranslation();
   const usage = useUsage();
@@ -300,7 +302,8 @@ export default function UsageDisplay({
         </div>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-2">
+        {footerAction}
         <Button
           size="sm"
           variant="default"

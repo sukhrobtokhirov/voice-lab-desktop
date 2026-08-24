@@ -67,7 +67,6 @@ import { validateHotkeyForSlot } from "../utils/hotkeyValidation";
 import { getPlatform, getCachedPlatform } from "../utils/platform";
 import { formatHotkeyLabel } from "../utils/hotkeys";
 import { ActivationModeSelector } from "./ui/ActivationModeSelector";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import LinuxPttSetupInfo from "./ui/LinuxPttSetupInfo";
 import { Toggle } from "./ui/toggle";
 import DeveloperSection from "./DeveloperSection";
@@ -556,9 +555,6 @@ export default function SettingsPage({
     setUseCleanupModel,
     setDictationKey,
     meetingKey,
-    setMeetingKey,
-    meetingHotkeyLayoutMode,
-    setMeetingHotkeyLayoutMode,
     autoLearnCorrections,
     setAutoLearnCorrections,
     updateTranscriptionSettings,
@@ -622,11 +618,8 @@ export default function SettingsPage({
   } = useSettings();
 
   const chatAgentKey = useSettingsStore((s) => s.chatAgentKey);
-  const setChatAgentKey = useSettingsStore((s) => s.setChatAgentKey);
   const voiceAgentKey = useSettingsStore((s) => s.voiceAgentKey);
-  const setVoiceAgentKey = useSettingsStore((s) => s.setVoiceAgentKey);
   const translationKey = useSettingsStore((s) => s.translationKey);
-  const setTranslationKey = useSettingsStore((s) => s.setTranslationKey);
 
   const { t } = useTranslation();
   const { toast } = useToast();
@@ -738,44 +731,6 @@ export default function SettingsPage({
     showAlert: showAlertDialog,
   });
 
-  const meetingRegisterFn = useCallback(async (hotkey: string) => {
-    const result = await window.electronAPI?.registerMeetingHotkey?.(hotkey);
-    return result ?? { success: false, message: "Electron API unavailable" };
-  }, []);
-
-  const { registerHotkey: registerMeetingHotkey, isRegistering: isMeetingHotkeyRegistering } =
-    useHotkeyRegistration({
-      onSuccess: (registeredHotkey) => {
-        setMeetingKey(registeredHotkey);
-      },
-      showSuccessToast: false,
-      showErrorToast: true,
-      showAlert: showAlertDialog,
-      registerFn: meetingRegisterFn,
-    });
-
-  // Agent hotkey setters resolve to false when main-process registration fails;
-  // surface it and return the result so HotkeyListInput rolls the row back.
-  const [isAgentHotkeyCommitting, setIsAgentHotkeyCommitting] = useState(false);
-  const commitAgentHotkey = useCallback(
-    async (setter: (key: string) => Promise<boolean>, key: string) => {
-      setIsAgentHotkeyCommitting(true);
-      try {
-        const ok = await setter(key);
-        if (!ok) {
-          showAlertDialog({
-            title: t("hooks.hotkeyRegistration.titles.notRegistered"),
-            description: t("hooks.hotkeyRegistration.errors.failedToRegister"),
-          });
-        }
-        return ok;
-      } finally {
-        setIsAgentHotkeyCommitting(false);
-      }
-    },
-    [showAlertDialog, t]
-  );
-
   const validateDictationHotkey = useCallback(
     (hotkey: string) =>
       validateHotkeyForSlot(
@@ -789,66 +744,6 @@ export default function SettingsPage({
         t
       ),
     [meetingKey, chatAgentKey, voiceAgentKey, translationKey, t]
-  );
-
-  const validateMeetingHotkey = useCallback(
-    (hotkey: string) =>
-      validateHotkeyForSlot(
-        hotkey,
-        {
-          "settingsPage.general.hotkey.title": dictationKey,
-          "agentMode.settings.hotkey": chatAgentKey,
-          "settingsPage.general.voiceAgentHotkey.title": voiceAgentKey,
-          "settingsPage.general.translationHotkey.title": translationKey,
-        },
-        t
-      ),
-    [dictationKey, chatAgentKey, voiceAgentKey, translationKey, t]
-  );
-
-  const validateChatAgentHotkey = useCallback(
-    (hotkey: string) =>
-      validateHotkeyForSlot(
-        hotkey,
-        {
-          "settingsPage.general.hotkey.title": dictationKey,
-          "settingsPage.general.meetingHotkey.title": meetingKey,
-          "settingsPage.general.voiceAgentHotkey.title": voiceAgentKey,
-          "settingsPage.general.translationHotkey.title": translationKey,
-        },
-        t
-      ),
-    [dictationKey, meetingKey, voiceAgentKey, translationKey, t]
-  );
-
-  const validateVoiceAgentHotkey = useCallback(
-    (hotkey: string) =>
-      validateHotkeyForSlot(
-        hotkey,
-        {
-          "settingsPage.general.hotkey.title": dictationKey,
-          "settingsPage.general.meetingHotkey.title": meetingKey,
-          "agentMode.settings.hotkey": chatAgentKey,
-          "settingsPage.general.translationHotkey.title": translationKey,
-        },
-        t
-      ),
-    [dictationKey, meetingKey, chatAgentKey, translationKey, t]
-  );
-
-  const validateTranslationHotkey = useCallback(
-    (hotkey: string) =>
-      validateHotkeyForSlot(
-        hotkey,
-        {
-          "settingsPage.general.hotkey.title": dictationKey,
-          "settingsPage.general.meetingHotkey.title": meetingKey,
-          "agentMode.settings.hotkey": chatAgentKey,
-          "settingsPage.general.voiceAgentHotkey.title": voiceAgentKey,
-        },
-        t
-      ),
-    [dictationKey, meetingKey, chatAgentKey, voiceAgentKey, t]
   );
 
   const { isUsingNativeShortcut, isUsingHyprland, hyprlandConfigStatus, supportsPushToTalk } =
@@ -1314,23 +1209,23 @@ export default function SettingsPage({
                   </div>
                 </div>
 
-                <UsageDisplay />
-
-                <div className="flex justify-end">
-                  <Button
-                    onClick={handleSignOut}
-                    variant="ghost"
-                    size="sm"
-                    disabled={isSigningOut}
-                    className="h-8 px-2 text-xs text-muted-foreground hover:bg-transparent hover:text-destructive"
-                  >
-                    {isSigningOut
-                      ? t("settingsPage.account.signOut.signingOut", {
-                          defaultValue: "Signing out…",
-                        })
-                      : t("settingsPage.account.signOut.signOut", { defaultValue: "Sign out" })}
-                  </Button>
-                </div>
+                <UsageDisplay
+                  footerAction={
+                    <Button
+                      onClick={handleSignOut}
+                      variant="outline"
+                      size="sm"
+                      disabled={isSigningOut}
+                      className="h-8 border-destructive/35 px-3 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      {isSigningOut
+                        ? t("settingsPage.account.signOut.signingOut", {
+                            defaultValue: "Signing out…",
+                          })
+                        : t("settingsPage.account.signOut.signOut", { defaultValue: "Sign out" })}
+                    </Button>
+                  }
+                />
               </>
             ) : (
               <SettingsPanel>
@@ -1636,34 +1531,30 @@ export default function SettingsPage({
                 title={t("settings.language.sectionTitle")}
                 description={t("settings.language.sectionDescription")}
               />
-              <SettingsPanel>
-                <SettingsPanelRow>
-                  <SettingsRow
-                    label={t("settings.language.uiLabel")}
-                    description={t("settings.language.uiDescription")}
-                  >
-                    <LanguageSelector
-                      value={uiLanguage}
-                      onChange={setUiLanguage}
-                      options={UI_LANGUAGE_OPTIONS}
-                      className="min-w-32"
-                    />
-                  </SettingsRow>
-                </SettingsPanelRow>
-                <SettingsPanelRow>
-                  <SettingsRow
-                    label={t("settings.language.transcriptionLabel")}
-                    description={t("settings.language.transcriptionDescription")}
-                  >
-                    <LanguageSelector
-                      value={preferredLanguage}
-                      onChange={(value) =>
-                        updateTranscriptionSettings({ preferredLanguage: value })
-                      }
-                    />
-                  </SettingsRow>
-                </SettingsPanelRow>
-              </SettingsPanel>
+              <div className="space-y-5">
+                <SettingsRow
+                  label={t("settings.language.uiLabel")}
+                  description={t("settings.language.uiDescription")}
+                >
+                  <LanguageSelector
+                    value={uiLanguage}
+                    onChange={setUiLanguage}
+                    options={UI_LANGUAGE_OPTIONS}
+                    className="min-w-32"
+                  />
+                </SettingsRow>
+                <SettingsRow
+                  label={t("settings.language.transcriptionLabel")}
+                  description={t("settings.language.transcriptionDescription")}
+                >
+                  <LanguageSelector
+                    value={preferredLanguage}
+                    onChange={(value) =>
+                      updateTranscriptionSettings({ preferredLanguage: value })
+                    }
+                  />
+                </SettingsRow>
+              </div>
             </div>
 
             {/* Startup */}
@@ -2241,37 +2132,36 @@ EOF`,
                 description={t("settingsPage.general.hotkey.description")}
                 note={isUsingHyprland && t("settingsPage.general.hotkey.hyprlandUnbindDescription")}
               />
-              <SettingsPanel>
-                <SettingsPanelRow>
-                  <HotkeyListInput
-                    value={dictationKey}
-                    onChange={(list) => registerHotkey(list)}
-                    validate={validateDictationHotkey}
-                    disabled={isHotkeyRegistering}
-                    maxHotkeys={isUsingNativeShortcut ? 1 : undefined}
-                    required
-                    footerEnd={
-                      effectiveDefaultHotkey &&
-                      dictationKey &&
-                      dictationKey !== effectiveDefaultHotkey ? (
-                        <button
-                          onClick={() => registerHotkey(effectiveDefaultHotkey)}
-                          disabled={isHotkeyRegistering}
-                          className="text-xs text-muted-foreground/70 hover:text-foreground transition-colors disabled:opacity-50"
-                        >
-                          {t("settingsPage.general.hotkey.resetToDefault", {
-                            hotkey: formatHotkeyLabel(effectiveDefaultHotkey),
-                          })}
-                        </button>
-                      ) : null
-                    }
-                  />
-                </SettingsPanelRow>
+              <div className="space-y-6">
+                <HotkeyListInput
+                  value={dictationKey}
+                  onChange={(list) => registerHotkey(list)}
+                  validate={validateDictationHotkey}
+                  disabled={isHotkeyRegistering}
+                  maxHotkeys={1}
+                  required
+                  variant="settings"
+                  footerEnd={
+                    effectiveDefaultHotkey &&
+                    dictationKey &&
+                    dictationKey !== effectiveDefaultHotkey ? (
+                      <button
+                        onClick={() => registerHotkey(effectiveDefaultHotkey)}
+                        disabled={isHotkeyRegistering}
+                        className="text-xs text-muted-foreground/70 hover:text-foreground transition-colors disabled:opacity-50"
+                      >
+                        {t("settingsPage.general.hotkey.resetToDefault", {
+                          hotkey: formatHotkeyLabel(effectiveDefaultHotkey),
+                        })}
+                      </button>
+                    ) : null
+                  }
+                />
 
                 {(!isUsingNativeShortcut || getCachedPlatform() === "linux") && (
-                  <SettingsPanelRow>
+                  <>
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs text-muted-foreground/80">
+                      <span className="text-sm text-muted-foreground">
                         {t("settingsPage.general.hotkey.activationMode")}
                       </span>
                       <ActivationModeSelector value={activationMode} onChange={setActivationMode} />
@@ -2279,122 +2169,11 @@ EOF`,
                     {getCachedPlatform() === "linux" && activationMode === "push" && (
                       <LinuxPttSetupInfo isAvailable={linuxPttAvailable} />
                     )}
-                  </SettingsPanelRow>
+                  </>
                 )}
-              </SettingsPanel>
+              </div>
             </div>
 
-            {/* Voice Agent Hotkey */}
-            <div>
-              <SectionHeader
-                title={t("settingsPage.general.voiceAgentHotkey.title")}
-                description={t("settingsPage.general.voiceAgentHotkey.description")}
-              />
-              <SettingsPanel>
-                <SettingsPanelRow>
-                  <HotkeyListInput
-                    value={voiceAgentKey}
-                    onChange={(list) => commitAgentHotkey(setVoiceAgentKey, list)}
-                    onClear={() => commitAgentHotkey(setVoiceAgentKey, "")}
-                    validate={validateVoiceAgentHotkey}
-                    disabled={isAgentHotkeyCommitting}
-                    maxHotkeys={isUsingNativeShortcut ? 1 : undefined}
-                  />
-                </SettingsPanelRow>
-              </SettingsPanel>
-            </div>
-
-            {/* Translation Hotkey */}
-            <div>
-              <SectionHeader
-                title={t("settingsPage.general.translationHotkey.title")}
-                description={t("settingsPage.general.translationHotkey.description")}
-              />
-              <SettingsPanel>
-                <SettingsPanelRow>
-                  <HotkeyListInput
-                    value={translationKey}
-                    onChange={(list) => commitAgentHotkey(setTranslationKey, list)}
-                    onClear={() => commitAgentHotkey(setTranslationKey, "")}
-                    validate={validateTranslationHotkey}
-                    disabled={isAgentHotkeyCommitting}
-                    maxHotkeys={isUsingNativeShortcut ? 1 : undefined}
-                  />
-                </SettingsPanelRow>
-              </SettingsPanel>
-            </div>
-
-            {/* Meeting Mode Hotkey */}
-            <div>
-              <SectionHeader
-                title={t("settingsPage.general.meetingHotkey.title")}
-                description={t("settingsPage.general.meetingHotkey.description")}
-              />
-              <SettingsPanel>
-                <SettingsPanelRow>
-                  <HotkeyListInput
-                    value={meetingKey}
-                    onChange={(list) => registerMeetingHotkey(list)}
-                    onClear={async () => {
-                      await window.electronAPI?.registerMeetingHotkey?.("");
-                      setMeetingKey("");
-                    }}
-                    validate={validateMeetingHotkey}
-                    disabled={isMeetingHotkeyRegistering}
-                    maxHotkeys={isUsingNativeShortcut ? 1 : undefined}
-                  />
-                </SettingsPanelRow>
-                <SettingsPanelRow className="flex items-center justify-between gap-3 border-t border-border/40 dark:border-white/5">
-                  <span className="text-xs text-muted-foreground/80">
-                    {t("settingsPage.general.meetingHotkey.layoutLabel")}
-                  </span>
-                  <Select
-                    value={meetingHotkeyLayoutMode}
-                    onValueChange={(value) =>
-                      setMeetingHotkeyLayoutMode(value as "side-panel" | "full-width")
-                    }
-                  >
-                    <SelectTrigger className="h-7 w-36 text-xs rounded-lg px-2.5 [&>svg]:h-3 [&>svg]:w-3">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem
-                        value="full-width"
-                        className="text-xs py-1.5 pl-2.5 pr-7 rounded-md"
-                      >
-                        {t("settingsPage.general.meetingHotkey.layoutFullWidth")}
-                      </SelectItem>
-                      <SelectItem
-                        value="side-panel"
-                        className="text-xs py-1.5 pl-2.5 pr-7 rounded-md"
-                      >
-                        {t("settingsPage.general.meetingHotkey.layoutSidePanel")}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </SettingsPanelRow>
-              </SettingsPanel>
-            </div>
-
-            {/* Chat Agent Hotkey */}
-            <div>
-              <SectionHeader
-                title={t("agentMode.settings.hotkey")}
-                description={t("agentMode.settings.hotkeyDescription")}
-              />
-              <SettingsPanel>
-                <SettingsPanelRow>
-                  <HotkeyListInput
-                    value={chatAgentKey}
-                    onChange={(list) => commitAgentHotkey(setChatAgentKey, list)}
-                    onClear={() => commitAgentHotkey(setChatAgentKey, "")}
-                    validate={validateChatAgentHotkey}
-                    disabled={isAgentHotkeyCommitting}
-                    maxHotkeys={isUsingNativeShortcut ? 1 : undefined}
-                  />
-                </SettingsPanelRow>
-              </SettingsPanel>
-            </div>
           </div>
         );
 
