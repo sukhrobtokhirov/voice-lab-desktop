@@ -90,10 +90,10 @@ const DISABLED_LEGACY_SPEECH_CHANNELS = new Set([
 // Meeting capture runs at 24 kHz (see meetingRecordingStore AudioContext); cloud
 // streaming providers must be told the true PCM rate or they misread the audio.
 const MEETING_STREAM_SAMPLE_RATE = 24000;
-const MAX_DICTATION_AUDIO_BYTES = 64 * 1024 * 1024;
+const MAX_DICTATION_AUDIO_BYTES = 200 * 1024 * 1024;
 const MAX_STORED_AUDIO_BYTES = 128 * 1024 * 1024;
 const MAX_MEETING_CHUNK_BYTES = 4 * 1024 * 1024;
-const MAX_UPLOAD_AUDIO_BYTES = 128 * 1024 * 1024;
+const MAX_UPLOAD_AUDIO_BYTES = 200 * 1024 * 1024;
 
 function toBoundedAudioBuffer(value, maximumBytes, label = "Audio") {
   let buffer;

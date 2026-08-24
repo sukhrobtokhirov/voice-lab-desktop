@@ -2458,7 +2458,7 @@
       "noProviderTitle": "Sign in required",
       "noProviderDescription": "Sign in to transcribe with VoiceLab. Usage is charged from your AI Credits balance.",
       "noProviderAction": "Sign In",
-      "fileTooLarge": "This file exceeds the 500 MB limit.",
+      "fileTooLarge": "This file exceeds the 200 MB limit.",
       "paidPlanRequired": "Cloud transcription for files over 25 MB requires a paid plan. Large files are processed with VoiceLab Cloud for reliable, high-quality results.",
       "largeFileNote": "Large files are split and transcribed in parallel.",
       "chunkProgress": "Transcribing part {{completed}} of {{total}}...",
@@ -2501,7 +2501,7 @@
       "urlSubmit": "Add link",
       "urlsSkipped": "Some links couldn't be added ({{n}})",
       "queueFailed": "{{n}} failed",
-      "urlFileTooLarge": "File is too large to download. The maximum size is 500 MB.",
+      "urlFileTooLarge": "File is too large to download. The maximum size is 200 MB.",
       "urlYoutubeBlocked": "YouTube is temporarily blocking downloads from your network. Try again in a little while."
     },
     "meeting": {

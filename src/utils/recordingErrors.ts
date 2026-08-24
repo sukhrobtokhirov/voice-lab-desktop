@@ -51,7 +51,7 @@ const COPY: Record<string, Record<string, RecoveryCopy>> = {
     },
     AUDIO_LIMIT_EXCEEDED: {
       title: "Recording limit exceeded",
-      description: "Use a recording under 300 seconds and 64 MiB.",
+      description: "Use a recording under 300 seconds and 200 MiB.",
     },
     AUDIO_INVALID: {
       title: "Audio could not be processed",
@@ -119,7 +119,7 @@ const COPY: Record<string, Record<string, RecoveryCopy>> = {
     },
     AUDIO_LIMIT_EXCEEDED: {
       title: "Yozuv limitdan oshdi",
-      description: "Yozuv 300 soniya va 64 MiB’dan oshmasin.",
+      description: "Yozuv 300 soniya va 200 MiB’dan oshmasin.",
     },
     AUDIO_INVALID: {
       title: "Audioni qayta ishlab bo‘lmadi",

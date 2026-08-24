@@ -8,7 +8,7 @@ const Module = require("node:module");
 const API_BASE_URL = "https://api.voicelab.test";
 const DESKTOP_STT_URL = `${API_BASE_URL}/v1/desktop/stt`;
 const DESKTOP_USAGE_URL = `${API_BASE_URL}/v1/desktop/usage`;
-const MAX_AUDIO_BYTES = 64 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 200 * 1024 * 1024;
 
 function jsonResponse(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), {
@@ -1016,7 +1016,7 @@ test("cancelling desktop STT aborts the active upload without retrying", async (
   assert.equal(authManager.state.refreshCalls, 0);
 });
 
-test("desktop STT enforces only the documented 64 MiB client-side boundary", async (t) => {
+test("desktop STT enforces only the documented 200 MiB client-side boundary", async (t) => {
   const VoiceLabApiClient = loadClient(t);
   const { client, authManager } = createClient(VoiceLabApiClient);
   primeActiveSubscription(client, authManager);

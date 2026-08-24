@@ -26,7 +26,7 @@ const YOUTUBE_HOSTS = new Set([
 
 const STALL_TIMEOUT_MS = 30_000;
 const CONNECT_TIMEOUT_MS = 30_000;
-const MAX_DOWNLOAD_BYTES = 500 * 1024 * 1024;
+const MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
 // Reject absurdly long videos before downloading.
 const MAX_DURATION_SECONDS = 6 * 60 * 60;
@@ -908,7 +908,7 @@ async function downloadYouTube(url, onProgress, abortSignal) {
 
     // --max-filesize makes yt-dlp skip the file and exit 0 with no output.
     if (/larger than max-filesize/i.test(extractionOut)) {
-      const err = new Error("File too large. Maximum download size is 500 MB.");
+      const err = new Error("File too large. Maximum download size is 200 MB.");
       err.code = "FILE_TOO_LARGE";
       throw err;
     }
@@ -924,7 +924,7 @@ async function downloadYouTube(url, onProgress, abortSignal) {
       try {
         fs.unlinkSync(tempPath);
       } catch {}
-      const err = new Error("File too large. Maximum download size is 500 MB.");
+      const err = new Error("File too large. Maximum download size is 200 MB.");
       err.code = "FILE_TOO_LARGE";
       throw err;
     }
@@ -1059,7 +1059,7 @@ function streamToFile(
           abort();
         } catch {}
         bail(
-          Object.assign(new Error("File too large. Maximum download size is 500 MB."), {
+          Object.assign(new Error("File too large. Maximum download size is 200 MB."), {
             code: "FILE_TOO_LARGE",
           })
         );
@@ -1245,7 +1245,7 @@ async function downloadViaProxy(url, onProgress, abortSignal, redirectCount = 0)
           request.abort();
         } catch {}
         reject(
-          Object.assign(new Error("File too large. Maximum download size is 500 MB."), {
+          Object.assign(new Error("File too large. Maximum download size is 200 MB."), {
             code: "FILE_TOO_LARGE",
           })
         );
@@ -1397,7 +1397,7 @@ async function downloadDirect(url, onProgress, abortSignal, redirectCount = 0) {
       : null;
 
     if (contentLength && contentLength > MAX_DOWNLOAD_BYTES) {
-      const err = new Error("File too large. Maximum download size is 500 MB.");
+      const err = new Error("File too large. Maximum download size is 200 MB.");
       err.code = "FILE_TOO_LARGE";
       throw err;
     }
@@ -1443,7 +1443,7 @@ async function downloadDirect(url, onProgress, abortSignal, redirectCount = 0) {
     contentLength = Number(response.headers["content-length"]);
     if (contentLength > MAX_DOWNLOAD_BYTES) {
       response.destroy();
-      const err = new Error("File too large. Maximum download size is 500 MB.");
+      const err = new Error("File too large. Maximum download size is 200 MB.");
       err.code = "FILE_TOO_LARGE";
       throw err;
     }

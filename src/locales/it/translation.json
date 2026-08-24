@@ -2257,7 +2257,7 @@
       "noProviderTitle": "Nessun provider di trascrizione configurato",
       "noProviderDescription": "Aggiungi una chiave API o scarica un modello locale per iniziare a trascrivere.",
       "noProviderAction": "Apri impostazioni di trascrizione",
-      "fileTooLarge": "Questo file supera il limite di 500 MB.",
+      "fileTooLarge": "Questo file supera il limite di 200 MB.",
       "largeFileNote": "I file di grandi dimensioni vengono suddivisi e trascritti in parallelo.",
       "chunkProgress": "Trascrizione parte {{completed}} di {{total}}...",
       "paidPlanRequired": "La trascrizione cloud per file superiori a 25 MB richiede un piano a pagamento. I file di grandi dimensioni vengono elaborati con VoiceLab Cloud per risultati affidabili e di alta qualità.",
@@ -2300,7 +2300,7 @@
       "urlSubmit": "Aggiungi link",
       "urlsSkipped": "Alcuni link non sono stati aggiunti ({{n}})",
       "queueFailed": "{{n}} non riusciti",
-      "urlFileTooLarge": "Il file è troppo grande per essere scaricato. La dimensione massima è 500 MB.",
+      "urlFileTooLarge": "Il file è troppo grande per essere scaricato. La dimensione massima è 200 MB.",
       "urlYoutubeBlocked": "YouTube sta bloccando temporaneamente i download dalla tua rete. Riprova tra poco."
     },
     "meeting": {

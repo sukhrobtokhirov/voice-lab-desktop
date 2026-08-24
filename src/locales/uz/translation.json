@@ -2460,7 +2460,7 @@
       "noProviderTitle": "Hisobga kirish kerak",
       "noProviderDescription": "VoiceLab bilan transkripsiya qilish uchun hisobingizga kiring. Xarajat AI Credits balansingizdan yechiladi.",
       "noProviderAction": "Kirish",
-      "fileTooLarge": "Bu fayl 500 MB cheklovidan katta.",
+      "fileTooLarge": "Bu fayl 200 MB cheklovidan katta.",
       "paidPlanRequired": "25 MB dan katta fayllarni bulutda matnga aylantirish uchun pulli tarif kerak. Katta fayllar ishonchli va sifatli natija uchun VoiceLab Cloud orqali qayta ishlanadi.",
       "largeFileNote": "Katta fayllar bo‘laklarga ajratilib, parallel qayta ishlanadi.",
       "chunkProgress": "{{total}} qismdan {{completed}}-qismi matnga aylantirilmoqda...",
@@ -2503,7 +2503,7 @@
       "urlSubmit": "Havola qo‘shish",
       "urlsSkipped": "Ayrim havolalarni qo‘shib bo‘lmadi ({{n}})",
       "queueFailed": "{{n}} tasi bajarilmadi",
-      "urlFileTooLarge": "Fayl yuklab olish uchun juda katta. Eng katta hajm — 500 MB.",
+      "urlFileTooLarge": "Fayl yuklab olish uchun juda katta. Eng katta hajm — 200 MB.",
       "urlYoutubeBlocked": "YouTube tarmog‘ingizdan yuklab olishni vaqtincha cheklamoqda. Birozdan keyin qayta urining."
     },
     "meeting": {

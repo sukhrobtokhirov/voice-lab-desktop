@@ -2,7 +2,7 @@ const crypto = require("crypto");
 const authLogger = require("./authLogger");
 
 const CLIENT_ID = "voicelab-desktop";
-const MAX_AUDIO_BYTES = 64 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 200 * 1024 * 1024;
 const SUPPORTED_LANGUAGES = new Set(["uz", "en", "ru"]);
 const CANONICAL_AUDIO_UPLOADS = new Map([
   ["audio/mpeg", "mp3"],
@@ -740,7 +740,7 @@ class VoiceLabApiClient {
     if (audioBuffer.byteLength > MAX_AUDIO_BYTES)
       throw new VoiceLabApiError({
         code: "AUDIO_LIMIT_EXCEEDED",
-        message: "The audio file is larger than 64 MiB.",
+        message: "The audio file is larger than 200 MiB.",
         status: 413,
         details: { max_audio_bytes: MAX_AUDIO_BYTES },
       });

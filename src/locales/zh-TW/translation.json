@@ -2252,7 +2252,7 @@
       "noProviderTitle": "尚未設定轉錄服務供應商",
       "noProviderDescription": "新增 API Key 或下載本機模型以開始轉錄。",
       "noProviderAction": "開啟轉錄設定",
-      "fileTooLarge": "此檔案超過 500 MB 的大小限制。",
+      "fileTooLarge": "此檔案超過 200 MB 的大小限制。",
       "largeFileNote": "大型檔案將被分割並平行轉錄。",
       "chunkProgress": "正在轉錄第 {{completed}} 部分，共 {{total}} 部分...",
       "paidPlanRequired": "超過 25 MB 的檔案需要付費方案才能使用雲端轉錄。大型檔案透過 VoiceLab Cloud 處理，確保可靠、高品質的結果。",
@@ -2295,7 +2295,7 @@
       "urlSubmit": "新增連結",
       "urlsSkipped": "部分連結無法新增（{{n}} 個）",
       "queueFailed": "{{n}} 個失敗",
-      "urlFileTooLarge": "檔案過大，無法下載。大小上限為 500 MB。",
+      "urlFileTooLarge": "檔案過大，無法下載。大小上限為 200 MB。",
       "urlYoutubeBlocked": "YouTube 暫時封鎖了來自您網路的下載。請稍後再試。"
     },
     "meeting": {

@@ -2241,7 +2241,7 @@
       "noProviderTitle": "文字起こしプロバイダーが設定されていません",
       "noProviderDescription": "API キーを追加するか、ローカルモデルをダウンロードして文字起こしを開始してください。",
       "noProviderAction": "文字起こし設定を開く",
-      "fileTooLarge": "このファイルは 500 MB の制限を超えています。",
+      "fileTooLarge": "このファイルは 200 MB の制限を超えています。",
       "largeFileNote": "大容量ファイルは分割され、並列で文字起こしされます。",
       "chunkProgress": "パート {{completed}} / {{total}} を文字起こし中...",
       "paidPlanRequired": "25 MB を超えるファイルのクラウド文字起こしには有料プランが必要です。大容量ファイルは VoiceLab Cloud で信頼性の高い高品質な結果を得られます。",
@@ -2284,7 +2284,7 @@
       "urlSubmit": "リンクを追加",
       "urlsSkipped": "追加できなかったリンクがあります（{{n}}件）",
       "queueFailed": "{{n}}件失敗",
-      "urlFileTooLarge": "ファイルが大きすぎてダウンロードできません。最大サイズは500 MBです。",
+      "urlFileTooLarge": "ファイルが大きすぎてダウンロードできません。最大サイズは200 MBです。",
       "urlYoutubeBlocked": "YouTubeがお使いのネットワークからのダウンロードを一時的にブロックしています。しばらくしてからもう一度お試しください。"
     },
     "meeting": {

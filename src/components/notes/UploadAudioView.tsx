@@ -57,7 +57,7 @@ type UploadState = "idle" | "selected" | "downloading" | "transcribing" | "compl
 const SUPPORTED_EXTENSIONS = ["mp3", "wav", "m4a", "webm", "ogg", "oga", "flac", "aac", "opus"];
 
 const CLOUD_FREE_MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB — free plan cloud limit
-const CLOUD_PRO_MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB — pro plan cloud limit
+const CLOUD_PRO_MAX_FILE_SIZE = 200 * 1024 * 1024; // Desktop STT upload limit
 
 const MAX_BATCH_URLS = 50;
 
@@ -1262,7 +1262,7 @@ function SelectedView({
         </div>
       </div>
 
-      {/* Cloud absolute limit (500 MB) */}
+      {/* Desktop STT absolute limit (200 MiB) */}
       {fileTooLarge && (
         <div className="rounded-lg border border-destructive/12 dark:border-destructive/15 bg-destructive/[0.03] px-3 py-2.5 mb-3">
           <p className="text-xs text-destructive/60 leading-relaxed">
