@@ -4,8 +4,6 @@ import "./index.css";
 import { Check, X } from "lucide-react";
 import { useToast } from "./components/ui/useToast";
 import { LoadingDots } from "./components/ui/LoadingDots";
-import { useHotkey } from "./hooks/useHotkey";
-import { formatHotkeyListLabel } from "./utils/hotkeys";
 import { useWindowDrag } from "./hooks/useWindowDrag";
 import { useAudioRecording } from "./hooks/useAudioRecording";
 import { useSettingsStore } from "./stores/settingsStore";
@@ -84,7 +82,6 @@ export default function App() {
   const buttonRef = useRef(null);
   const { toast, dismiss, toastCount } = useToast();
   const { t } = useTranslation();
-  const { hotkey } = useHotkey();
   const { isDragging, handleMouseDown, handleMouseUp } = useWindowDrag();
 
   const [dragStartPos, setDragStartPos] = useState(null);
@@ -328,7 +325,7 @@ export default function App() {
       case "hover":
         return {
           className: `${baseClasses} bg-black/50 cursor-pointer`,
-          tooltip: `${t("app.mic.clickToSpeak")} · ${formatHotkeyListLabel(hotkey)}`,
+          tooltip: t("app.mic.clickToSpeak"),
         };
       case "recording":
         return {

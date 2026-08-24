@@ -2625,7 +2625,7 @@
       "hotkeyToSpeak": "{{hotkey}} で話す",
       "recording": "録音中...",
       "processing": "処理中...",
-      "clickToSpeak": "クリックして話す",
+      "clickToSpeak": "押して話す",
       "waitingForMicrophone": "マイクを待っています…"
     },
     "buttons": {

@@ -2648,7 +2648,7 @@
       "hotkeyToSpeak": "{{hotkey}} для записи",
       "recording": "Запись...",
       "processing": "Обработка...",
-      "clickToSpeak": "Нажмите для записи",
+      "clickToSpeak": "Нажмите, чтобы говорить",
       "waitingForMicrophone": "Ожидание микрофона…"
     },
     "buttons": {

@@ -2620,7 +2620,7 @@
       "hotkeyToSpeak": "{{hotkey}} 說話",
       "recording": "錄音中...",
       "processing": "處理中...",
-      "clickToSpeak": "點擊開始說話",
+      "clickToSpeak": "按下開始說話",
       "waitingForMicrophone": "等待麥克風…"
     },
     "buttons": {

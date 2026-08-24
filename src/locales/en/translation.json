@@ -2780,7 +2780,7 @@
       "hotkeyToSpeak": "{{hotkey}} to talk",
       "recording": "Recording...",
       "processing": "Processing...",
-      "clickToSpeak": "Click to speak",
+      "clickToSpeak": "Press to speak",
       "waitingForMicrophone": "Waiting for microphone…"
     },
     "buttons": {

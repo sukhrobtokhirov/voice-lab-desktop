@@ -2625,7 +2625,7 @@
       "hotkeyToSpeak": "{{hotkey}} zum Sprechen",
       "recording": "Aufnahme...",
       "processing": "Verarbeitung...",
-      "clickToSpeak": "Klicken zum Sprechen",
+      "clickToSpeak": "Zum Sprechen drücken",
       "waitingForMicrophone": "Warte auf Mikrofon…"
     },
     "buttons": {

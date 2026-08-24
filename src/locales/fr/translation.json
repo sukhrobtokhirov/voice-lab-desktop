@@ -2673,7 +2673,7 @@
       "hotkeyToSpeak": "{{hotkey}} pour parler",
       "recording": "Enregistrement...",
       "processing": "Traitement...",
-      "clickToSpeak": "Cliquez pour parler",
+      "clickToSpeak": "Appuyez pour parler",
       "waitingForMicrophone": "En attente du microphone…"
     },
     "buttons": {
