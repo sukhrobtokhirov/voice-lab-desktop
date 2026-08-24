@@ -10,33 +10,22 @@ function formatDuration(seconds: number, language: string) {
   const hours = Math.floor(safeSeconds / 3600);
   const minutes = Math.floor((safeSeconds % 3600) / 60);
   const remainder = safeSeconds % 60;
-  const duration = hours
-    ? { hours, ...(minutes ? { minutes } : {}) }
-    : minutes
-      ? { minutes, ...(remainder ? { seconds: remainder } : {}) }
-      : { seconds: remainder };
-  const DurationFormat = (
-    Intl as unknown as {
-      DurationFormat?: new (
-        locale: string,
-        options: { style: "short" }
-      ) => { format: (value: Partial<Record<"hours" | "minutes" | "seconds", number>>) => string };
-    }
-  ).DurationFormat;
-  if (DurationFormat) return new DurationFormat(language, { style: "short" }).format(duration);
-  if (hours) return `${hours}h${minutes ? ` ${minutes}m` : ""}`;
-  if (minutes) return `${minutes}m${remainder ? ` ${remainder}s` : ""}`;
-  return `${remainder}s`;
-}
+  const parts: Array<{ value: number; unit: "hour" | "minute" | "second" }> = [];
 
-function formatCompactDuration(seconds: number) {
-  const safeSeconds = Math.max(0, Math.round(seconds));
-  const hours = Math.floor(safeSeconds / 3600);
-  const minutes = Math.floor((safeSeconds % 3600) / 60);
-  const remainder = safeSeconds % 60;
-  if (hours) return `${hours}h${minutes ? ` ${minutes}m` : ""}`;
-  if (minutes) return `${minutes}m${remainder ? ` ${remainder}s` : ""}`;
-  return `${remainder}s`;
+  if (hours) parts.push({ value: hours, unit: "hour" });
+  if (minutes) parts.push({ value: minutes, unit: "minute" });
+  if (!parts.length || remainder) parts.push({ value: remainder, unit: "second" });
+
+  return parts
+    .map(({ value, unit }) =>
+      new Intl.NumberFormat(language, {
+        style: "unit",
+        unit,
+        unitDisplay: "short",
+        maximumFractionDigits: 0,
+      }).format(value)
+    )
+    .join(" ");
 }
 
 function formatResetAt(value: string | null, language: string) {
@@ -101,11 +90,22 @@ export default function UsageDisplay({
     }
 
     return (
-      <div className="space-y-5 py-1">
+      <section className="space-y-4" aria-label={t("desktop.wallet.balanceTitle")}>
         <div className="flex items-center justify-between gap-3">
-          <p className="text-base font-semibold leading-5 text-foreground">
-            {t("desktop.wallet.balanceTitle")}
-          </p>
+          {active && entitlement ? (
+            <Badge
+              variant="outline"
+              className={
+                isFreePlan
+                  ? "border-border bg-muted/70 text-muted-foreground"
+                  : "border-coral/30 bg-coral/10 text-coral dark:border-coral/35 dark:bg-coral/15"
+              }
+            >
+              {entitlement.planName || usage.plan || t("desktop.wallet.activePlan")}
+            </Badge>
+          ) : (
+            <p className="text-sm font-semibold text-foreground">{t("desktop.wallet.balanceTitle")}</p>
+          )}
           <Button
             size="sm"
             variant="default"
@@ -119,27 +119,45 @@ export default function UsageDisplay({
 
         {active && entitlement ? (
           <>
-            <dl className="space-y-3 text-sm">
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-muted-foreground">{t("desktop.wallet.total")}</dt>
-                <dd className="shrink-0 text-right font-medium tabular-nums text-foreground">
-                  {formatCompactDuration(entitlement.usageLimitSeconds)}
+            <dl className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-5">
+              <div className="min-w-0">
+                <dt className="text-xs text-muted-foreground">{t("desktop.wallet.available")}</dt>
+                <dd className="mt-1 truncate text-xl font-semibold leading-none tabular-nums text-foreground">
+                  {formatDuration(entitlement.remainingSeconds, i18n.language)}
                 </dd>
               </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-muted-foreground">{t("desktop.wallet.remaining")}</dt>
-                <dd className="shrink-0 text-right font-medium tabular-nums text-foreground">
-                  {formatCompactDuration(entitlement.remainingSeconds)}
+              <div className="text-right">
+                <dt className="text-xs text-muted-foreground">{t("desktop.wallet.dailyLimit")}</dt>
+                <dd className="mt-1 text-sm font-semibold leading-none tabular-nums text-foreground">
+                  {formatDuration(entitlement.usageLimitSeconds, i18n.language)}
                 </dd>
               </div>
             </dl>
+            <div
+              className="h-1 overflow-hidden rounded-full bg-foreground/10 dark:bg-foreground/15"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={entitlement.usageLimitSeconds}
+              aria-valuenow={entitlement.usedSeconds}
+              aria-label={t("desktop.wallet.balance")}
+            >
+              <div
+                className="h-full rounded-full bg-foreground/70 transition-[width] duration-200 dark:bg-foreground/80"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    Math.max(0, (entitlement.usedSeconds / entitlement.usageLimitSeconds) * 100)
+                  )}%`,
+                }}
+              />
+            </div>
           </>
         ) : (
-          <p className="text-sm leading-5 text-muted-foreground">
+          <p className="mt-4 text-sm leading-5 text-muted-foreground">
             {t("desktop.wallet.inactiveDescription")}
           </p>
         )}
-      </div>
+      </section>
     );
   }
 
@@ -320,20 +338,22 @@ export default function UsageDisplay({
 
 function ProfileUsageSkeleton() {
   return (
-    <div className="space-y-5 py-1" aria-busy="true" aria-label="Loading plan usage">
+    <div className="space-y-4" aria-busy="true" aria-label="Loading plan usage">
       <div className="flex items-center justify-between">
         <span className="h-5 w-16 animate-pulse rounded bg-foreground/10" />
         <span className="h-8 w-20 animate-pulse rounded-lg bg-foreground/10" />
       </div>
-      <div className="space-y-3">
-        {[0, 1].map((index) => (
-          <div key={index} className="flex items-center justify-between gap-4">
-            <span className="h-4 w-16 animate-pulse rounded bg-foreground/10" />
-            <span className="h-4 w-14 animate-pulse rounded bg-foreground/10" />
-          </div>
-        ))}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-5">
+        <div className="space-y-2">
+          <span className="block h-3 w-24 animate-pulse rounded bg-foreground/10" />
+          <span className="block h-5 w-28 animate-pulse rounded bg-foreground/10" />
+        </div>
+        <div className="space-y-2 text-right">
+          <span className="ml-auto block h-3 w-20 animate-pulse rounded bg-foreground/10" />
+          <span className="ml-auto block h-4 w-14 animate-pulse rounded bg-foreground/10" />
+        </div>
       </div>
-      <span className="block h-4 w-44 animate-pulse rounded bg-foreground/10" />
+      <span className="block h-1 w-full animate-pulse rounded-full bg-foreground/10" />
     </div>
   );
 }

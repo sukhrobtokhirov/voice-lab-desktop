@@ -1510,10 +1510,10 @@
       },
       "rollingWeeklyLimit": "Rolling weekly limit",
       "signOut": {
-        "failedDescription": "Something went wrong signing out. Please try again.",
-        "failedTitle": "Couldn't sign out",
-        "signOut": "Sign Out",
-        "signingOut": "Signing out..."
+        "failedDescription": "Tizimdan chiqishda xatolik yuz berdi. Qayta urinib ko‘ring.",
+        "failedTitle": "Tizimdan chiqib bo‘lmadi",
+        "signOut": "Chiqish",
+        "signingOut": "Chiqilmoqda..."
       },
       "signedIn": "Tizimga kirilgan",
       "title": "Hisob",
