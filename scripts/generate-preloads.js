@@ -105,8 +105,6 @@ const controlOnly = new Set([
   "desktopPricing",
   "desktopSubscription",
   "onDictationComplete",
-  "setShortcutTestMode",
-  "onShortcutTested",
 ]);
 
 const agent = new Set([

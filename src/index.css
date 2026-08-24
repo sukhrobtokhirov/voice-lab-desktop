@@ -1300,32 +1300,12 @@ body:has(.agent-overlay-window) #root {
   animation: app-content-in 1000ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-@keyframes onboarding-confetti {
-  from {
-    opacity: 1;
-    transform: translate(-50%, -50%) rotate(0deg);
-  }
-  to {
-    opacity: 0;
-    transform: translate(
-        calc(-50% + var(--onboarding-confetti-x)),
-        calc(-50% + var(--onboarding-confetti-y))
-      )
-      rotate(var(--onboarding-confetti-rotate));
-  }
-}
-
-.onboarding-confetti-piece {
-  animation: onboarding-confetti 800ms ease-out both;
-}
-
 @media (prefers-reduced-motion: reduce) {
   [class*="onboarding-mark"],
   [class*="onboarding-content"],
   .welcome-greeting-exit,
   .welcome-greeting-caret,
-  .app-content-in,
-  .onboarding-confetti-piece {
+  .app-content-in {
     animation: none;
   }
 }

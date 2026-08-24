@@ -2040,14 +2040,6 @@ class IPCHandlers {
       return { success: true };
     });
 
-    this._handle("set-shortcut-test-mode", async (event, enabled) => {
-      if (typeof enabled !== "boolean") {
-        return { success: false, message: "Shortcut test mode must be a boolean" };
-      }
-
-      return this.windowManager.setShortcutTestMode(enabled, event.sender);
-    });
-
     this._handle("get-hotkey-mode-info", async () => {
       const isUsingNativeShortcut = this.windowManager.isUsingNativeShortcutHotkeys();
       const supportsPushToTalk =

@@ -1051,10 +1051,6 @@ async function startApp() {
       // Handle dictation if Globe/Fn is one of the dictation hotkeys
       const dictationUsesGlobe = hotkeyManager.getSlotHotkeys("dictation").some(isGlobeLikeHotkey);
       if (dictationUsesGlobe) {
-        if (windowManager.isShortcutTestMode()) {
-          windowManager.notifyShortcutTested(currentHotkey);
-          return;
-        }
         if (mainWindowLive) {
           // Capture target app PID BEFORE showing the overlay
           if (textEditMonitor) textEditMonitor.captureTargetPid();
@@ -1251,11 +1247,6 @@ async function startApp() {
       if (hotkeyManager.isInListeningMode && hotkeyManager.isInListeningMode()) return;
       if (!isMouseButtonHotkey(button)) return;
 
-      if (hotkeyManager.slotHasHotkey("dictation", button) && windowManager.isShortcutTestMode()) {
-        windowManager.notifyShortcutTested(button);
-        return;
-      }
-
       if (hotkeyManager.slotHasHotkey("agent", button)) {
         windowManager.toggleAgentOverlay();
       }
@@ -1297,7 +1288,6 @@ async function startApp() {
       if (!isMouseButtonHotkey(button)) return;
 
       if (!hotkeyManager.slotHasHotkey("dictation", button)) return;
-      if (windowManager.isShortcutTestMode()) return;
       if (!isLiveWindow(windowManager.mainWindow)) return;
 
       const activationMode = windowManager.getActivationMode();
@@ -1367,10 +1357,6 @@ async function startApp() {
     // drive other windows (matching their globalShortcut callbacks and macOS).
     const dispatchNativeKeyDown = (key) => {
       if (hotkeyManager.slotHasHotkey("dictation", key)) {
-        if (windowManager.isShortcutTestMode()) {
-          windowManager.notifyShortcutTested(key);
-          return;
-        }
         if (!isLiveWindow(windowManager.mainWindow)) return;
         if (windowManager.getActivationMode() === "push") {
           windowManager.startWindowsPushToTalk(key);

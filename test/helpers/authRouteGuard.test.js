@@ -162,13 +162,9 @@ test("onboarding personalizes interface language and appearance without the sett
   assert.match(onboarding, /<main className="[^"]*min-h-0/);
 });
 
-test("onboarding setup asks only for needed access and checks the shortcut locally", () => {
+test("onboarding setup asks only for needed access and saves the chosen shortcut", () => {
   const onboarding = read("src/components/OnboardingFlow.tsx");
-  const windowManager = read("src/helpers/windowManager.js");
-  const ipcHandlers = read("src/helpers/ipcHandlers.js");
-  const main = read("main.js");
   const hotkeyInput = read("src/components/ui/HotkeyInput.tsx");
-  const overlayPreload = read("preloads/overlay.js");
   const controlPanelPreload = read("preloads/control-panel.js");
 
   assert.match(onboarding, /platform === "darwin" \? "Fn" : getDefaultHotkey\(\)/);
@@ -185,36 +181,16 @@ test("onboarding setup asks only for needed access and checks the shortcut local
   assert.match(hotkeyInput, /function MacFnKeycap/);
   assert.match(hotkeyInput, /<Globe2/);
   assert.match(onboarding, /role="switch"/);
-  assert.match(onboarding, /isShortcutCheckOpen/);
-  assert.match(onboarding, /<ConfettiBurst \/>/);
-  assert.match(onboarding, /setupPermissionsGranted && isShortcutDetected/);
+  assert.match(onboarding, /\(step === "hotkey" && setupPermissionsGranted\)/);
   assert.match(onboarding, /setDictationKey\(value\)/);
-  assert.match(onboarding, /onShortcutTested/);
-  assert.match(onboarding, /setShortcutTestMode/);
+  assert.doesNotMatch(onboarding, /onShortcutTested|setShortcutTestMode|isShortcutDetected|ConfettiBurst/);
   assert.doesNotMatch(onboarding, /onDictationComplete/);
   assert.doesNotMatch(onboarding, /Textarea/);
   assert.match(onboarding, /<main className="[^"]*overflow-hidden/);
   assert.doesNotMatch(onboarding, /overflow-y-auto/);
   assert.doesNotMatch(onboarding, /variant="hero"/);
 
-  assert.match(windowManager, /isShortcutTestMode\(\)[\s\S]*notifyShortcutTested\(currentHotkey\)/);
-  assert.match(windowManager, /shortcut-test-detected/);
-  assert.match(windowManager, /sender !== this\.controlPanelWindow\.webContents/);
-  assert.match(ipcHandlers, /setShortcutTestMode\(enabled, event\.sender\)/);
-  assert.match(main, /isShortcutTestMode\(\)[\s\S]*notifyShortcutTested/);
-  assert.match(controlPanelPreload, /const preloadCapabilities = new Set\([^;]*"onShortcutTested"/);
-  assert.match(
-    controlPanelPreload,
-    /const preloadCapabilities = new Set\([^;]*"setShortcutTestMode"/
-  );
-  assert.doesNotMatch(
-    overlayPreload,
-    /const preloadCapabilities = new Set\([^;]*"setShortcutTestMode"/
-  );
-  assert.doesNotMatch(
-    overlayPreload,
-    /const preloadCapabilities = new Set\([^;]*"onShortcutTested"/
-  );
+  assert.doesNotMatch(controlPanelPreload, /onShortcutTested|setShortcutTestMode/);
 });
 
 test("global error screen keeps internal error details out of the interface", () => {

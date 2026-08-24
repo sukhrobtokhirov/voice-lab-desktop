@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Check, FileText, Mic, Monitor, Moon, Shield, Sun } from "lucide-react";
 import { Button } from "./ui/button";
@@ -46,41 +46,6 @@ const ONBOARDING_THEMES = [
 
 const ONBOARDING_NAV_BUTTON_CLASS = "min-w-28";
 
-const CONFETTI_PIECES = [
-  [-54, -38, -22, "bg-primary"],
-  [-32, -55, 12, "bg-warning"],
-  [-8, -48, -34, "bg-success"],
-  [20, -56, 27, "bg-foreground"],
-  [50, -36, -18, "bg-primary"],
-  [-58, -8, 26, "bg-success"],
-  [56, -4, -30, "bg-warning"],
-  [-43, 28, 18, "bg-foreground"],
-  [-15, 42, -14, "bg-primary"],
-  [19, 43, 30, "bg-success"],
-  [44, 25, -25, "bg-warning"],
-  [0, 56, 12, "bg-foreground"],
-] as const;
-
-function ConfettiBurst() {
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-      {CONFETTI_PIECES.map(([x, y, rotate, color], index) => (
-        <span
-          key={index}
-          className={`onboarding-confetti-piece absolute left-1/2 top-1/2 h-1.5 w-1.5 ${color}`}
-          style={
-            {
-              "--onboarding-confetti-x": `${x}px`,
-              "--onboarding-confetti-y": `${y}px`,
-              "--onboarding-confetti-rotate": `${rotate}deg`,
-            } as React.CSSProperties
-          }
-        />
-      ))}
-    </div>
-  );
-}
-
 function updateWithViewTransition(update: () => void) {
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const startViewTransition = (document as ViewTransitionDocument).startViewTransition;
@@ -111,29 +76,12 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
       dictationKey ||
       (platform === "darwin" ? "Fn" : getDefaultHotkey())
   );
-  const [isShortcutDetected, setIsShortcutDetected] = useState(false);
-  const [isShortcutCheckOpen, setIsShortcutCheckOpen] = useState(false);
   const [showPermissionNotice, setShowPermissionNotice] = useState(false);
   const permissions = usePermissions(() => setShowPermissionNotice(true));
   const systemAudio = useSystemAudioPermission();
   const { registerHotkey, isRegistering } = useHotkeyRegistration();
   const { isSignedIn } = useAuth();
   const shouldShowSystemAudioPermission = canManageSystemAudioInApp(systemAudio);
-
-  useEffect(() => {
-    if (step !== "hotkey") return undefined;
-
-    void window.electronAPI?.setShortcutTestMode?.(true);
-    const dispose = window.electronAPI?.onShortcutTested?.(() => {
-      setIsShortcutDetected(true);
-      setIsShortcutCheckOpen(true);
-    });
-
-    return () => {
-      dispose?.();
-      void window.electronAPI?.setShortcutTestMode?.(false);
-    };
-  }, [step]);
 
   const setupPermissionsGranted =
     permissions.micPermissionGranted &&
@@ -143,26 +91,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     if (setupPermissionsGranted) setShowPermissionNotice(false);
   }, [setupPermissionsGranted]);
 
-  useEffect(() => {
-    if (step === "hotkey" && setupPermissionsGranted && !isShortcutDetected) {
-      setIsShortcutCheckOpen(true);
-    }
-  }, [isShortcutDetected, setupPermissionsGranted, step]);
-
-  useEffect(() => {
-    if (step !== "hotkey" || !isShortcutDetected) return undefined;
-
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const timer = window.setTimeout(() => setIsShortcutCheckOpen(false), reducedMotion ? 0 : 1100);
-
-    return () => window.clearTimeout(timer);
-  }, [isShortcutDetected, step]);
-
   const stepIndex = ONBOARDING_STEPS.indexOf(step);
-  const shortcutLabel =
-    platform === "darwin" && (hotkey === "Fn" || hotkey === "GLOBE")
-      ? "Fn"
-      : formatHotkeyLabelForPlatform(hotkey, platform);
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setIntroPhase("complete");
@@ -210,7 +139,7 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     step === "welcome" ||
     step === "mode" ||
     step === "language-permissions" ||
-    (step === "hotkey" && setupPermissionsGranted && isShortcutDetected);
+    (step === "hotkey" && setupPermissionsGranted);
 
   if (introPhase !== "complete") {
     return (
@@ -600,66 +529,15 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                       onChange={async (value) => {
                         if (await registerHotkey(value)) {
                           setHotkey(value);
-                          setIsShortcutDetected(false);
-                          setIsShortcutCheckOpen(setupPermissionsGranted);
                           setDictationKey(value);
                           localStorage.setItem("hotkey", value);
                         }
                       }}
                     />
-                    {isShortcutDetected && (
-                      <p
-                        className="mt-2 flex items-center justify-center gap-1.5 text-xs font-medium text-foreground"
-                        role="status"
-                      >
-                        <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-                        {t("desktop.onboarding.permissions.shortcutDetected")}
-                      </p>
-                    )}
                   </section>
                 </div>
               )}
             </main>
-            {step === "hotkey" && isShortcutCheckOpen && (
-              <div
-                className="absolute inset-0 z-10 flex items-center justify-center bg-background/85 px-6"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="shortcut-check-title"
-              >
-                <div className="relative w-full max-w-xs overflow-hidden rounded-lg border border-border bg-card px-6 py-5 text-center shadow-[0_2px_8px_rgba(0,0,0,0.12)] dark:shadow-[0_2px_8px_rgba(0,0,0,0.32)]">
-                  {isShortcutDetected ? (
-                    <>
-                      <ConfettiBurst />
-                      <span className="relative mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-foreground bg-foreground text-background">
-                        <Check className="h-5 w-5" strokeWidth={2.5} />
-                      </span>
-                      <h2
-                        id="shortcut-check-title"
-                        className="relative mt-3 text-lg font-semibold tracking-tight"
-                      >
-                        {t("desktop.onboarding.permissions.shortcutDetected")}
-                      </h2>
-                    </>
-                  ) : (
-                    <>
-                      <kbd className="inline-flex min-h-10 items-center justify-center rounded-md border border-border bg-muted/40 px-4 text-base font-semibold">
-                        {shortcutLabel}
-                      </kbd>
-                      <h2
-                        id="shortcut-check-title"
-                        className="mt-3 text-lg font-semibold tracking-tight"
-                      >
-                        {t("desktop.onboarding.permissions.shortcut")}
-                      </h2>
-                      <p className="mt-1.5 text-sm leading-5 text-muted-foreground">
-                        {t("desktop.onboarding.permissions.pressShortcut")}
-                      </p>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
             <footer className="flex h-14 shrink-0 items-end justify-center">
               <div className="flex items-center justify-center gap-3">
                 {stepIndex > 0 && (
