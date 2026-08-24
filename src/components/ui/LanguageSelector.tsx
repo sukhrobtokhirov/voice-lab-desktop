@@ -193,7 +193,7 @@ export default function LanguageSelector({
               <span className="min-w-0 flex-1 truncate text-sm font-medium">
                 {item.localizedName || item.label}
               </span>
-              <span className="text-[11px] font-medium uppercase text-muted-foreground">
+              <span className="text-xs font-medium uppercase text-muted-foreground">
                 {item.value}
               </span>
               {item.value === value && <Check className="h-4 w-4 shrink-0 text-foreground" />}

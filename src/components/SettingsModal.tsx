@@ -4,7 +4,6 @@ import { UserCircle, Wrench, SlidersHorizontal } from "lucide-react";
 import SidebarModal, { type SidebarItem } from "./ui/SidebarModal";
 import SettingsPage, { SettingsSectionType } from "./SettingsPage";
 import keyboardIcon from "../assets/icons/keyboard.svg";
-import shieldIcon from "../assets/icons/shield.svg";
 
 export type { SettingsSectionType };
 
@@ -17,8 +16,6 @@ const SECTION_ALIASES: Record<string, SettingsSectionType> = {
   meetings: "llms",
   prompts: "llms",
   softwareUpdates: "system",
-  privacy: "privacyData",
-  permissions: "privacyData",
   developer: "system",
   plansBilling: "account",
   llms: "system",
@@ -29,7 +26,6 @@ const CANONICAL_SECTIONS = new Set<SettingsSectionType>([
   "account",
   "general",
   "hotkeys",
-  "privacyData",
   "system",
 ]);
 
@@ -75,15 +71,6 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
           defaultValue: "Dictation and VoiceLab AI shortcuts",
         }),
         group: t("settingsModal.groups.app", { defaultValue: "Flow" }),
-      },
-      {
-        id: "privacyData",
-        label: t("desktop.settings.privacy", { defaultValue: "Data & Privacy" }),
-        icon: shieldIcon,
-        description: t("desktop.settings.privacyDescription", {
-          defaultValue: "Cloud backup, local audio and retention",
-        }),
-        group: t("settingsModal.groups.system", { defaultValue: "System" }),
       },
       {
         id: "system",

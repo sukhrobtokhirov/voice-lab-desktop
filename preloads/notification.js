@@ -296,6 +296,7 @@ const fullElectronAPI = {
   setNotificationInteractivity: (interactive) =>
     ipcRenderer.invoke("set-notification-interactivity", interactive),
   resizeMainWindow: (sizeKey) => ipcRenderer.invoke("resize-main-window", sizeKey),
+  getRecordingIslandSupport: () => ipcRenderer.invoke("get-recording-island-support"),
 
   // Update functions
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),

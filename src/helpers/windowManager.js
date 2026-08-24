@@ -13,6 +13,8 @@ const {
   openExternalUrl: openValidatedExternalUrl,
 } = require("./windowSecurity");
 const { DEV_SERVER_PORT } = DevServerManager;
+const { supportsRecordingIsland } = require("./recordingIslandSupport");
+const { configureStatusPanel, restorePanelWindow } = require("./macosStatusPanel");
 const {
   MAIN_WINDOW_CONFIG,
   CONTROL_PANEL_CONFIG,
@@ -54,6 +56,7 @@ class WindowManager {
     this._floatingIconAutoHide = false;
     this._agentAnimationState = null;
     this._panelStartPosition = "bottom-right";
+    this._mainWindowSizeKey = "BASE";
     this._isDictatingToggle = false;
     this._pendingMeetingNoteNavigation = null;
     this._pendingNoteNavigation = null;
@@ -96,16 +99,51 @@ class WindowManager {
   async _createMainWindow() {
     const cursorPos = screen.getCursorScreenPoint();
     const display = screen.getDisplayNearestPoint(cursorPos);
+    const startAsRecordingIsland =
+      process.env.NODE_ENV === "development" && supportsRecordingIsland();
+    const initialSize = startAsRecordingIsland ? WINDOW_SIZES.RECORDING_ISLAND : WINDOW_SIZES.BASE;
     const position = WindowPositionUtil.getMainWindowPosition(
       display,
-      null,
+      initialSize,
       this._panelStartPosition
     );
 
+    // The development preview starts exactly where the recording island will
+    // live. Production still begins as the small, user-positioned mic control
+    // and moves here only while a dictation is active.
+    if (startAsRecordingIsland) {
+      position.x = Math.round(display.bounds.x + (display.bounds.width - initialSize.width) / 2);
+      position.y = display.bounds.y;
+      this._mainWindowSizeKey = "RECORDING_ISLAND";
+    }
+
     this.mainWindow = new BrowserWindow({
       ...MAIN_WINDOW_CONFIG,
-      ...position,
+      ...initialSize,
+      x: position.x,
+      // macOS must receive a literal top-edge coordinate for the status
+      // island. The native panel bridge below prevents the work-area clamp.
+      y: startAsRecordingIsland ? 0 : position.y,
     });
+
+    // Configure the macOS panel before it can be shown. This lets the
+    // recording island remain at the screen's top edge across Spaces and
+    // fullscreen apps, while its transparent pixels continue passing clicks
+    // to the native menu bar underneath.
+    if (process.platform === "darwin") {
+      // Keep Electron's window level aligned with the native NSPanel level.
+      // The native bridge applies the collection behaviour Electron lacks.
+      this.mainWindow.setAlwaysOnTop(true, "status");
+      this.mainWindow.setVisibleOnAllWorkspaces(true, {
+        visibleOnFullScreen: true,
+        skipTransformProcessType: true,
+      });
+    }
+    this.mainWindow.setIgnoreMouseEvents(true, { forward: true });
+    if (startAsRecordingIsland) {
+      this.enforceMainWindowOnTop();
+      this.positionRecordingIsland(position.x, 0);
+    }
     hardenWindow(this.mainWindow);
 
     this.setMainWindowInteractivity(false);
@@ -189,7 +227,13 @@ class WindowManager {
       return { success: false, message: "Window not available" };
     }
 
-    const newSize = WINDOW_SIZES[sizeKey] || WINDOW_SIZES.BASE;
+    // Renderer support checks are for presentation. Keep the same platform
+    // gate here so an IPC caller cannot force the island on unsupported Macs.
+    const previousSizeKey = this._mainWindowSizeKey;
+    const resolvedSizeKey =
+      sizeKey === "RECORDING_ISLAND" && !supportsRecordingIsland() ? "BASE" : sizeKey;
+    this._mainWindowSizeKey = resolvedSizeKey;
+    const newSize = WINDOW_SIZES[resolvedSizeKey] || WINDOW_SIZES.BASE;
     const currentBounds = this.mainWindow.getBounds();
     const position = this._panelStartPosition;
 
@@ -201,7 +245,12 @@ class WindowManager {
 
     let newX, newY;
 
-    if (position === "bottom-left") {
+    if (resolvedSizeKey === "RECORDING_ISLAND") {
+      // Recording is a transient status surface, so it intentionally ignores
+      // the user's idle-panel corner preference and sits in the macOS menu bar.
+      newX = Math.round(workArea.x + (workArea.width - newSize.width) / 2);
+      newY = display.bounds.y;
+    } else if (position === "bottom-left") {
       // Anchor bottom-left corner: keep x, expand rightward and upward
       newX = currentBounds.x;
       newY = currentBounds.y + currentBounds.height - newSize.height;
@@ -217,16 +266,41 @@ class WindowManager {
       newY = currentBounds.y + currentBounds.height - newSize.height;
     }
 
-    // Clamp to work area
+    // The island uses the full physical display so it can align with the
+    // menu-bar/notch line; every other layout stays in the usable work area.
+    const verticalBounds = resolvedSizeKey === "RECORDING_ISLAND" ? display.bounds : workArea;
     newX = Math.max(workArea.x, Math.min(newX, workArea.x + workArea.width - newSize.width));
-    newY = Math.max(workArea.y, Math.min(newY, workArea.y + workArea.height - newSize.height));
+    newY = Math.max(
+      verticalBounds.y,
+      Math.min(newY, verticalBounds.y + verticalBounds.height - newSize.height)
+    );
 
-    this.mainWindow.setBounds({
-      x: newX,
-      y: newY,
-      width: newSize.width,
-      height: newSize.height,
-    });
+    // macOS clamps a floating/status panel to the usable work area. Promote the
+    // recording island before positioning it so its top edge can occupy the
+    // menu-bar/notch line instead of being pushed beneath it.
+    if (resolvedSizeKey === "RECORDING_ISLAND") {
+      this.enforceMainWindowOnTop();
+    }
+
+    if (resolvedSizeKey === "RECORDING_ISLAND") {
+      // `setBounds` is work-area aware for this panel and macOS silently moves
+      // it below the menu bar. Apply the dimensions, then use the native
+      // position setter once the window is at its elevated level.
+      this.mainWindow.setSize(newSize.width, newSize.height);
+      this.positionRecordingIsland(newX, newY);
+      this.mainWindow.moveTop();
+    } else {
+      if (previousSizeKey === "RECORDING_ISLAND") {
+        restorePanelWindow(this.mainWindow);
+      }
+      this.mainWindow.setBounds({
+        x: newX,
+        y: newY,
+        width: newSize.width,
+        height: newSize.height,
+      });
+      this.enforceMainWindowOnTop();
+    }
 
     return { success: true, bounds: { x: newX, y: newY, ...newSize } };
   }
@@ -1227,7 +1301,27 @@ class WindowManager {
 
   enforceMainWindowOnTop() {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      if (process.platform === "darwin" && this._mainWindowSizeKey === "RECORDING_ISLAND") {
+        this.mainWindow.setAlwaysOnTop(true, "status");
+        this.mainWindow.setVisibleOnAllWorkspaces(true, {
+          visibleOnFullScreen: true,
+          skipTransformProcessType: true,
+        });
+        return;
+      }
       WindowPositionUtil.setupAlwaysOnTop(this.mainWindow);
+    }
+  }
+
+  positionRecordingIsland(x, y) {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
+
+    // BrowserWindow#setPosition is still useful as an Electron fallback. The
+    // AppKit bridge then sets the NSPanel frame directly, bypassing the
+    // work-area safe-area clamp that kept the island below the menu bar.
+    this.mainWindow.setPosition(x, y, false);
+    if (process.platform === "darwin") {
+      configureStatusPanel(this.mainWindow, { x, y });
     }
   }
 

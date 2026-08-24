@@ -937,6 +937,7 @@ declare global {
       setMainWindowInteractivity: (interactive: boolean) => Promise<void>;
       captureTargetPid: () => Promise<number | null>;
       setNotificationInteractivity: (interactive: boolean) => Promise<void>;
+      getRecordingIslandSupport?: () => Promise<boolean>;
 
       // App management
       cleanupApp: () => Promise<{ success: boolean; message: string; errors?: string[] }>;

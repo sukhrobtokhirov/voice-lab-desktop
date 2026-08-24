@@ -24,6 +24,7 @@ export const useAudioRecording = (toast, options = {}) => {
   const [transcript, setTranscript] = useState("");
   const [partialTranscript, setPartialTranscript] = useState("");
   const [wasPlaced, setWasPlaced] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
   const audioManagerRef = useRef(null);
   const startLockRef = useRef(false);
   const stopLockRef = useRef(false);
@@ -193,6 +194,9 @@ export const useAudioRecording = (toast, options = {}) => {
       },
       onPartialTranscript: (text) => {
         setPartialTranscript(text);
+      },
+      onAudioLevel: (level) => {
+        setAudioLevel(level);
       },
       onTranscriptionComplete: async (result) => {
         if (result.success) {
@@ -392,6 +396,7 @@ export const useAudioRecording = (toast, options = {}) => {
     transcript,
     partialTranscript,
     wasPlaced,
+    audioLevel,
     startRecording: performStartRecording,
     stopRecording: performStopRecording,
     cancelRecording,

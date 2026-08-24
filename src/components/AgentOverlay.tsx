@@ -89,6 +89,7 @@ export default function AgentOverlay() {
       onPartialTranscript: (text: string) => {
         setPartialTranscript(text);
       },
+      onAudioLevel: undefined,
       onStreamingCommit: undefined,
       onTranslationFallback: undefined,
     });

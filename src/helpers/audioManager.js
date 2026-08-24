@@ -297,6 +297,7 @@ class AudioManager {
     this.onError = null;
     this.onTranscriptionComplete = null;
     this.onPartialTranscript = null;
+    this.onAudioLevel = null;
     this.micCaptureStatus = "inactive";
 
     // Invalidate the pinned mic device when the OS adds/removes/suspends inputs.
@@ -316,6 +317,9 @@ class AudioManager {
     this.streamingSource = null;
     this.streamingProcessor = null;
     this.streamingStream = null;
+    this.streamingLevelAnalyser = null;
+    this.streamingLevelSource = null;
+    this.streamingLevelInterval = null;
     this.streamingCleanupFns = [];
     this.streamingFinalText = "";
     this.streamingPartialText = "";
@@ -429,6 +433,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     onError,
     onTranscriptionComplete,
     onPartialTranscript,
+    onAudioLevel,
     onStreamingCommit,
     onTranslationFallback,
   }) {
@@ -436,6 +441,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     this.onError = onError;
     this.onTranscriptionComplete = onTranscriptionComplete;
     this.onPartialTranscript = onPartialTranscript;
+    this.onAudioLevel = onAudioLevel;
     this.onStreamingCommit = onStreamingCommit;
     this.onTranslationFallback = onTranslationFallback;
   }
@@ -443,6 +449,14 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
   // Fail-open: translation degraded/failed but raw text is still pasted. Surface why.
   notifyTranslationFallback(reason) {
     this.onTranslationFallback?.({ reason });
+  }
+
+  emitAudioLevel(rms = 0, peak = 0) {
+    // Use the measured waveform, with a small gain so normal speech is visible
+    // without turning room noise into a busy animation.
+    const measured = Math.max(rms * 9, peak * 0.6);
+    const level = Math.min(1, Math.max(0, (measured - 0.02) / 0.58));
+    this.onAudioLevel?.(level);
   }
 
   setMicCaptureStatus(status) {
@@ -797,6 +811,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           }
           const rms = Math.sqrt(sum / dataArray.length);
           recordLocalSpeechWindow(this._localSpeechGateState, rms, peak);
+          this.emitAudioLevel(rms, peak);
         }, 100);
       } catch (e) {
         logger.warn("Audio level gate setup failed, skipping", { error: e.message }, "audio");
@@ -1026,6 +1041,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     this._silenceCtx = null;
     this._silenceAnalyser = null;
     this._silenceSource = null;
+    this.emitAudioLevel();
   }
 
   cancelRecording() {
@@ -2346,6 +2362,60 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     return this.persistentAudioContext;
   }
 
+  startStreamingLevelMeter(stream) {
+    this.stopStreamingLevelMeter();
+    if (!this.streamingAudioContext || !stream) return;
+
+    try {
+      this.streamingLevelAnalyser = this.streamingAudioContext.createAnalyser();
+      this.streamingLevelAnalyser.fftSize = 512;
+      this.streamingLevelAnalyser.smoothingTimeConstant = 0.72;
+      this.streamingLevelSource = this.streamingAudioContext.createMediaStreamSource(stream);
+      this.streamingLevelSource.connect(this.streamingLevelAnalyser);
+
+      const samples = new Uint8Array(this.streamingLevelAnalyser.fftSize);
+      this.streamingLevelInterval = setInterval(() => {
+        if (!this.isRecording || !this.isStreaming || !this.streamingLevelAnalyser) return;
+        this.streamingLevelAnalyser.getByteTimeDomainData(samples);
+        let sum = 0;
+        let peak = 0;
+        for (let i = 0; i < samples.length; i++) {
+          const value = (samples[i] - 128) / 128;
+          sum += value * value;
+          peak = Math.max(peak, Math.abs(value));
+        }
+        this.emitAudioLevel(Math.sqrt(sum / samples.length), peak);
+      }, 75);
+    } catch (error) {
+      logger.debug("Streaming audio-level meter unavailable", { error: error.message }, "audio");
+      this.stopStreamingLevelMeter();
+    }
+  }
+
+  replaceStreamingLevelSource(stream) {
+    if (!this.streamingAudioContext || !this.streamingLevelAnalyser || !stream) return;
+    try {
+      this.streamingLevelSource?.disconnect();
+      this.streamingLevelSource = this.streamingAudioContext.createMediaStreamSource(stream);
+      this.streamingLevelSource.connect(this.streamingLevelAnalyser);
+    } catch (error) {
+      logger.debug("Failed to replace streaming audio-level source", { error: error.message }, "audio");
+    }
+  }
+
+  stopStreamingLevelMeter() {
+    if (this.streamingLevelInterval) {
+      clearInterval(this.streamingLevelInterval);
+      this.streamingLevelInterval = null;
+    }
+    try {
+      this.streamingLevelSource?.disconnect();
+    } catch {}
+    this.streamingLevelSource = null;
+    this.streamingLevelAnalyser = null;
+    this.emitAudioLevel();
+  }
+
   async startStreamingFallbackRecorder(stream) {
     try {
       const recorder = new PcmWavRecorder({ sampleRate: PCM_WAV_RECORDING_FORMAT.sampleRate });
@@ -2378,6 +2448,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       nextSource.connect(this.streamingProcessor);
       this.streamingSource?.disconnect();
       this.streamingSource = nextSource;
+      this.replaceStreamingLevelSource(replacement);
       await this.finishStreamingFallbackSegment();
       if (!this.isStreaming || !this.isRecording) {
         throw new Error("Streaming stopped during microphone recovery");
@@ -2521,6 +2592,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       this.isRecording = true;
       this.recordingStartTime = Date.now();
       this.onStateChange?.({ isRecording: true, isProcessing: false, isStreaming: true });
+      this.startStreamingLevelMeter(stream);
       await this.beginMicRecovery(stream);
 
       // 4. Connect WebSocket — audio is already flowing from the pipeline above,
@@ -2685,6 +2757,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     this.isRecording = false;
     this.recordingStartTime = null;
     this.onStateChange?.({ isRecording: false, isProcessing: true, isStreaming: false });
+    this.stopStreamingLevelMeter();
 
     // 2. Stop the processor — it flushes its remaining buffer on "stop".
     //    Keep isStreaming TRUE so the port.onmessage handler forwards the flush to WebSocket.
@@ -3043,6 +3116,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
   }
 
   cleanupStreamingAudio() {
+    this.stopStreamingLevelMeter();
     if (this.streamingFallbackRecorder?.state === "recording") {
       try {
         this.streamingFallbackRecorder.stop();
@@ -3129,6 +3203,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     this.onError = null;
     this.onTranscriptionComplete = null;
     this.onPartialTranscript = null;
+    this.onAudioLevel = null;
     this.onStreamingCommit = null;
     if (this._onDeviceChange) {
       navigator.mediaDevices?.removeEventListener?.("devicechange", this._onDeviceChange);

@@ -134,6 +134,11 @@ const UI_LANGUAGE_OPTIONS: LanguageOption[] = [
   { value: "zh-TW", label: "繁體中文", flag: "🇹🇼" },
 ];
 
+// Keep support tooling implemented without exposing it in customer settings.
+const SHOW_SYSTEM_MAINTENANCE_TOOLS = false;
+// This section remains implemented for a future return, but is intentionally unavailable for now.
+const SHOW_PRIVACY_SETTINGS = false;
+
 const noop = () => {};
 
 function SettingsPanel({
@@ -1171,6 +1176,10 @@ export default function SettingsPage({
   );
 
   const renderSectionContent = () => {
+    if (!SHOW_PRIVACY_SETTINGS && activeSection === "privacyData") {
+      return null;
+    }
+
     switch (activeSection) {
       case "account":
       case "plansBilling":
@@ -2435,32 +2444,6 @@ EOF`,
       case "system":
         return (
           <div className="space-y-6">
-            <div>
-              <SectionHeader
-                title={t("desktop.settings.cloudTranscription", {
-                  defaultValue: "Cloud transcription",
-                })}
-                description={t("desktop.settings.cloudTranscriptionDescription", {
-                  defaultValue: "VoiceLab Flow uses your signed-in account automatically.",
-                })}
-              />
-              <SettingsPanel>
-                <SettingsPanelRow>
-                  <div className="rounded-xl border border-[#e55347]/45 bg-[#e55347]/8 p-4">
-                    <div className="flex items-start gap-3">
-                      <Cloud className="mb-2 h-5 w-5 text-[#e55347]" />
-                      <div>
-                        <strong className="block text-sm">VoiceLab Cloud</strong>
-                        <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-                          No API key is required. Dictation starts after sign-in and usage is
-                          charged from your VoiceLab AI Credits balance.
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </SettingsPanelRow>
-              </SettingsPanel>
-            </div>
             {/* Software Updates */}
             <div>
               <SectionHeader title={t("settingsPage.general.updates.title")} />
@@ -2476,7 +2459,7 @@ EOF`,
                           : t("settingsPage.general.updates.latestVersion")
                     }
                   >
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center justify-end gap-2.5">
                       <span className="text-xs tabular-nums text-muted-foreground font-mono">
                         {currentVersion || t("settingsPage.general.updates.versionPlaceholder")}
                       </span>
@@ -2493,260 +2476,270 @@ EOF`,
                           {t("settingsPage.general.updates.badges.latest")}
                         </Badge>
                       )}
+                      {!updateStatus.isDevelopment && (
+                        <Button
+                          onClick={async () => {
+                            try {
+                              const result = await checkForUpdates();
+                              if (result && !result.updateAvailable) {
+                                toast({
+                                  title: t("settingsPage.general.updates.dialogs.noUpdates.title"),
+                                  description: t(
+                                    "settingsPage.general.updates.dialogs.noUpdates.description"
+                                  ),
+                                });
+                              }
+                            } catch {}
+                          }}
+                          disabled={checkingForUpdates}
+                          variant="outline"
+                          className="shrink-0"
+                          size="sm"
+                        >
+                          <RefreshCw
+                            size={13}
+                            className={`mr-1.5 ${checkingForUpdates ? "animate-spin" : ""}`}
+                          />
+                          {checkingForUpdates
+                            ? t("settingsPage.general.updates.checking")
+                            : t("settingsPage.general.updates.checkForUpdates")}
+                        </Button>
+                      )}
                     </div>
                   </SettingsRow>
                 </SettingsPanelRow>
 
-                <SettingsPanelRow>
-                  <div className="space-y-2.5">
-                    <Button
-                      onClick={async () => {
-                        try {
-                          const result = await checkForUpdates();
-                          if (result && !result.updateAvailable) {
-                            toast({
-                              title: t("settingsPage.general.updates.dialogs.noUpdates.title"),
-                              description: t(
-                                "settingsPage.general.updates.dialogs.noUpdates.description"
-                              ),
-                            });
-                          }
-                        } catch {}
-                      }}
-                      disabled={checkingForUpdates || updateStatus.isDevelopment}
-                      variant="outline"
-                      className="w-full"
-                      size="sm"
-                    >
-                      <RefreshCw
-                        size={13}
-                        className={`mr-1.5 ${checkingForUpdates ? "animate-spin" : ""}`}
-                      />
-                      {checkingForUpdates
-                        ? t("settingsPage.general.updates.checking")
-                        : t("settingsPage.general.updates.checkForUpdates")}
-                    </Button>
-
-                    {isUpdateAvailable && !updateStatus.updateDownloaded && (
-                      <div className="space-y-2">
-                        <Button
-                          onClick={async () => {
-                            try {
-                              await downloadUpdate();
-                            } catch {
-                              showAlertDialog({
-                                title: t(
-                                  "settingsPage.general.updates.dialogs.downloadFailed.title"
-                                ),
-                                description: t(
-                                  "settingsPage.general.updates.dialogs.downloadFailed.description"
-                                ),
-                              });
-                            }
-                          }}
-                          disabled={downloadingUpdate}
-                          variant="success"
-                          className="w-full"
-                          size="sm"
-                        >
-                          <Download
-                            size={13}
-                            className={`mr-1.5 ${downloadingUpdate ? "animate-pulse" : ""}`}
-                          />
-                          {downloadingUpdate
-                            ? t("settingsPage.general.updates.downloading", {
-                                progress: Math.round(updateDownloadProgress),
-                              })
-                            : t("settingsPage.general.updates.downloadUpdate", {
-                                version: updateInfo?.version || "",
-                              })}
-                        </Button>
-
-                        {downloadingUpdate && (
-                          <div className="h-1 w-full overflow-hidden rounded-full bg-muted/50">
-                            <div
-                              className="h-full bg-success transition-[width] duration-200 rounded-full"
-                              style={{
-                                width: `${Math.min(100, Math.max(0, updateDownloadProgress))}%`,
-                              }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {updateStatus.updateDownloaded && (
-                      <Button
-                        onClick={() => {
-                          showConfirmDialog({
-                            title: t("settingsPage.general.updates.dialogs.installUpdate.title"),
-                            description: t(
-                              "settingsPage.general.updates.dialogs.installUpdate.description",
-                              { version: updateInfo?.version || "" }
-                            ),
-                            confirmText: t(
-                              "settingsPage.general.updates.dialogs.installUpdate.confirmText"
-                            ),
-                            onConfirm: async () => {
+                {(isUpdateAvailable ||
+                  updateStatus.updateDownloaded ||
+                  updateInfo?.releaseNotes) && (
+                  <SettingsPanelRow>
+                    <div className="space-y-2.5">
+                      {isUpdateAvailable && !updateStatus.updateDownloaded && (
+                        <div className="space-y-2">
+                          <Button
+                            onClick={async () => {
                               try {
-                                await installUpdateAction();
+                                await downloadUpdate();
                               } catch {
                                 showAlertDialog({
                                   title: t(
-                                    "settingsPage.general.updates.dialogs.installFailed.title"
+                                    "settingsPage.general.updates.dialogs.downloadFailed.title"
                                   ),
                                   description: t(
-                                    "settingsPage.general.updates.dialogs.installFailed.description"
+                                    "settingsPage.general.updates.dialogs.downloadFailed.description"
                                   ),
                                 });
                               }
-                            },
-                          });
-                        }}
-                        disabled={installInitiated}
-                        className="w-full"
-                        size="sm"
-                      >
-                        <RefreshCw
-                          size={14}
-                          className={`mr-2 ${installInitiated ? "animate-spin" : ""}`}
-                        />
-                        {installInitiated
-                          ? t("settingsPage.general.updates.restarting")
-                          : t("settingsPage.general.updates.installAndRestart")}
-                      </Button>
-                    )}
-                  </div>
+                            }}
+                            disabled={downloadingUpdate}
+                            variant="success"
+                            className="w-full"
+                            size="sm"
+                          >
+                            <Download
+                              size={13}
+                              className={`mr-1.5 ${downloadingUpdate ? "animate-pulse" : ""}`}
+                            />
+                            {downloadingUpdate
+                              ? t("settingsPage.general.updates.downloading", {
+                                  progress: Math.round(updateDownloadProgress),
+                                })
+                              : t("settingsPage.general.updates.downloadUpdate", {
+                                  version: updateInfo?.version || "",
+                                })}
+                          </Button>
 
-                  {updateInfo?.releaseNotes && (
-                    <div className="mt-4 pt-4 border-t border-border/30">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                        {t("settingsPage.general.updates.whatsNew", {
-                          version: updateInfo.version,
-                        })}
-                      </p>
-                      <div className="text-xs text-muted-foreground [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:space-y-1 [&_li]:pl-1 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_a]:text-link [&_a]:underline">
-                        <ReactMarkdown
-                          skipHtml
-                          components={{
-                            a: ({ href, children }) => {
-                              const safeHref =
-                                typeof href === "string" &&
-                                (href.startsWith("https://") || href.startsWith("mailto:"))
-                                  ? href
-                                  : undefined;
-                              return safeHref ? (
-                                <a href={safeHref} target="_blank" rel="noreferrer noopener">
-                                  {children}
-                                </a>
-                              ) : (
-                                <span>{children}</span>
-                              );
-                            },
+                          {downloadingUpdate && (
+                            <div className="h-1 w-full overflow-hidden rounded-full bg-muted/50">
+                              <div
+                                className="h-full bg-success transition-[width] duration-200 rounded-full"
+                                style={{
+                                  width: `${Math.min(100, Math.max(0, updateDownloadProgress))}%`,
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {updateStatus.updateDownloaded && (
+                        <Button
+                          onClick={() => {
+                            showConfirmDialog({
+                              title: t("settingsPage.general.updates.dialogs.installUpdate.title"),
+                              description: t(
+                                "settingsPage.general.updates.dialogs.installUpdate.description",
+                                { version: updateInfo?.version || "" }
+                              ),
+                              confirmText: t(
+                                "settingsPage.general.updates.dialogs.installUpdate.confirmText"
+                              ),
+                              onConfirm: async () => {
+                                try {
+                                  await installUpdateAction();
+                                } catch {
+                                  showAlertDialog({
+                                    title: t(
+                                      "settingsPage.general.updates.dialogs.installFailed.title"
+                                    ),
+                                    description: t(
+                                      "settingsPage.general.updates.dialogs.installFailed.description"
+                                    ),
+                                  });
+                                }
+                              },
+                            });
                           }}
+                          disabled={installInitiated}
+                          className="w-full"
+                          size="sm"
                         >
-                          {updateInfo.releaseNotes}
-                        </ReactMarkdown>
-                      </div>
+                          <RefreshCw
+                            size={14}
+                            className={`mr-2 ${installInitiated ? "animate-spin" : ""}`}
+                          />
+                          {installInitiated
+                            ? t("settingsPage.general.updates.restarting")
+                            : t("settingsPage.general.updates.installAndRestart")}
+                        </Button>
+                      )}
                     </div>
-                  )}
-                </SettingsPanelRow>
+
+                    {updateInfo?.releaseNotes && (
+                      <div className="mt-4 pt-4 border-t border-border/30">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                          {t("settingsPage.general.updates.whatsNew", {
+                            version: updateInfo.version,
+                          })}
+                        </p>
+                        <div className="text-xs text-muted-foreground [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:space-y-1 [&_li]:pl-1 [&_p]:mb-2 [&_p:last-child]:mb-0 [&_a]:text-link [&_a]:underline">
+                          <ReactMarkdown
+                            skipHtml
+                            components={{
+                              a: ({ href, children }) => {
+                                const safeHref =
+                                  typeof href === "string" &&
+                                  (href.startsWith("https://") || href.startsWith("mailto:"))
+                                    ? href
+                                    : undefined;
+                                return safeHref ? (
+                                  <a href={safeHref} target="_blank" rel="noreferrer noopener">
+                                    {children}
+                                  </a>
+                                ) : (
+                                  <span>{children}</span>
+                                );
+                              },
+                            }}
+                          >
+                            {updateInfo.releaseNotes}
+                          </ReactMarkdown>
+                        </div>
+                      </div>
+                    )}
+                  </SettingsPanelRow>
+                )}
               </SettingsPanel>
             </div>
 
-            {/* Developer Tools */}
-            <div className="border-t border-border/40 pt-6">
-              <DeveloperSection />
-            </div>
+            {SHOW_SYSTEM_MAINTENANCE_TOOLS && (
+              <>
+                <div className="border-t border-border/40 pt-6">
+                  <DeveloperSection />
+                </div>
 
-            {/* Data Management */}
-            <div className="border-t border-border/40 pt-6">
-              <SectionHeader
-                title={t("settingsPage.developer.dataManagementTitle")}
-                description={t("settingsPage.developer.dataManagementDescription")}
-              />
+                <div className="border-t border-border/40 pt-6">
+                  <SectionHeader
+                    title={t("settingsPage.developer.dataManagementTitle")}
+                    description={t("settingsPage.developer.dataManagementDescription")}
+                  />
 
-              <div className="space-y-4">
-                <SettingsPanel>
-                  <SettingsPanelRow>
-                    <SettingsRow
-                      label={t("settingsPage.developer.modelCache")}
-                      description={t("settingsPage.developer.dataManagementDescription")}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => window.electronAPI?.openModelCacheFolder?.()}
+                  <div className="space-y-4">
+                    <SettingsPanel>
+                      <SettingsPanelRow>
+                        <SettingsRow
+                          label={t("settingsPage.developer.modelCache")}
+                          description={t("settingsPage.developer.dataManagementDescription")}
                         >
-                          <VoiceLabIcon source={folderOpenIcon} className="mr-1.5 h-3.5 w-3.5" />
-                          {t("settingsPage.developer.open")}
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={handleRemoveModels}
-                          disabled={isRemovingModels}
-                        >
-                          {isRemovingModels
-                            ? t("settingsPage.developer.removing")
-                            : t("settingsPage.developer.clearCache")}
-                        </Button>
-                      </div>
-                    </SettingsRow>
-                  </SettingsPanelRow>
-                </SettingsPanel>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => window.electronAPI?.openModelCacheFolder?.()}
+                            >
+                              <VoiceLabIcon
+                                source={folderOpenIcon}
+                                className="mr-1.5 h-3.5 w-3.5"
+                              />
+                              {t("settingsPage.developer.open")}
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={handleRemoveModels}
+                              disabled={isRemovingModels}
+                            >
+                              {isRemovingModels
+                                ? t("settingsPage.developer.removing")
+                                : t("settingsPage.developer.clearCache")}
+                            </Button>
+                          </div>
+                        </SettingsRow>
+                      </SettingsPanelRow>
+                    </SettingsPanel>
 
-                <SettingsPanel>
-                  <SettingsPanelRow>
-                    <SettingsRow
-                      label={t("settingsPage.developer.resetAppData")}
-                      description={t("settingsPage.developer.resetAppDataDescription")}
-                    >
-                      <Button
-                        onClick={() => {
-                          showConfirmDialog({
-                            title: t("settingsPage.developer.resetAll.title"),
-                            description: t("settingsPage.developer.resetAll.description"),
-                            onConfirm: async () => {
-                              try {
-                                try {
-                                  await signOut();
-                                } catch {}
-                                await window.electronAPI?.cleanupApp();
-                                showAlertDialog({
-                                  title: t("settingsPage.developer.resetAll.successTitle"),
-                                  description: t(
-                                    "settingsPage.developer.resetAll.successDescription"
-                                  ),
-                                });
-                                setTimeout(() => {
-                                  window.location.reload();
-                                }, 1000);
-                              } catch {
-                                showAlertDialog({
-                                  title: t("settingsPage.developer.resetAll.failedTitle"),
-                                  description: t(
-                                    "settingsPage.developer.resetAll.failedDescription"
-                                  ),
-                                });
-                              }
-                            },
-                            variant: "destructive",
-                            confirmText: t("settingsPage.developer.resetAll.confirmText"),
-                          });
-                        }}
-                        variant="outline"
-                        size="sm"
-                        className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:border-destructive"
-                      >
-                        {t("common.reset")}
-                      </Button>
-                    </SettingsRow>
-                  </SettingsPanelRow>
-                </SettingsPanel>
-              </div>
-            </div>
+                    <SettingsPanel>
+                      <SettingsPanelRow>
+                        <SettingsRow
+                          label={t("settingsPage.developer.resetAppData")}
+                          description={t("settingsPage.developer.resetAppDataDescription")}
+                        >
+                          <Button
+                            onClick={() => {
+                              showConfirmDialog({
+                                title: t("settingsPage.developer.resetAll.title"),
+                                description: t("settingsPage.developer.resetAll.description"),
+                                onConfirm: async () => {
+                                  try {
+                                    try {
+                                      await signOut();
+                                    } catch {}
+                                    await window.electronAPI?.cleanupApp();
+                                    showAlertDialog({
+                                      title: t("settingsPage.developer.resetAll.successTitle"),
+                                      description: t(
+                                        "settingsPage.developer.resetAll.successDescription"
+                                      ),
+                                    });
+                                    setTimeout(() => {
+                                      window.location.reload();
+                                    }, 1000);
+                                  } catch {
+                                    showAlertDialog({
+                                      title: t("settingsPage.developer.resetAll.failedTitle"),
+                                      description: t(
+                                        "settingsPage.developer.resetAll.failedDescription"
+                                      ),
+                                    });
+                                  }
+                                },
+                                variant: "destructive",
+                                confirmText: t("settingsPage.developer.resetAll.confirmText"),
+                              });
+                            }}
+                            variant="outline"
+                            size="sm"
+                            className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:border-destructive"
+                          >
+                            {t("common.reset")}
+                          </Button>
+                        </SettingsRow>
+                      </SettingsPanelRow>
+                    </SettingsPanel>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         );
 

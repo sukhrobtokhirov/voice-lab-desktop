@@ -31,6 +31,8 @@ const FLOATING_OVERLAY_TYPE =
 const WINDOW_SIZES = {
   // Leave room around the 52px mic for its cancel control, tooltip, and drag hit area.
   BASE: { width: 112, height: 112 },
+  // Recording temporarily becomes a top-centred status island.
+  RECORDING_ISLAND: { width: 350, height: 80 },
   WITH_MENU: { width: 240, height: 280 },
   WITH_TOAST: { width: 400, height: 500 },
   EXPANDED: { width: 400, height: 500 },

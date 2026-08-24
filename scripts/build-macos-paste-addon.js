@@ -41,6 +41,8 @@ const result = spawnSync(
     target,
     `-I${nodeInclude}`,
     "-framework",
+    "Cocoa",
+    "-framework",
     "ApplicationServices",
     source,
     "-o",

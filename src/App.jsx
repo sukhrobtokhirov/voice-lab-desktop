@@ -45,6 +45,52 @@ const VoiceWaveIndicator = ({ isListening }) => {
   );
 };
 
+const formatRecordingDuration = (seconds) => {
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+};
+
+// Keep the island visible while developing so its dimensions and position can
+// be tuned without starting a dictation. Vite replaces this with `false` in
+// release builds, so the preview can never ship to customers.
+const RECORDING_ISLAND_DEV_PREVIEW = import.meta.env.DEV;
+
+const RecordingIsland = ({ elapsedSeconds, audioLevel }) => {
+  const level = Math.min(1, Math.max(0, Number(audioLevel) || 0));
+  const barShape = [0.38, 0.6, 0.82, 1, 0.72, 0.46, 0.68, 0.94, 0.78, 0.52, 0.34];
+
+  return (
+    <div className="recording-island pointer-events-none flex h-full w-full items-center justify-center">
+      <div className="flex h-12 min-w-[14rem] items-center gap-3 rounded-br-[28px] rounded-bl-[28px] mt-[-20px] border border-white/10 bg-[#080808]/95 px-3.5 shadow-[0_8px_24px_rgba(0,0,0,0.36)] backdrop-blur-2xl">
+        <span className="flex items-center gap-1.5 font-mono text-xs font-medium tabular-nums tracking-tight text-white/90">
+          <span className="size-1.5 rounded-full bg-[#ff453a]" />
+          {formatRecordingDuration(elapsedSeconds)}
+        </span>
+        <span className="h-4 w-px bg-white/12" aria-hidden="true" />
+        <div
+          className="flex h-6 flex-1 items-center justify-center gap-[3px]"
+          aria-label="Microphone input level"
+          role="img"
+        >
+          {barShape.map((shape, index) => {
+            const height = 4 + Math.round(level * (7 + shape * 16));
+            const opacity = 0.38 + level * 0.62;
+            return (
+              <span
+                key={index}
+                className="w-[2px] rounded-full bg-white transition-[height,opacity] duration-75 ease-out"
+                style={{ height: `${height}px`, opacity }}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Tooltip Component
 const Tooltip = ({ children, content, emoji, align = "center" }) => {
   const [isVisible, setIsVisible] = useState(false);
@@ -86,6 +132,8 @@ export default function App() {
 
   const [dragStartPos, setDragStartPos] = useState(null);
   const [hasDragged, setHasDragged] = useState(false);
+  const [recordingElapsedSeconds, setRecordingElapsedSeconds] = useState(0);
+  const [recordingIslandSupported, setRecordingIslandSupported] = useState(false);
 
   // Floating icon auto-hide setting (read from store, synced via IPC)
   const floatingIconAutoHide = useSettingsStore((s) => s.floatingIconAutoHide);
@@ -101,6 +149,25 @@ export default function App() {
     setWindowInteractivity(false);
     return () => setWindowInteractivity(false);
   }, [setWindowInteractivity]);
+
+  useEffect(() => {
+    let disposed = false;
+
+    const checkRecordingIslandSupport = async () => {
+      try {
+        const supported = await window.electronAPI?.getRecordingIslandSupport?.();
+        if (!disposed) setRecordingIslandSupported(Boolean(supported));
+      } catch {
+        // The normal floating control is the safe fallback.
+        if (!disposed) setRecordingIslandSupported(false);
+      }
+    };
+
+    void checkRecordingIslandSupport();
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
   useEffect(() => {
     const unsubscribeFallback = window.electronAPI?.onHotkeyFallbackUsed?.((data) => {
@@ -184,21 +251,6 @@ export default function App() {
     }
   }, [isCommandMenuOpen, isHovered, toastCount, setWindowInteractivity]);
 
-  useEffect(() => {
-    const resizeWindow = () => {
-      if (isCommandMenuOpen && toastCount > 0) {
-        window.electronAPI?.resizeMainWindow?.("EXPANDED");
-      } else if (isCommandMenuOpen) {
-        window.electronAPI?.resizeMainWindow?.("WITH_MENU");
-      } else if (toastCount > 0) {
-        window.electronAPI?.resizeMainWindow?.("WITH_TOAST");
-      } else {
-        window.electronAPI?.resizeMainWindow?.("BASE");
-      }
-    };
-    resizeWindow();
-  }, [isCommandMenuOpen, toastCount]);
-
   const handleDictationToggle = React.useCallback(() => {
     setIsCommandMenuOpen(false);
     setWindowInteractivity(false);
@@ -209,12 +261,46 @@ export default function App() {
     isProcessing,
     micCaptureStatus,
     wasPlaced,
+    audioLevel,
     toggleListening,
     cancelRecording,
     cancelProcessing,
   } = useAudioRecording(toast, {
     onToggle: handleDictationToggle,
   });
+
+  const showRecordingIsland =
+    recordingIslandSupported && (isRecording || RECORDING_ISLAND_DEV_PREVIEW);
+
+  useEffect(() => {
+    if (!showRecordingIsland) {
+      setRecordingElapsedSeconds(0);
+      return undefined;
+    }
+
+    const startedAt = Date.now();
+    setIsHovered(false);
+    setRecordingElapsedSeconds(0);
+    const timer = window.setInterval(() => {
+      setRecordingElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 250);
+
+    return () => window.clearInterval(timer);
+  }, [isRecording, showRecordingIsland]);
+
+  useEffect(() => {
+    if (showRecordingIsland) {
+      window.electronAPI?.resizeMainWindow?.("RECORDING_ISLAND");
+    } else if (isCommandMenuOpen && toastCount > 0) {
+      window.electronAPI?.resizeMainWindow?.("EXPANDED");
+    } else if (isCommandMenuOpen) {
+      window.electronAPI?.resizeMainWindow?.("WITH_MENU");
+    } else if (toastCount > 0) {
+      window.electronAPI?.resizeMainWindow?.("WITH_TOAST");
+    } else {
+      window.electronAPI?.resizeMainWindow?.("BASE");
+    }
+  }, [isCommandMenuOpen, showRecordingIsland, toastCount]);
 
   const captureTargetThenToggle = React.useCallback(async () => {
     try {
@@ -360,8 +446,15 @@ export default function App() {
 
   return (
     <div className="dictation-window">
-      {/* Voice button - position determined by panelStartPosition setting */}
-      <div
+      {showRecordingIsland ? (
+        <RecordingIsland
+          elapsedSeconds={recordingElapsedSeconds}
+          audioLevel={isRecording ? audioLevel : 0.12}
+        />
+      ) : (
+        <>
+          {/* Voice button - position determined by panelStartPosition setting */}
+          <div
         className={`fixed bottom-1 z-50 ${
           panelStartPosition === "bottom-left"
             ? "left-1"
@@ -545,7 +638,9 @@ export default function App() {
             </div>
           )}
         </div>
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
