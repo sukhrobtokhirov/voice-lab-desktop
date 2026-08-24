@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Search, FileText, Mic, Folder, Users, Upload, MessageSquare } from "lucide-react";
+import { Search, FileText, Mic, Users, Upload, MessageSquare } from "lucide-react";
 import { cn } from "./lib/utils";
 import type { NoteItem, FolderItem, TranscriptionItem } from "../types/electron.js";
 import { normalizeDbDate } from "../utils/dateFormatting";
+import VoiceLabIcon from "./ui/VoiceLabIcon";
+import folderIcon from "../assets/icons/folder.svg";
 
 interface ConversationResult {
   id: number;
@@ -365,10 +367,18 @@ export default function CommandSearch({
                   <div>
                     {noteGroups.map((group) => {
                       const label = group.folder?.name ?? t("commandSearch.sections.notes");
-                      const Icon = group.folder ? Folder : FileText;
                       return (
                         <div key={group.folder?.id ?? "null-folder"}>
-                          <SectionHeader icon={<Icon size={11} />} label={label} />
+                          <SectionHeader
+                            icon={
+                              group.folder ? (
+                                <VoiceLabIcon source={folderIcon} className="size-[11px]" />
+                              ) : (
+                                <FileText size={11} />
+                              )
+                            }
+                            label={label}
+                          />
                           {group.items.map((note) => {
                             const idx = flatItems.findIndex(
                               (fi) => fi.kind === "note" && fi.note.id === note.id

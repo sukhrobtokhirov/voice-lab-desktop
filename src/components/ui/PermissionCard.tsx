@@ -1,9 +1,10 @@
 import { Button } from "./button";
 import { Check, LucideIcon } from "lucide-react";
 import { cn } from "../lib/utils";
+import VoiceLabIcon from "./VoiceLabIcon";
 
 interface PermissionCardProps {
-  icon: LucideIcon;
+  icon: LucideIcon | string;
   title: string;
   description: string;
   granted: boolean;
@@ -44,6 +45,8 @@ export default function PermissionCard({
         >
           {granted ? (
             <Check className="w-4 h-4 text-success" strokeWidth={2.5} />
+          ) : typeof Icon === "string" ? (
+            <VoiceLabIcon source={Icon} className="w-4 h-4 text-primary" />
           ) : (
             <Icon className="w-4 h-4 text-primary" />
           )}

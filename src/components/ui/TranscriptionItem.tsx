@@ -3,10 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "./button";
 import { Tooltip } from "./tooltip";
 import {
-  Copy,
   Check,
-  Trash2,
-  Pencil,
   FolderOpen,
   RotateCcw,
   Loader2,
@@ -20,6 +17,10 @@ import type {
 import { cn } from "../lib/utils";
 import { getCachedPlatform } from "../../utils/platform";
 import { formatMmSs } from "../../utils/formatDuration";
+import VoiceLabIcon from "./VoiceLabIcon";
+import copyIcon from "../../assets/icons/copy.svg";
+import deleteIcon from "../../assets/icons/delete.svg";
+import editIcon from "../../assets/icons/edit.svg";
 
 const platform = getCachedPlatform();
 
@@ -238,7 +239,7 @@ export default function TranscriptionItem({
                 onClick={() => onEdit?.(item)}
                 className="h-6 w-6 rounded-sm text-muted-foreground hover:text-primary hover:bg-primary/10"
               >
-                <Pencil size={9} />
+                <VoiceLabIcon source={editIcon} className="size-[11px]" />
               </Button>
             </Tooltip>
           )}
@@ -286,7 +287,7 @@ export default function TranscriptionItem({
                 onClick={() => void handleCopy(item.text)}
                 className="h-6 w-6 rounded-sm text-muted-foreground hover:text-foreground hover:bg-foreground/10"
               >
-                {copiedTarget === "text" ? <Check size={9} /> : <Copy size={9} />}
+                {copiedTarget === "text" ? <Check size={9} /> : <VoiceLabIcon source={copyIcon} className="size-[11px]" />}
               </Button>
             </Tooltip>
           )}
@@ -297,7 +298,7 @@ export default function TranscriptionItem({
               onClick={() => onDelete(item.id)}
               className="h-6 w-6 rounded-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10"
             >
-              <Trash2 size={9} />
+              <VoiceLabIcon source={deleteIcon} className="size-[11px]" />
             </Button>
           </Tooltip>
         </div>

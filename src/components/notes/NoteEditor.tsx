@@ -9,7 +9,6 @@ import {
   MessageSquareText,
   Calendar,
   LinkIcon,
-  FolderOpen,
   Search,
   Plus,
   Check,
@@ -50,6 +49,8 @@ import {
 } from "../../utils/transcriptSpeakerState";
 import NoteParticipants from "./NoteParticipants";
 import type { CalendarAttendee } from "../../types/calendar";
+import VoiceLabIcon from "../ui/VoiceLabIcon";
+import folderOpenIcon from "../../assets/icons/folder-open.svg";
 
 function formatNoteDate(dateStr: string): string {
   const date = normalizeDbDate(dateStr);
@@ -672,7 +673,7 @@ export default function NoteEditor({
               >
                 <DropdownMenuTrigger asChild>
                   <button className="inline-flex items-center gap-1.5 text-2xs px-1.5 py-0.5 rounded-md border border-border/70 dark:border-white/25 text-foreground/50 dark:text-foreground/35 hover:text-foreground/60 hover:border-border/60 hover:bg-foreground/3 dark:hover:text-foreground/40 dark:hover:border-white/10 dark:hover:bg-white/3 transition-all duration-150 cursor-pointer outline-none">
-                    <FolderOpen size={11} className="shrink-0" />
+                    <VoiceLabIcon source={folderOpenIcon} className="size-[11px] shrink-0" />
                     {folderName ? displayFolderName(folderName, t) : t("notes.editor.noFolder")}
                   </button>
                 </DropdownMenuTrigger>
@@ -705,7 +706,10 @@ export default function NoteEditor({
                           onClick={() => onMoveToFolder(note.id, folder.id)}
                           className="text-xs gap-2 rounded-md px-2 py-1.5"
                         >
-                          <FolderOpen size={11} className="text-foreground/30 shrink-0" />
+                          <VoiceLabIcon
+                            source={folderOpenIcon}
+                            className="size-[11px] shrink-0 text-foreground/30"
+                          />
                           <span className="truncate flex-1">
                             {displayFolderName(folder.name, t)}
                           </span>

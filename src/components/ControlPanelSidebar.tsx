@@ -1,30 +1,34 @@
 import React from "react";
-import {
-  BookOpen,
-  Download,
-  History,
-  MessageSquare,
-  NotebookPen,
-  Search,
-  Settings,
-} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "./lib/utils";
 import UsageDisplay from "./UsageDisplay";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import VoiceLabIcon from "./ui/VoiceLabIcon";
 import { useUsage } from "../hooks/useUsage";
 import { getCachedPlatform } from "../utils/platform";
 import { VOICELAB_AI_ENABLED } from "../lib/features";
+import historyIcon from "../assets/icons/history.svg";
+import bookmarkIcon from "../assets/icons/bookmark.svg";
+import speechToTextIcon from "../assets/icons/speech-to-text.svg";
+import settingsIcon from "../assets/icons/settings.svg";
+import downloadIcon from "../assets/icons/download.svg";
+import sidebarOpenIcon from "../assets/icons/sidebar-open.svg";
+import sidebarClosedIcon from "../assets/icons/sidebar-closed.svg";
+import notesIcon from "../assets/icons/notes.svg";
+import searchIcon from "../assets/icons/search.svg";
 
 const platform = getCachedPlatform();
 
 export const CONTROL_PANEL_SIDEBAR_WIDTH_PX = 256;
+export const CONTROL_PANEL_SIDEBAR_RAIL_WIDTH_PX = 64;
 
 export type ControlPanelView =
   "home" | "chat" | "personal-notes" | "dictionary" | "upload" | "integrations";
 
 interface ControlPanelSidebarProps {
   activeView: ControlPanelView;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
   onViewChange: (view: ControlPanelView) => void;
   onOpenSettings: () => void;
   onOpenSearch?: () => void;
@@ -41,7 +45,7 @@ interface ControlPanelSidebarProps {
 }
 
 const navButton =
-  "group flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-base font-normal outline-none transition-colors focus-visible:ring-2 focus-visible:ring-foreground/20";
+  "group flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-base font-normal outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-foreground/20";
 
 function initialsFromName(name: string) {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -200,8 +204,11 @@ function UpdateActionButton({
           className="text-neutral-500 transition-[stroke-dashoffset] duration-200 ease-out"
         />
       </svg>
-      <Download className="size-4 transition-[opacity,transform] duration-200 ease-out group-hover/update:scale-[0.9] group-hover/update:opacity-0 group-focus-visible/update:scale-[0.9] group-focus-visible/update:opacity-0" />
-      <span className="absolute text-2xs font-semibold leading-none tabular-nums opacity-0 transition-[opacity,transform] duration-200 ease-out group-hover/update:scale-100 group-hover/update:opacity-100 group-focus-visible/update:scale-100 group-focus-visible/update:opacity-100">
+      <VoiceLabIcon
+        source={downloadIcon}
+        className="size-4 transition-opacity duration-150 group-hover/update:opacity-0 group-focus-visible/update:opacity-0"
+      />
+      <span className="absolute text-2xs font-semibold leading-none tabular-nums opacity-0 transition-opacity duration-150 group-hover/update:opacity-100 group-focus-visible/update:opacity-100">
         {roundedProgress}%
       </span>
     </button>
@@ -213,11 +220,13 @@ function ProfileUsageControl({
   image,
   percentage,
   label,
+  collapsed = false,
 }: {
   name: string;
   image?: string | null;
   percentage: number | null;
   label: string;
+  collapsed?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const showUsageOnHover = percentage !== null;
@@ -228,7 +237,10 @@ function ProfileUsageControl({
         <button
           type="button"
           aria-label={label}
-          className="group flex min-w-0 flex-1 animate-in fade-in-0 items-center gap-2.5 rounded-md px-2.5 py-0.5 text-left outline-none transition-colors duration-200 hover:bg-black/[0.035] focus-visible:ring-2 focus-visible:ring-foreground/20 dark:hover:bg-white/[0.06]"
+          className={cn(
+            "group relative flex h-10 min-w-0 items-center gap-2.5 rounded-md py-0.5 text-left outline-none transition-[width,padding,opacity] duration-200 ease-out hover:bg-black/[0.035] focus-visible:ring-2 focus-visible:ring-foreground/20 dark:hover:bg-white/[0.06]",
+            collapsed ? "mx-auto size-10 justify-center gap-0 px-0" : "w-full px-2.5"
+          )}
         >
           <span className={cn("relative shrink-0", showUsageOnHover ? "size-10" : "size-8")}>
             {showUsageOnHover && (
@@ -249,8 +261,14 @@ function ProfileUsageControl({
               </span>
             )}
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium leading-5">{name}</span>
+          <span
+            aria-hidden={collapsed}
+            className={cn(
+              "min-w-0 flex-1 overflow-hidden transition-opacity duration-150",
+              collapsed ? "pointer-events-none absolute opacity-0" : "opacity-100"
+            )}
+          >
+              <span className="block truncate text-sm font-medium leading-5">{name}</span>
           </span>
         </button>
       </PopoverTrigger>
@@ -268,20 +286,28 @@ function ProfileUsageControl({
   );
 }
 
-function ProfileIdentitySkeleton() {
+function ProfileIdentitySkeleton({ collapsed = false }: { collapsed?: boolean }) {
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5" aria-busy="true">
+    <div
+      className={cn(
+        "flex min-w-0 items-center gap-2.5",
+        collapsed ? "mx-auto size-10 justify-center" : "w-full px-2.5"
+      )}
+      aria-busy="true"
+    >
       <span className="relative size-10 shrink-0">
         <span className="absolute inset-0 rounded-full border-2 border-foreground/10" />
         <span className="absolute inset-1.5 animate-pulse rounded-full bg-foreground/10" />
       </span>
-      <span className="h-4 w-24 animate-pulse rounded bg-foreground/10" />
+      {!collapsed && <span className="h-4 w-24 animate-pulse rounded bg-foreground/10" />}
     </div>
   );
 }
 
 export default function ControlPanelSidebar({
   activeView,
+  collapsed,
+  onToggleCollapsed,
   onViewChange,
   onOpenSettings,
   onOpenSearch,
@@ -300,33 +326,33 @@ export default function ControlPanelSidebar({
     {
       id: "home" as const,
       label: t("desktop.nav.history", { defaultValue: "History" }),
-      icon: History,
+      icon: historyIcon,
     },
     {
       id: "dictionary" as const,
       label: t("desktop.nav.vocabulary", { defaultValue: "Vocabulary" }),
-      icon: BookOpen,
+      icon: bookmarkIcon,
     },
     ...(VOICELAB_AI_ENABLED
       ? [
           {
             id: "chat" as const,
             label: "VoiceLab AI",
-            icon: MessageSquare,
+            icon: speechToTextIcon,
           },
         ]
       : []),
     {
       id: "personal-notes" as const,
       label: t("sidebar.notes", { defaultValue: "Notes" }),
-      icon: NotebookPen,
+      icon: notesIcon,
     },
   ];
 
   const renderItem = ({
     id,
     label,
-    icon: Icon,
+    icon,
   }: (typeof primaryItems)[number]) => {
     const active = activeView === id;
     return (
@@ -335,89 +361,190 @@ export default function ControlPanelSidebar({
         type="button"
         aria-current={active ? "page" : undefined}
         onClick={() => onViewChange(id)}
+        title={collapsed ? label : undefined}
         className={cn(
           navButton,
+          collapsed && "size-10 min-h-0 justify-center px-0",
           active
             ? "bg-black/[0.055] font-medium text-foreground dark:bg-white/[0.08]"
             : "text-foreground/60 hover:bg-black/[0.035] hover:text-foreground dark:text-foreground/65 dark:hover:bg-white/[0.06]"
         )}
       >
-        <Icon
+        <VoiceLabIcon
+          source={icon}
           className={cn(
-            "h-[18px] w-[18px] shrink-0 transition-opacity",
+            "size-[18px] transition-opacity",
             active ? "text-foreground" : "text-foreground/55 group-hover:text-foreground/80"
           )}
         />
-        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {!collapsed && <span className="min-w-0 flex-1 truncate">{label}</span>}
       </button>
     );
   };
 
   return (
     <aside
-      className="flex h-full shrink-0 flex-col border-r border-black/10 bg-white text-foreground dark:border-white/12 dark:bg-[#171717]"
-      style={{ width: CONTROL_PANEL_SIDEBAR_WIDTH_PX }}
+      className="flex h-full shrink-0 flex-col overflow-hidden border-r border-black/10 bg-white text-foreground transition-[width] duration-200 ease-out dark:border-white/12 dark:bg-[#171717]"
+      style={{
+        width: collapsed ? CONTROL_PANEL_SIDEBAR_RAIL_WIDTH_PX : CONTROL_PANEL_SIDEBAR_WIDTH_PX,
+      }}
     >
       <div className="h-12 shrink-0" style={{ WebkitAppRegion: "drag" } as React.CSSProperties} />
 
-      <div className="px-3 pb-4">
-        {onOpenSearch && (
+      <div className={cn("px-3 pb-4", collapsed && "flex justify-center")}>
+        {onOpenSearch ? (
           <button
             type="button"
             onClick={onOpenSearch}
-            className="flex h-8 w-full items-center gap-2 rounded-[10px] border border-black/10 bg-white px-2.5 text-sm text-foreground/50 outline-none transition-colors hover:bg-black/[0.025] hover:text-foreground/70 focus-visible:ring-2 focus-visible:ring-foreground/15 dark:border-white/15 dark:bg-transparent dark:text-foreground/60 dark:hover:bg-white/[0.06] dark:hover:text-foreground/85"
+            aria-label={
+              collapsed
+                ? t("commandSearch.shortPlaceholder", { defaultValue: "Search" })
+                : undefined
+            }
+            title={
+              collapsed
+                ? t("commandSearch.shortPlaceholder", { defaultValue: "Search" })
+                : undefined
+            }
+            className={cn(
+              "flex h-8 items-center rounded-[10px] border border-black/10 bg-white text-sm text-foreground/50 outline-none transition-colors hover:bg-black/[0.025] hover:text-foreground/70 focus-visible:ring-2 focus-visible:ring-foreground/15 dark:border-white/15 dark:bg-transparent dark:text-foreground/60 dark:hover:bg-white/[0.06] dark:hover:text-foreground/85",
+              collapsed ? "w-8 justify-center px-0" : "w-full px-2.5"
+            )}
           >
-            <Search className="h-3.5 w-3.5" />
-            <span className="flex-1 text-left">
-              {t("commandSearch.shortPlaceholder", { defaultValue: "Search" })}
-            </span>
-            <kbd className="rounded-[5px] border border-current/15 px-1.5 py-0.5 text-xs font-medium leading-4 opacity-65">
-              {platform === "darwin" ? "⌘K" : "Ctrl K"}
-            </kbd>
+            {collapsed ? (
+              <VoiceLabIcon source={searchIcon} className="size-4" />
+            ) : (
+              <>
+                <VoiceLabIcon source={searchIcon} className="mr-2 size-4 text-current" />
+                <span className="flex-1 text-left">
+                  {t("commandSearch.shortPlaceholder", { defaultValue: "Search" })}
+                </span>
+                <span className="flex items-center gap-1 opacity-65" aria-hidden="true">
+                  {(platform === "darwin" ? ["⌘", "K"] : ["Ctrl", "K"]).map((key) => (
+                    <kbd
+                      key={key}
+                      className="flex h-6 min-w-6 items-center justify-center rounded-[5px] border border-current/15 px-1.5 text-xs font-medium leading-none"
+                    >
+                      {key}
+                    </kbd>
+                  ))}
+                </span>
+              </>
+            )}
           </button>
+        ) : (
+          <div className="h-8" />
         )}
       </div>
 
       <nav aria-label="VoiceLab" className="px-3">
-        <p className="mb-2 px-2.5 text-xs font-medium text-foreground/40 dark:text-foreground/45">
-          {t("desktop.nav.desktop", { defaultValue: "Desktop" })}
-        </p>
+        <div aria-hidden="true" className="h-3" />
         <div className="space-y-0.5">{primaryItems.map(renderItem)}</div>
       </nav>
 
       <div className="flex-1" />
 
-      <div className="border-t border-black/10 p-3 dark:border-white/12">
-        <div className="flex min-h-10 items-center gap-1 px-2.5">
-          {isProfileLoading ? (
-            <ProfileIdentitySkeleton />
-          ) : isSignedIn ? (
-            <ProfileUsageControl
-              name={profileName}
-              image={userImage}
-              percentage={usagePercentage}
-              label={`${profileName}: ${t("desktop.wallet.title")}`}
-            />
-          ) : (
-            <div className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5">
-              <span className="relative size-8 shrink-0 overflow-hidden rounded-full border border-black/8 bg-[#f8f8f8] dark:border-white/12 dark:bg-white/12">
-                <ProfileAvatar name={profileName} image={userImage} />
-              </span>
-              <p className="truncate text-sm leading-5 text-muted-foreground">
-                {t("sidebar.notSignedIn", { defaultValue: "Not signed in" })}
-              </p>
-            </div>
-          )}
+      <div
+        className={cn(
+          "relative shrink-0 overflow-hidden border-t border-black/10 transition-[height,padding] duration-200 ease-out dark:border-white/12",
+          collapsed
+              ? updateAction
+              ? "h-[172px] p-2"
+              : "h-32 p-2"
+            : "h-16 p-3"
+        )}
+      >
+        <div className="relative size-full">
+          <div
+            className={cn(
+              "absolute transition-[left,top,width] duration-200 ease-out",
+              collapsed
+                ? "left-[calc(50%-1.25rem)] top-0 w-10"
+                : updateAction
+                  ? "left-2.5 top-0 w-[calc(100%-6.75rem)]"
+                  : "left-2.5 top-0 w-[calc(100%-4.5rem)]"
+            )}
+          >
+            {isProfileLoading ? (
+              <ProfileIdentitySkeleton collapsed={collapsed} />
+            ) : isSignedIn ? (
+              <ProfileUsageControl
+                name={profileName}
+                image={userImage}
+                percentage={usagePercentage}
+                label={`${profileName}: ${t("desktop.wallet.title")}`}
+                collapsed={collapsed}
+              />
+            ) : (
+              <div
+                className={cn(
+                  "flex h-10 min-w-0 items-center gap-2.5 transition-[width,padding] duration-200 ease-out",
+                  collapsed ? "mx-auto size-10 justify-center px-0" : "w-full px-2.5"
+                )}
+              >
+                <span className="relative size-8 shrink-0 overflow-hidden rounded-full border border-black/8 bg-[#f8f8f8] dark:border-white/12 dark:bg-white/12">
+                  <ProfileAvatar name={profileName} image={userImage} />
+                </span>
+                <p
+                  aria-hidden={collapsed}
+                  className={cn(
+                    "min-w-0 flex-1 truncate text-sm leading-5 text-muted-foreground transition-opacity duration-150",
+                    collapsed ? "opacity-0" : "opacity-100"
+                  )}
+                >
+                  {t("sidebar.notSignedIn", { defaultValue: "Not signed in" })}
+                </p>
+              </div>
+            )}
+          </div>
+
           <button
             type="button"
             onClick={onOpenSettings}
             aria-label={t("sidebar.settings", { defaultValue: "Settings" })}
             title={t("sidebar.settings", { defaultValue: "Settings" })}
-            className="flex size-8 shrink-0 items-center justify-center rounded-md text-foreground/55 outline-none transition-colors hover:bg-black/[0.05] hover:text-foreground focus-visible:ring-2 focus-visible:ring-foreground/20 dark:text-foreground/65 dark:hover:bg-white/[0.08]"
+            className={cn(
+              "absolute flex size-8 items-center justify-center rounded-md text-foreground/55 outline-none transition-[left,top,color,background-color] duration-200 ease-out hover:bg-black/[0.05] hover:text-foreground focus-visible:ring-2 focus-visible:ring-foreground/20 dark:text-foreground/65 dark:hover:bg-white/[0.08]",
+              collapsed
+                ? "left-2 top-11"
+                : updateAction
+                  ? "left-[calc(100%-6.5rem)] top-1"
+                  : "left-[calc(100%-4.25rem)] top-1"
+            )}
           >
-            <Settings className="h-[18px] w-[18px]" />
+            <VoiceLabIcon source={settingsIcon} className="size-[18px]" />
           </button>
-          {updateAction && <UpdateActionButton {...updateAction} />}
+
+          {updateAction && (
+            <div
+              className={cn(
+                "absolute transition-[left,top] duration-200 ease-out",
+                collapsed ? "left-2 top-20" : "left-[calc(100%-4.25rem)] top-1"
+              )}
+            >
+              <UpdateActionButton {...updateAction} />
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label={t(collapsed ? "sidebar.expand" : "sidebar.collapse")}
+            title={t(collapsed ? "sidebar.expand" : "sidebar.collapse")}
+            className={cn(
+              "absolute flex size-8 items-center justify-center rounded-md text-foreground/55 outline-none transition-[left,top,color,background-color] duration-200 ease-out hover:bg-black/[0.05] hover:text-foreground focus-visible:ring-2 focus-visible:ring-foreground/20 dark:text-foreground/65 dark:hover:bg-white/[0.08]",
+              collapsed
+                ? updateAction
+                  ? "left-2 top-[7.75rem]"
+                  : "left-2 top-20"
+                : "left-[calc(100%-2rem)] top-1"
+            )}
+          >
+            <VoiceLabIcon
+              source={collapsed ? sidebarOpenIcon : sidebarClosedIcon}
+              className="size-[18px]"
+            />
+          </button>
         </div>
       </div>
     </aside>

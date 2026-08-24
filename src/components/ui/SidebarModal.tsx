@@ -3,11 +3,12 @@ import { useTranslation } from "react-i18next";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { SettingsLayoutProvider } from "./useSettingsLayout";
+import VoiceLabIcon from "./VoiceLabIcon";
 
 export interface SidebarItem<T extends string> {
   id: T;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string }> | string;
   group?: string;
   description?: string;
   badge?: string;
@@ -155,13 +156,24 @@ export default function SidebarModal<T extends string>({
                               }`}
                             >
                               <div className="flex h-6 w-6 shrink-0 items-center justify-center">
-                                <Icon
-                                  className={`h-[18px] w-[18px] shrink-0 transition-colors duration-100 ${
-                                    isActive
-                                      ? "text-foreground"
-                                      : "text-foreground/50 group-hover:text-foreground/80"
-                                  }`}
-                                />
+                                {typeof Icon === "string" ? (
+                                  <VoiceLabIcon
+                                    source={Icon}
+                                    className={`h-[18px] w-[18px] shrink-0 transition-colors duration-100 ${
+                                      isActive
+                                        ? "text-foreground"
+                                        : "text-foreground/50 group-hover:text-foreground/80"
+                                    }`}
+                                  />
+                                ) : (
+                                  <Icon
+                                    className={`h-[18px] w-[18px] shrink-0 transition-colors duration-100 ${
+                                      isActive
+                                        ? "text-foreground"
+                                        : "text-foreground/50 group-hover:text-foreground/80"
+                                    }`}
+                                  />
+                                )}
                               </div>
                               {!isCompact && (
                                 <>

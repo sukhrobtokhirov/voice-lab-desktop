@@ -8,8 +8,6 @@ import {
   RefreshCw,
   Download,
   Mic,
-  Shield,
-  FolderOpen,
   LogOut,
   UserCircle,
   Sun,
@@ -25,7 +23,6 @@ import {
   CircleCheck,
   CircleX,
   RotateCw,
-  BookOpen,
   Copy,
   Trash2,
   Info,
@@ -99,6 +96,10 @@ import { useSettingsStore } from "../stores/settingsStore";
 import { canManageSystemAudioInApp } from "../utils/systemAudioAccess";
 import WorkspaceSection from "./settings/WorkspaceSection";
 import { WORKSPACES_ENABLED } from "../lib/features";
+import VoiceLabIcon from "./ui/VoiceLabIcon";
+import notesIcon from "../assets/icons/notes.svg";
+import shieldIcon from "../assets/icons/shield.svg";
+import folderOpenIcon from "../assets/icons/folder-open.svg";
 
 const formatAmount = (cents: number, currency: string) =>
   (cents / 100).toLocaleString(undefined, { style: "currency", currency });
@@ -448,7 +449,7 @@ function LlmsTabs({
           if (id === "dictationCleanup") return <Wand2 className="w-3.5 h-3.5" />;
           if (id === "dictationAgent") return <Sparkles className="w-3.5 h-3.5" />;
           if (id === "dictationTranslation") return <Languages className="w-3.5 h-3.5" />;
-          if (id === "noteFormatting") return <BookOpen className="w-3.5 h-3.5" />;
+          if (id === "noteFormatting") return <VoiceLabIcon source={notesIcon} className="w-3.5 h-3.5" />;
           return <MessageSquare className="w-3.5 h-3.5" />;
         }}
       />
@@ -2155,7 +2156,7 @@ EOF`,
                                         onClick={() => setYdotoolGuideKey(item.key)}
                                         className="shrink-0 flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border border-border hover:bg-muted transition-colors text-foreground"
                                       >
-                                        <BookOpen className="w-3 h-3" />
+                                        <VoiceLabIcon source={notesIcon} className="w-3 h-3" />
                                         {t("settingsPage.general.waylandPaste.guide.open", {
                                           defaultValue: "Guide",
                                         })}
@@ -2188,7 +2189,7 @@ EOF`,
                             <>
                               <DialogHeader>
                                 <DialogTitle className="flex items-center gap-2">
-                                  <BookOpen className="w-4 h-4" />
+                                  <VoiceLabIcon source={notesIcon} className="w-4 h-4" />
                                   {activeGuide.label}
                                 </DialogTitle>
                                 <DialogDescription>{activeGuide.desc}</DialogDescription>
@@ -2448,7 +2449,7 @@ EOF`,
                   description={t("settingsPage.permissions.accessibilityDescription")}
                 />
                 <PermissionCard
-                  icon={Shield}
+                  icon={shieldIcon}
                   title={t("settingsPage.permissions.accessibilityTitle")}
                   description={t("settingsPage.permissions.accessibilityDescription")}
                   granted={false}
@@ -2613,7 +2614,7 @@ EOF`,
                   <>
                     {platform === "darwin" && (
                       <PermissionCard
-                        icon={Shield}
+                        icon={shieldIcon}
                         title={t("settingsPage.permissions.accessibilityTitle")}
                         description={t("settingsPage.permissions.accessibilityDescription")}
                         granted={permissionsHook.accessibilityPermissionGranted}
@@ -2936,7 +2937,7 @@ EOF`,
                           size="sm"
                           onClick={() => window.electronAPI?.openModelCacheFolder?.()}
                         >
-                          <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
+                          <VoiceLabIcon source={folderOpenIcon} className="mr-1.5 h-3.5 w-3.5" />
                           {t("settingsPage.developer.open")}
                         </Button>
                         <Button

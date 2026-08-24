@@ -6,7 +6,6 @@ import {
   X,
   AlertCircle,
   ChevronRight,
-  FolderOpen,
   Plus,
   Settings,
   Link2,
@@ -40,6 +39,8 @@ import {
   getSettings,
 } from "../../stores/settingsStore";
 import { useBatchQueue } from "../../stores/batchQueueStore";
+import VoiceLabIcon from "../ui/VoiceLabIcon";
+import folderOpenIcon from "../../assets/icons/folder-open.svg";
 import type { TranscribeOptions } from "../../stores/batchQueueStore";
 import { transcribeFileWithSpeakers, shouldUseByokDiarize } from "../../services/fileTranscription";
 import type {
@@ -1417,7 +1418,7 @@ function FolderSelect({
 }: FolderSelectProps) {
   return (
     <div className={cn("flex items-center justify-center gap-2", className)}>
-      <FolderOpen size={12} className="text-foreground/20 shrink-0" />
+      <VoiceLabIcon source={folderOpenIcon} className="size-3 shrink-0 text-foreground/20" />
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="h-7 w-44 text-xs rounded-lg px-2.5 [&>svg]:h-3 [&>svg]:w-3">
           <SelectValue placeholder={t("notes.upload.selectFolder")} />

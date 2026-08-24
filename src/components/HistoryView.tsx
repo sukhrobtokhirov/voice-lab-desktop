@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
-import { Sparkles, Cloud, X, Mic, Trash2, Archive } from "lucide-react";
+import { Sparkles, Cloud, X, Mic } from "lucide-react";
 import { Skeleton } from "./ui/skeleton";
 import TranscriptionItem from "./ui/TranscriptionItem";
 import type { TranscriptionItem as TranscriptionItemType } from "../types/electron";
@@ -13,6 +13,9 @@ import UpcomingMeetings from "./UpcomingMeetings";
 import { useSettingsStore } from "../stores/settingsStore";
 import { VOICELAB_AI_ENABLED } from "../lib/features";
 import SavedDictationDialog from "./SavedDictationDialog";
+import VoiceLabIcon from "./ui/VoiceLabIcon";
+import archiveIcon from "../assets/icons/archive.svg";
+import deleteIcon from "../assets/icons/delete.svg";
 
 interface HistoryViewProps {
   history: TranscriptionItemType[];
@@ -120,7 +123,7 @@ export default function HistoryView({
       onClick={onToggleDiscarded}
       className="flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs text-muted-foreground/60 hover:!text-foreground hover:!bg-black/5 dark:hover:!bg-white/5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/30 transition-all duration-200"
     >
-      <Archive size={11} />
+      <VoiceLabIcon source={archiveIcon} className="size-[11px]" />
       <span>
         {showDiscarded
           ? t("controlPanel.history.discarded.hide")
@@ -367,7 +370,7 @@ export default function HistoryView({
                             onClick={clearAllTranscriptions}
                             className="flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs text-muted-foreground/60 hover:!text-destructive hover:!bg-destructive/8 dark:hover:!bg-destructive/10 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/30 transition-all duration-200"
                           >
-                            <Trash2 size={11} />
+                            <VoiceLabIcon source={deleteIcon} className="size-[11px]" />
                             <span>{t("controlPanel.history.clearAll")}</span>
                           </button>
                         </div>

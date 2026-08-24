@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
-import { FolderOpen, Copy, Check } from "lucide-react";
+import { Copy, Check } from "lucide-react";
 import { useToast } from "./ui/useToast";
 import { Toggle } from "./ui/toggle";
 import { useSettingsLayout } from "./ui/useSettingsLayout";
 import logger from "../utils/logger";
+import VoiceLabIcon from "./ui/VoiceLabIcon";
+import folderOpenIcon from "../assets/icons/folder-open.svg";
 
 export default function DeveloperSection() {
   const { t } = useTranslation();
@@ -183,7 +185,7 @@ export default function DeveloperSection() {
         {debugEnabled && (
           <div className="px-5 py-4">
             <Button onClick={handleOpenLogsFolder} variant="outline" size="sm" className="w-full">
-              <FolderOpen className="mr-2 h-3.5 w-3.5" />
+              <VoiceLabIcon source={folderOpenIcon} className="mr-2 h-3.5 w-3.5" />
               {t("developerSection.openLogsFolder")}
             </Button>
           </div>

@@ -2,12 +2,10 @@ import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MoreHorizontal,
-  FolderOpen,
   Trash2,
   Check,
   Plus,
   Search,
-  ExternalLink,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import {
@@ -24,6 +22,9 @@ import { cn } from "../lib/utils";
 import type { NoteItem, FolderItem } from "../../types/electron";
 import { normalizeDbDate } from "../../utils/dateFormatting";
 import { displayFolderName, displayNoteTitle } from "./shared";
+import VoiceLabIcon from "../ui/VoiceLabIcon";
+import folderOpenIcon from "../../assets/icons/folder-open.svg";
+import folderWithFileIcon from "../../assets/icons/folder-with-file.svg";
 
 const RE_HEADING = /#{1,6}\s+/g;
 const RE_EMPHASIS = /[*_~`]+/g;
@@ -168,9 +169,9 @@ export default function NoteListItem({
                       }}
                       className="text-xs gap-2 rounded-lg px-2.5 py-1.5 cursor-pointer focus:bg-foreground/5"
                     >
-                      <ExternalLink
-                        size={12}
-                        className="text-muted-foreground/80 dark:text-muted-foreground/60"
+                      <VoiceLabIcon
+                        source={folderWithFileIcon}
+                        className="size-3 text-muted-foreground/80 dark:text-muted-foreground/60"
                       />
                       {t("notes.context.showInFileManager", { manager: fileManagerName })}
                     </DropdownMenuItem>
@@ -179,9 +180,9 @@ export default function NoteListItem({
                 )}
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger className="text-xs gap-2 rounded-lg px-2.5 py-1.5 cursor-pointer focus:bg-foreground/5 data-[state=open]:bg-foreground/5">
-                    <FolderOpen
-                      size={12}
-                      className="text-muted-foreground/80 dark:text-muted-foreground/60"
+                    <VoiceLabIcon
+                      source={folderOpenIcon}
+                      className="size-3 text-muted-foreground/80 dark:text-muted-foreground/60"
                     />
                     {t("notes.context.moveToFolder")}
                   </DropdownMenuSubTrigger>

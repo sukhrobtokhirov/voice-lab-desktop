@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Plus,
-  FolderOpen,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -54,6 +53,8 @@ import {
 import { useFolderManagement } from "../../hooks/useFolderManagement";
 import { useNoteDragAndDrop } from "../../hooks/useNoteDragAndDrop";
 import { cn } from "../lib/utils";
+import VoiceLabIcon from "../ui/VoiceLabIcon";
+import folderOpenIcon from "../../assets/icons/folder-open.svg";
 import {
   MEETINGS_FOLDER_NAME,
   displayFolderName,
@@ -705,9 +706,10 @@ export default function PersonalNotesView({
                       "bg-emerald-500/10 dark:bg-emerald-400/10 ring-1 ring-emerald-500/20"
                   )}
                 >
-                  <FolderOpen
-                    size={13}
+                  <VoiceLabIcon
+                    source={folderOpenIcon}
                     className={cn(
+                      "size-[13px]",
                       "shrink-0 transition-colors duration-150",
                       isDragOver || isActive
                         ? "text-primary"

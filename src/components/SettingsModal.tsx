@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Mic, UserCircle, Wrench, Keyboard, Shield, SlidersHorizontal } from "lucide-react";
+import { Mic, UserCircle, Wrench, SlidersHorizontal } from "lucide-react";
 import SidebarModal, { type SidebarItem } from "./ui/SidebarModal";
 import SettingsPage, { SettingsSectionType } from "./SettingsPage";
+import keyboardIcon from "../assets/icons/keyboard.svg";
+import shieldIcon from "../assets/icons/shield.svg";
 
 export type { SettingsSectionType };
 
@@ -87,7 +89,7 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
       {
         id: "hotkeys",
         label: t("desktop.settings.shortcuts", { defaultValue: "Shortcuts" }),
-        icon: Keyboard,
+        icon: keyboardIcon,
         description: t("desktop.settings.shortcutsDescription", {
           defaultValue: "Dictation and VoiceLab AI shortcuts",
         }),
@@ -96,7 +98,7 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
       {
         id: "privacyData",
         label: t("desktop.settings.privacy", { defaultValue: "Data & Privacy" }),
-        icon: Shield,
+        icon: shieldIcon,
         description: t("desktop.settings.privacyDescription", {
           defaultValue: "Cloud backup, local audio and retention",
         }),
