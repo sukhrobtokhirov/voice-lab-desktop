@@ -17,7 +17,6 @@ export default function MeetingNotificationOverlay() {
   const { t } = useTranslation();
   const [data, setData] = useState<NotificationData | null>(null);
   const [isVisible, setIsVisible] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
 
   useEffect(() => {
     let shown = false;
@@ -54,12 +53,10 @@ export default function MeetingNotificationOverlay() {
   );
 
   const handleMouseEnter = useCallback(() => {
-    setIsHovered(true);
     window.electronAPI?.setNotificationInteractivity?.(true);
   }, []);
 
   const handleMouseLeave = useCallback(() => {
-    setIsHovered(false);
     window.electronAPI?.setNotificationInteractivity?.(false);
   }, []);
 
@@ -67,21 +64,20 @@ export default function MeetingNotificationOverlay() {
   const title = (variant !== "detected" && data?.event?.summary) || t("meetingNotification.title");
 
   return (
-    <div className="meeting-notification-window w-full h-full bg-transparent p-3">
+    <div className="meeting-notification-window h-full w-full bg-transparent p-2">
       <MeetingNotificationCard
         title={title}
         body={t(`meetingNotification.body.${variant}`)}
         startLabel={data?.joinUrl ? t("meetingNotification.join") : t("meetingNotification.start")}
         onStart={() => respond(data?.joinUrl ? "join" : "start")}
         onDismiss={() => respond("dismiss")}
-        closeVisible={isHovered}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         className={[
-          "transition-all duration-300 ease-out",
+          "transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none",
           isVisible
-            ? "translate-x-0 opacity-100 scale-100"
-            : "translate-x-[120%] opacity-0 scale-95",
+            ? "translate-x-0 opacity-100"
+            : "translate-x-2 opacity-0",
         ].join(" ")}
       />
     </div>

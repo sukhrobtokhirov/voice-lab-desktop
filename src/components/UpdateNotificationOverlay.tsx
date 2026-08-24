@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { X } from "lucide-react";
-import voiceLabMark from "../assets/logo.svg";
+import { PushNotificationCard } from "./PushNotificationCard";
 
 interface UpdateNotificationData {
   version: string;
@@ -67,51 +66,33 @@ export default function UpdateNotificationOverlay() {
 
   return (
     <div className="update-notification-window h-full w-full bg-transparent p-2">
-      <div
-        className={[
-          "relative flex h-full items-start gap-2 rounded-xl bg-transparent px-1 py-1 pb-2 pt-1.5 backdrop-blur-2xl",
-          "transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none",
-          isVisible ? "translate-x-0 opacity-100" : "translate-x-2 opacity-0",
-        ].join(" ")}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
-        <button
-          onClick={() => respond("dismiss")}
-          aria-label={t("common.dismiss")}
-          className="absolute right-0.5 top-0 flex size-4 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <X className="size-3.5" />
-        </button>
-
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-white p-1.5">
-          <img src={voiceLabMark} alt="" className="h-full w-full" />
-        </div>
-
-        <div className="flex min-w-0 flex-1 flex-col self-stretch ">
-          <p className="pr-1 text-sm font-semibold leading-4 text-foreground">
-            {t(`updateNotification.messages.${messageId}.title`)}
-          </p>
-          <p className="mt-1 text-xs leading-4 text-muted-foreground">
-            {t(`updateNotification.messages.${messageId}.description`)}
-          </p>
-
-          <div className="mt-auto flex items-center justify-end gap-1 pt-1">
+      <PushNotificationCard
+        title={t(`updateNotification.messages.${messageId}.title`)}
+        description={t(`updateNotification.messages.${messageId}.description`)}
+        onDismiss={() => respond("dismiss")}
+        actions={
+          <>
             <button
               onClick={() => respond("dismiss")}
-              className="inline-flex h-6 items-center rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+              className="inline-flex h-6 cursor-pointer items-center rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {t("updateNotification.later")}
             </button>
             <button
               onClick={() => respond("update")}
-              className="inline-flex h-6 items-center rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 active:bg-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card cursor-pointer"
+              className="inline-flex h-6 cursor-pointer items-center rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 active:bg-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
             >
               {t("updateNotification.update")}
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+        className={[
+          "transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none",
+          isVisible ? "translate-x-0 opacity-100" : "translate-x-2 opacity-0",
+        ].join(" ")}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      />
     </div>
   );
 }

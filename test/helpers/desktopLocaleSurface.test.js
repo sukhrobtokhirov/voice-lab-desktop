@@ -77,14 +77,25 @@ test("critical Uzbek overlay copy is localized", () => {
 
 test("compact overlay controls have localized accessible names", () => {
   const files = [
-    "src/components/MeetingNotificationCard.tsx",
     "src/components/TranscriptionPreviewOverlay.tsx",
-    "src/components/UpdateNotificationOverlay.tsx",
+    "src/components/PushNotificationCard.tsx",
   ];
 
   for (const relative of files) {
     const source = fs.readFileSync(path.join(root, relative), "utf8");
     assert.match(source, /aria-label=\{t\("common\.(?:close|dismiss)"\)\}/, relative);
     assert.doesNotMatch(source, /text-\[11px\]/, `${relative} uses inaccessible 11px copy`);
+  }
+});
+
+test("desktop push windows share the notification surface", () => {
+  const overlays = [
+    "src/components/MeetingNotificationCard.tsx",
+    "src/components/UpdateNotificationOverlay.tsx",
+  ];
+
+  for (const relative of overlays) {
+    const source = fs.readFileSync(path.join(root, relative), "utf8");
+    assert.match(source, /PushNotificationCard/, `${relative} bypasses the shared push surface`);
   }
 });
