@@ -183,7 +183,10 @@ test("onboarding setup asks only for needed access and saves the chosen shortcut
   assert.match(onboarding, /role="switch"/);
   assert.match(onboarding, /\(step === "hotkey" && setupPermissionsGranted\)/);
   assert.match(onboarding, /setDictationKey\(value\)/);
-  assert.doesNotMatch(onboarding, /onShortcutTested|setShortcutTestMode|isShortcutDetected|ConfettiBurst/);
+  assert.doesNotMatch(
+    onboarding,
+    /onShortcutTested|setShortcutTestMode|isShortcutDetected|ConfettiBurst/
+  );
   assert.doesNotMatch(onboarding, /onDictationComplete/);
   assert.doesNotMatch(onboarding, /Textarea/);
   assert.match(onboarding, /<main className="[^"]*overflow-hidden/);
@@ -212,4 +215,24 @@ test("settings keeps both interface and transcription language selectors reachab
   assert.match(settings, /onChange=\{setUiLanguage\}/);
   assert.match(settings, /value=\{preferredLanguage\}/);
   assert.match(settings, /updateTranscriptionSettings\(\{ preferredLanguage: value \}\)/);
+});
+
+// Every LanguageSelector renders inside the settings Radix Dialog, which is
+// modal: it sets `pointer-events: none` on <body> and traps focus in its own
+// content. A menu hand-portaled to document.body lands outside both, so it was
+// unclickable and its search box could not hold focus. Popover nests its own
+// DismissableLayer and FocusScope, which fixes both by construction -- so the
+// selector must not go back to a bare createPortal menu.
+test("language dropdown nests a Radix layer inside the modal settings dialog", () => {
+  const selector = read("src/components/ui/LanguageSelector.tsx");
+
+  assert.match(selector, /import \{ Popover, PopoverContent, PopoverTrigger \} from "\.\/popover"/);
+  assert.match(selector, /<PopoverContent/);
+  assert.match(selector, /<PopoverTrigger asChild>/);
+  // Matches the call, not the prose in the comment explaining why it is gone.
+  assert.doesNotMatch(selector, /createPortal\(/);
+
+  // The search box only holds focus because the popover takes over autofocus.
+  assert.match(selector, /onOpenAutoFocus=\{\(event\) => \{/);
+  assert.match(selector, /searchRef\.current\?\.focus\(\)/);
 });
