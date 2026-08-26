@@ -177,7 +177,7 @@ test("refresh restores display identity from the new access JWT when the respons
   assert.equal(await manager.getValidAccessToken(), getSession().accessToken);
 });
 
-test("refresh never reports an authenticated user when no display profile can be restored", async (t) => {
+test("refresh preserves a rotated credential when no display profile can be restored", async (t) => {
   const originalFetch = global.fetch;
   t.after(() => {
     global.fetch = originalFetch;
@@ -202,13 +202,13 @@ test("refresh never reports an authenticated user when no display profile can be
 
   const status = await manager.initialize();
 
-  assert.equal(status.status, "signed-out");
+  assert.equal(status.status, "error");
   assert.equal(status.errorCode, "AUTH_PROFILE_REQUIRED");
   assert.equal(status.user, null);
-  assert.equal(getSession(), null);
+  assert.equal(getSession().refreshToken, `refresh-new-${"n".repeat(40)}`);
 });
 
-test("an expired local refresh credential signs the user out with an explicit reason", async () => {
+test("an expired local refresh credential is retained for background recovery", async () => {
   const expiredSession = {
     ...initialSession(),
     refreshExpiresAt: Date.now() - 1,
@@ -221,17 +221,17 @@ test("an expired local refresh credential signs the user out with an explicit re
     (error) => error.code === "AUTH_EXPIRED"
   );
 
-  assert.equal(getSession(), null);
+  assert.equal(getSession().refreshToken, expiredSession.refreshToken);
   assert.deepEqual(
     {
       status: manager.getPublicStatus().status,
       errorCode: manager.getPublicStatus().errorCode,
     },
-    { status: "signed-out", errorCode: "AUTH_EXPIRED" }
+    { status: "authenticated", errorCode: "AUTH_EXPIRED" }
   );
 });
 
-test("invalid_refresh_token clears the desktop session and preserves diagnostics", async (t) => {
+test("invalid_refresh_token preserves the desktop session and retries safely", async (t) => {
   const originalFetch = global.fetch;
   t.after(() => {
     global.fetch = originalFetch;
@@ -253,10 +253,16 @@ test("invalid_refresh_token clears the desktop session and preserves diagnostics
     assert.equal(error.requestId, "req_invalid_refresh");
     return true;
   });
-  assert.equal(getSession(), null);
+  assert.equal(getSession().refreshToken, `refresh-old-${"r".repeat(40)}`);
+  assert.ok(manager.refreshRetryTimer);
   assert.deepEqual(manager.getPublicStatus(), {
-    status: "signed-out",
-    user: null,
+    status: "authenticated",
+    user: {
+      id: "7",
+      email: "desktop@example.com",
+      name: "desktop@example.com",
+      image: null,
+    },
     errorCode: "invalid_refresh_token",
     errorMessage: "The refresh token is invalid or expired.",
     errorRequestId: "req_invalid_refresh",
@@ -291,8 +297,13 @@ test("auth_unavailable preserves the rotating refresh credential for explicit re
   });
   assert.equal(getSession().refreshToken, session.refreshToken);
   assert.deepEqual(manager.getPublicStatus(), {
-    status: "error",
-    user: null,
+    status: "authenticated",
+    user: {
+      id: "7",
+      email: "desktop@example.com",
+      name: "desktop@example.com",
+      image: null,
+    },
     errorCode: "auth_unavailable",
     errorMessage: "Desktop authentication is temporarily unavailable.",
     errorRequestId: "req_auth_unavailable",
@@ -337,7 +348,50 @@ test("authenticated sessions proactively refresh before access-token expiry", as
   assert.equal(refreshes, 1);
 });
 
-test("ambiguous refresh transport failure clears the token to prevent rotated-token reuse", async (t) => {
+test("a failed refresh automatically retries and restores the session", async (t) => {
+  const originalFetch = global.fetch;
+  const originalSetTimeout = global.setTimeout;
+  const originalClearTimeout = global.clearTimeout;
+  const timers = [];
+  t.after(() => {
+    global.fetch = originalFetch;
+    global.setTimeout = originalSetTimeout;
+    global.clearTimeout = originalClearTimeout;
+  });
+  global.setTimeout = (callback, delay) => {
+    const timer = { callback, delay, unref() {} };
+    timers.push(timer);
+    return timer;
+  };
+  global.clearTimeout = () => {};
+
+  const session = initialSession();
+  const { DesktopAuthManager, getSession } = loadDesktopAuthManager(session);
+  const manager = managerFrom(DesktopAuthManager);
+  global.fetch = async () => {
+    throw new Error("offline");
+  };
+
+  await assert.rejects(manager.refreshSession({ force: true }), /offline/);
+  const retryTimer = timers.find((timer) => timer.delay === 5_000);
+  assert.ok(retryTimer);
+  assert.equal(getSession().refreshToken, session.refreshToken);
+
+  global.fetch = async () =>
+    jsonResponse({
+      access_token: "new-access-token-abcdefghijklmnopqrstuvwxyz",
+      refresh_token: `refresh-new-${"n".repeat(40)}`,
+      session_id: "dss_background_retry",
+    });
+  retryTimer.callback();
+  await manager.refreshPromise;
+
+  assert.equal(manager.getPublicStatus().status, "authenticated");
+  assert.equal(manager.getPublicStatus().errorCode, null);
+  assert.equal(getSession().refreshToken, `refresh-new-${"n".repeat(40)}`);
+});
+
+test("ambiguous refresh transport failure preserves the token for automatic retry", async (t) => {
   const originalFetch = global.fetch;
   t.after(() => {
     global.fetch = originalFetch;
@@ -349,8 +403,9 @@ test("ambiguous refresh transport failure clears the token to prevent rotated-to
   };
 
   await assert.rejects(manager.refreshSession({ force: true }), /connection reset/);
-  assert.equal(getSession(), null);
-  assert.equal(manager.getPublicStatus().status, "signed-out");
+  assert.equal(getSession().refreshToken, `refresh-old-${"r".repeat(40)}`);
+  assert.equal(manager.getPublicStatus().status, "authenticated");
+  assert.ok(manager.refreshRetryTimer);
 });
 
 test("refresh rejects a response that does not rotate the refresh credential", async (t) => {
@@ -371,7 +426,8 @@ test("refresh rejects a response that does not rotate the refresh credential", a
     manager.refreshSession({ force: true }),
     (error) => error.code === "AUTH_REFRESH_ROTATION_REQUIRED"
   );
-  assert.equal(getSession(), null);
+  assert.equal(getSession().refreshToken, session.refreshToken);
+  assert.equal(manager.getPublicStatus().status, "authenticated");
 });
 
 test("refresh fails closed on a malformed token response", async (t) => {
@@ -399,7 +455,8 @@ test("refresh fails closed on a malformed token response", async (t) => {
     manager.refreshSession({ force: true }),
     (error) => error.code === "AUTH_TOKEN_RESPONSE_INVALID"
   );
-  assert.equal(getSession(), null);
+  assert.equal(getSession().refreshToken, `refresh-old-${"r".repeat(40)}`);
+  assert.equal(manager.getPublicStatus().status, "authenticated");
 });
 
 test("refresh requires a fresh session_id instead of accepting the stored value", async (t) => {
@@ -426,7 +483,8 @@ test("refresh requires a fresh session_id instead of accepting the stored value"
     manager.refreshSession({ force: true }),
     (error) => error.code === "AUTH_TOKEN_RESPONSE_INVALID"
   );
-  assert.equal(getSession(), null);
+  assert.equal(getSession().refreshToken, `refresh-old-${"r".repeat(40)}`);
+  assert.equal(manager.getPublicStatus().status, "authenticated");
 });
 
 test("refresh ignores an unexpected user payload and preserves the current identity", async (t) => {

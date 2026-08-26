@@ -14,6 +14,8 @@ const MAX_AUTH_RESPONSE_BYTES = 1024 * 1024;
 const MAX_ACCESS_EXPIRES_IN_SECONDS = 24 * 60 * 60;
 const MAX_REFRESH_EXPIRES_IN_SECONDS = 30 * 24 * 60 * 60;
 const ACCESS_EXPIRY_SKEW_MS = 60_000;
+const REFRESH_RETRY_INITIAL_MS = 5_000;
+const REFRESH_RETRY_MAX_MS = 5 * 60_000;
 const CALLBACK_MAX_LENGTH = 4096;
 const CALLBACK_ALLOWED_PARAMS = new Set(["code", "state"]);
 const AUTHORIZATION_QUERY_PARAMS = new Set(["desktop_auth_id"]);
@@ -286,6 +288,8 @@ class DesktopAuthManager extends EventEmitter {
     this.refreshPromise = null;
     this.refreshPromiseEpoch = null;
     this.accessRefreshTimer = null;
+    this.refreshRetryTimer = null;
+    this.refreshRetryAttempt = 0;
     this.bootstrapPromise = null;
     this.authEpoch = 0;
   }
@@ -293,6 +297,7 @@ class DesktopAuthManager extends EventEmitter {
   _advanceAuthEpoch() {
     this.authEpoch += 1;
     this._clearAccessRefreshTimer();
+    this._clearRefreshRetryTimer();
     this.refreshPromise = null;
     this.refreshPromiseEpoch = null;
     return this.authEpoch;
@@ -301,6 +306,52 @@ class DesktopAuthManager extends EventEmitter {
   _clearAccessRefreshTimer() {
     clearTimeout(this.accessRefreshTimer);
     this.accessRefreshTimer = null;
+  }
+
+  _clearRefreshRetryTimer() {
+    clearTimeout(this.refreshRetryTimer);
+    this.refreshRetryTimer = null;
+    this.refreshRetryAttempt = 0;
+  }
+
+  _scheduleRefreshRetry(retryAfterSeconds = null) {
+    if (this.refreshRetryTimer || !tokenStore.getSession()?.refreshToken) return;
+    const retryAfterMs = Number.isFinite(retryAfterSeconds)
+      ? Math.max(1_000, Math.min(retryAfterSeconds * 1000, REFRESH_RETRY_MAX_MS))
+      : null;
+    const backoffMs = Math.min(
+      REFRESH_RETRY_INITIAL_MS * 2 ** this.refreshRetryAttempt,
+      REFRESH_RETRY_MAX_MS
+    );
+    const delayMs = retryAfterMs ?? backoffMs;
+    this.refreshRetryAttempt = Math.min(this.refreshRetryAttempt + 1, 16);
+    this.refreshRetryTimer = setTimeout(() => {
+      this.refreshRetryTimer = null;
+      void this.refreshSession({ force: true }).catch((error) => {
+        authLogger.warn("background_refresh_retry_failed", {
+          errorCode: error.code || "AUTH_REFRESH_FAILED",
+          httpStatus: error.httpStatus,
+          requestId: error.requestId,
+        });
+      });
+    }, delayMs);
+    this.refreshRetryTimer.unref?.();
+  }
+
+  _preserveSessionAfterRefreshFailure(error, session = tokenStore.getSession()) {
+    const user = canonicalUser(session?.user);
+    const details = {
+      user,
+      errorCode: error?.code || "AUTH_REFRESH_FAILED",
+      errorMessage: error?.message,
+      errorRequestId: error?.requestId,
+      errorFields: error?.fields,
+      retryAfterSeconds: error?.retryAfterSeconds,
+    };
+    // A saved profile means the app can remain usable while a new access token
+    // is fetched in the background. Only the person signing out may erase it.
+    this._setStatus(user ? "authenticated" : "error", details);
+    this._scheduleRefreshRetry(error?.retryAfterSeconds);
   }
 
   _scheduleAccessTokenRefresh(session = tokenStore.getSession()) {
@@ -391,7 +442,10 @@ class DesktopAuthManager extends EventEmitter {
       return this.getPublicStatus();
     }
 
-    this._setStatus("checking-session");
+    const storedUser = canonicalUser(storedSession.user);
+    // Do not send a returning user back to the account gate while the access
+    // token is being refreshed after a launch or an app update.
+    this._setStatus(storedUser ? "authenticated" : "checking-session", { user: storedUser });
     try {
       // Access credentials are process-memory only. Every launch rotates the
       // persisted refresh credential before the desktop session is usable.
@@ -406,21 +460,18 @@ class DesktopAuthManager extends EventEmitter {
       if (epoch !== this.authEpoch || error?.code === "AUTH_OPERATION_SUPERSEDED") {
         return this.getPublicStatus();
       }
-      const terminalRejection =
-        !tokenStore.getSession() ||
-        [400, 401, 403].includes(Number(error?.httpStatus)) ||
-        error?.code === "AUTH_EXPIRED";
-      if (terminalRejection) tokenStore.clearSession();
-      this._setStatus(
-        pending ? "waiting-for-browser" : terminalRejection ? "signed-out" : "error",
-        {
+      const retainedSession = tokenStore.getSession();
+      if (retainedSession?.refreshToken) {
+        this._preserveSessionAfterRefreshFailure(error, retainedSession);
+      } else {
+        this._setStatus(pending ? "waiting-for-browser" : "signed-out", {
           errorCode: error.code || "AUTH_SESSION_INVALID",
           errorMessage: error.message,
           errorRequestId: error.requestId,
           errorFields: error.fields,
           retryAfterSeconds: error.retryAfterSeconds,
-        }
-      );
+        });
+      }
       authLogger.warn("bootstrap_failed", {
         errorCode: error.code || "AUTH_SESSION_INVALID",
         httpStatus: error.httpStatus,
@@ -1157,12 +1208,8 @@ class DesktopAuthManager extends EventEmitter {
       return this.getPublicStatus();
     }
     if (storedSession.refreshExpiresAt && storedSession.refreshExpiresAt <= Date.now()) {
-      tokenStore.clearSession();
       const error = new DesktopAuthError("AUTH_EXPIRED", "Session expired");
-      this._setStatus("signed-out", {
-        errorCode: error.code,
-        errorMessage: error.message,
-      });
+      this._preserveSessionAfterRefreshFailure(error, storedSession);
       throw error;
     }
     try {
@@ -1179,6 +1226,9 @@ class DesktopAuthManager extends EventEmitter {
       const user = canonicalUser(storedSession.user);
       this._assertAuthEpoch(epoch);
       const updated = this._sessionFromTokenResponse(response, storedSession, user);
+      // Persist a successful rotation before treating a missing display profile
+      // as recoverable. Otherwise a valid one-time refresh token is lost.
+      tokenStore.saveSession(updated);
       if (!canonicalUser(updated.user)) {
         throw new DesktopAuthError(
           "AUTH_PROFILE_REQUIRED",
@@ -1187,7 +1237,7 @@ class DesktopAuthManager extends EventEmitter {
           { requestId: publicRequestId(response?.request_id) }
         );
       }
-      tokenStore.saveSession(updated);
+      this._clearRefreshRetryTimer();
       this._setStatus("authenticated", { user: updated.user });
       return this.getPublicStatus();
     } catch (error) {
@@ -1197,33 +1247,7 @@ class DesktopAuthManager extends EventEmitter {
           "Authentication operation was superseded"
         );
       }
-      const terminalRejection =
-        [400, 401, 403].includes(Number(error?.httpStatus)) ||
-        error?.httpStatus == null ||
-        [
-          "AUTH_REFRESH_ROTATION_REQUIRED",
-          "AUTH_BACKEND_RESPONSE_INVALID",
-          "AUTH_TOKEN_RESPONSE_INVALID",
-          "AUTH_USER_RESPONSE_INVALID",
-        ].includes(error?.code);
-      if (terminalRejection) {
-        tokenStore.clearSession();
-        this._setStatus("signed-out", {
-          errorCode: error.code || "AUTH_REFRESH_FAILED",
-          errorMessage: error.message,
-          errorRequestId: error.requestId,
-          errorFields: error.fields,
-          retryAfterSeconds: error.retryAfterSeconds,
-        });
-      } else {
-        this._setStatus("error", {
-          errorCode: error.code || "AUTH_REFRESH_FAILED",
-          errorMessage: error.message,
-          errorRequestId: error.requestId,
-          errorFields: error.fields,
-          retryAfterSeconds: error.retryAfterSeconds,
-        });
-      }
+      this._preserveSessionAfterRefreshFailure(error, tokenStore.getSession() || storedSession);
       throw error;
     }
   }
@@ -1254,11 +1278,15 @@ class DesktopAuthManager extends EventEmitter {
 
   invalidateSession({ code = "AUTH_EXPIRED", message = "Session expired" } = {}) {
     this._advanceAuthEpoch();
-    tokenStore.clearSession();
-    this._setStatus("signed-out", {
-      errorCode: code,
-      errorMessage: message,
-    });
+    const storedSession = tokenStore.getSession();
+    if (!storedSession?.refreshToken) {
+      this._setStatus("signed-out", { errorCode: code, errorMessage: message });
+      return;
+    }
+    this._preserveSessionAfterRefreshFailure(
+      new DesktopAuthError(code, message),
+      storedSession
+    );
   }
 
   async deleteAccount() {

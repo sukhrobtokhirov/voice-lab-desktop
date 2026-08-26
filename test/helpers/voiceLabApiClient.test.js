@@ -192,7 +192,7 @@ test("desktop subscription uses the desktop token and preserves desktop STT enti
   assert.equal(authManager.state.getValidAccessTokenCalls, 1);
 });
 
-test("desktop usage refreshes once on invalid token, then clears the session", async (t) => {
+test("desktop usage refreshes once on an invalid token, then starts session recovery", async (t) => {
   const VoiceLabApiClient = loadClient(t);
   const { client, authManager } = createClient(VoiceLabApiClient);
   const calls = [];
