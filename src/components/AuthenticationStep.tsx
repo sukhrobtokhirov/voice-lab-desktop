@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUpRight, Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { cancelBrowserSignIn, reopenBrowserSignIn, signInWithSocial } from "../lib/auth";
 import { Button } from "./ui/button";
@@ -112,11 +112,13 @@ export default function AuthenticationStep({ onAuthComplete }: AuthenticationSte
             <span className="sr-only">{t("auth.desktopWaiting")}</span>
           </div>
           <Button variant="outline" className="h-11 w-full rounded-lg" onClick={reopen}>
-            <ArrowUpRight className="h-4 w-4" />
             {t("auth.desktopReopen")}
           </Button>
-          <Button variant="ghost" className="h-10 w-full rounded-lg" onClick={cancel}>
-            <X className="h-4 w-4" />
+          <Button
+            variant="ghost"
+            className="h-10 w-full rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={cancel}
+          >
             {t("auth.desktopCancel")}
           </Button>
         </div>
@@ -126,11 +128,7 @@ export default function AuthenticationStep({ onAuthComplete }: AuthenticationSte
           onClick={start}
           disabled={busy || protocolReady === null}
         >
-          {busy ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <ArrowUpRight className="h-4 w-4" />
-          )}
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />}
           {busy ? t("auth.desktopOpening") : t("auth.desktopOpenBrowser")}
         </Button>
       )}
