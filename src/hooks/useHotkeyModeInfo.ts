@@ -25,10 +25,11 @@ const DEFAULT_INFO: HotkeyModeInfo = {
  * (native shortcut, Hyprland) and, on Hyprland, whether its config is
  * persistable. `scope` tags log output for the calling surface.
  */
-export function useHotkeyModeInfo(scope: string): HotkeyModeInfo {
+export function useHotkeyModeInfo(scope: string, enabled = true): HotkeyModeInfo {
   const [modeInfo, setModeInfo] = useState<HotkeyModeInfo>(DEFAULT_INFO);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     const checkHotkeyMode = async () => {
       try {
@@ -52,7 +53,7 @@ export function useHotkeyModeInfo(scope: string): HotkeyModeInfo {
     return () => {
       cancelled = true;
     };
-  }, [scope]);
+  }, [enabled, scope]);
 
   return modeInfo;
 }

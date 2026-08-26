@@ -64,7 +64,11 @@ import { VOICELAB_AI_ENABLED, WORKSPACES_ENABLED } from "../lib/features";
 
 const platform = getCachedPlatform();
 
-const SettingsModal = React.lazy(() => import("./SettingsModal"));
+// Keep this loader reusable so we can warm the settings chunk after the main
+// panel becomes interactive. Opening Settings should never replace the panel
+// with a page-level fallback on its first click.
+const loadSettingsModal = () => import("./SettingsModal");
+const SettingsModal = React.lazy(loadSettingsModal);
 const ReferralModal = React.lazy(() => import("./ReferralModal"));
 const PersonalNotesView = React.lazy(() => import("./notes/PersonalNotesView"));
 const DictionaryView = React.lazy(() => import("./DictionaryView"));
@@ -84,6 +88,36 @@ function PanelLoadingFallback() {
           <Skeleton className="mt-2 h-3 w-2/3" />
         </div>
       ))}
+    </div>
+  );
+}
+
+function SettingsModalLoadingFallback() {
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/45 backdrop-blur-[2px]"
+      aria-busy="true"
+      aria-label="Loading settings"
+    >
+      <div className="flex h-[88vh] w-[92vw] max-w-5xl overflow-hidden rounded-[14px] border border-black/10 bg-white shadow-[0_24px_64px_-20px_rgba(0,0,0,0.3)] dark:border-white/12 dark:bg-[#0f0f0f] dark:shadow-[0_28px_72px_-18px_rgba(0,0,0,0.7)]">
+        <aside className="w-60 shrink-0 border-r border-black/10 bg-[#fcfcfb] px-3 pt-5 dark:border-white/12 dark:bg-[#171717]">
+          <Skeleton className="mb-5 h-4 w-20" />
+          {[0, 1, 2, 3].map((item) => (
+            <Skeleton key={item} className="mb-2 h-9 w-full rounded-lg" />
+          ))}
+        </aside>
+        <div className="min-w-0 flex-1 px-8 py-7">
+          <Skeleton className="h-7 w-32" />
+          <div className="mt-10 flex items-center gap-3">
+            <Skeleton className="h-11 w-11 rounded-full" />
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-3 w-52" />
+            </div>
+          </div>
+          <Skeleton className="mt-8 h-40 w-full rounded-xl" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -142,6 +176,17 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   const { toast } = useToast();
   const { useCleanupModel, setUseLocalWhisper, setCloudTranscriptionMode } = useSettings();
   const { isSignedIn, isLoaded: authLoaded, user } = useAuth();
+
+  // Settings is opened often enough to justify warming its small code-split
+  // chunk once the primary screen is already usable. The timeout keeps the
+  // first render and initial transcription request ahead of this work.
+  useEffect(() => {
+    if (isLoading) return;
+    const timer = window.setTimeout(() => {
+      void loadSettingsModal();
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [isLoading]);
   const dataRetentionEnabled = useSettingsStore((state) => state.dataRetentionEnabled);
   const usage = useUsage({ loadOnMount: activeView === "integrations" });
 
@@ -698,7 +743,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       />
 
       {showSettings && (
-        <Suspense fallback={<PanelLoadingFallback />}>
+        <Suspense fallback={<SettingsModalLoadingFallback />}>
           <SettingsModal
             open={showSettings}
             onOpenChange={(open) => {
@@ -706,6 +751,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               if (!open) setSettingsSection(undefined);
             }}
             initialSection={settingsSection}
+            auth={{ isSignedIn, isLoaded: authLoaded, user }}
           />
         </Suspense>
       )}

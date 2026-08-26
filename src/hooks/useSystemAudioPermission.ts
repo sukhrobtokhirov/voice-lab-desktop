@@ -3,7 +3,7 @@ import { getCachedPlatform } from "../utils/platform";
 import type { SystemAudioAccessResult } from "../types/electron";
 import { DEFAULT_SYSTEM_AUDIO_ACCESS } from "../utils/systemAudioAccess";
 
-export function useSystemAudioPermission() {
+export function useSystemAudioPermission({ enabled = true }: { enabled?: boolean } = {}) {
   const isMacOS = getCachedPlatform() === "darwin";
   const [access, setAccess] = useState<SystemAudioAccessResult | null>(null);
   const [isChecking, setIsChecking] = useState(false);
@@ -23,15 +23,16 @@ export function useSystemAudioPermission() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     check();
-  }, [check]);
+  }, [check, enabled]);
 
   useEffect(() => {
-    if (!isMacOS) return;
+    if (!enabled || !isMacOS) return;
     const handleFocus = () => check();
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
-  }, [isMacOS, check]);
+  }, [enabled, isMacOS, check]);
 
   const openSettings = useCallback(async () => {
     await window.electronAPI?.openSystemAudioSettings?.();

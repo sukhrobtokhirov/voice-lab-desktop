@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "./useAuth";
+import type { VoiceLabUser } from "../lib/auth";
 
 export type DesktopSttUsage = {
   used_seconds: number;
@@ -51,6 +52,11 @@ interface UseUsageResult extends DesktopUsageData {
 
 type UseUsageOptions = {
   loadOnMount?: boolean;
+  /** Reuse an already-hydrated auth state instead of starting another auth request. */
+  auth?: {
+    isSignedIn: boolean;
+    user: VoiceLabUser | null;
+  };
 };
 
 type SubscriptionState = {
@@ -190,8 +196,11 @@ function fetchDesktopSubscription(accountKey: string) {
   return request;
 }
 
-export function useUsage({ loadOnMount = true }: UseUsageOptions = {}): UseUsageResult | null {
-  const { isSignedIn, user } = useAuth();
+export function useUsage({ loadOnMount = true, auth }: UseUsageOptions = {}): UseUsageResult | null {
+  // Hooks must be called unconditionally, but the dormant fallback avoids a
+  // duplicate status/profile request when the caller already owns auth state.
+  const fallbackAuth = useAuth({ enabled: !auth });
+  const { isSignedIn, user } = auth ?? fallbackAuth;
   const accountKey = user?.id || "desktop-session";
   const [sttUsage, setSttUsage] = useState<DesktopSttUsage | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);

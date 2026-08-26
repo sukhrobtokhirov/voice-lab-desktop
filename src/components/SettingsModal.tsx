@@ -4,6 +4,7 @@ import { UserCircle, Wrench, SlidersHorizontal } from "lucide-react";
 import SidebarModal, { type SidebarItem } from "./ui/SidebarModal";
 import SettingsPage, { SettingsSectionType } from "./SettingsPage";
 import keyboardIcon from "../assets/icons/keyboard.svg";
+import type { VoiceLabUser } from "../lib/auth";
 
 export type { SettingsSectionType };
 
@@ -42,9 +43,19 @@ interface SettingsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialSection?: string;
+  auth: {
+    isSignedIn: boolean;
+    isLoaded: boolean;
+    user: VoiceLabUser | null;
+  };
 }
 
-export default function SettingsModal({ open, onOpenChange, initialSection }: SettingsModalProps) {
+export default function SettingsModal({
+  open,
+  onOpenChange,
+  initialSection,
+  auth,
+}: SettingsModalProps) {
   const { t } = useTranslation();
   const sidebarItems: SidebarItem<SettingsSectionType>[] = useMemo(
     () => [
@@ -126,6 +137,7 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         activeSection={activeSection}
         onNavigateToSection={handleSectionChange}
         initialSubTab={initialSubTab}
+        auth={auth}
       />
     </SidebarModal>
   );

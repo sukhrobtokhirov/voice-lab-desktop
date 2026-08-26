@@ -45,7 +45,7 @@ function mergeProfile(user: VoiceLabUser, profile: DesktopProfile): VoiceLabUser
   };
 }
 
-export function useAuth() {
+export function useAuth({ enabled = true }: { enabled?: boolean } = {}) {
   const [authState, setAuthState] = useState<DesktopAuthState>(initialState);
 
   const applyAuthState = useCallback((next: DesktopAuthState) => {
@@ -84,6 +84,7 @@ export function useAuth() {
   }, [applyAuthState, hydrateUserProfile]);
 
   useEffect(() => {
+    if (!enabled) return;
     let mounted = true;
     window.electronAPI
       ?.authGetStatus?.()
@@ -139,7 +140,7 @@ export function useAuth() {
       unsubscribe?.();
       unsubscribeProtocolError?.();
     };
-  }, [applyAuthState, hydrateUserProfile]);
+  }, [applyAuthState, enabled, hydrateUserProfile]);
 
   const isSignedIn = authState.status === "authenticated";
   const isPending = [

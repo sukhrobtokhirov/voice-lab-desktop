@@ -2,6 +2,7 @@ import { RefreshCw } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useUsage } from "../hooks/useUsage";
+import type { VoiceLabUser } from "../lib/auth";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 
@@ -46,6 +47,10 @@ type UsageDisplayProps = {
   surface?: "settings" | "profile";
   autoRefresh?: boolean;
   footerAction?: ReactNode;
+  auth?: {
+    isSignedIn: boolean;
+    user: VoiceLabUser | null;
+  };
 };
 
 export default function UsageDisplay({
@@ -53,9 +58,10 @@ export default function UsageDisplay({
   surface = "settings",
   autoRefresh = false,
   footerAction,
+  auth,
 }: UsageDisplayProps) {
   const { t, i18n } = useTranslation();
-  const usage = useUsage();
+  const usage = useUsage({ auth });
   const refreshUsage = usage?.refetch;
 
   useEffect(() => {

@@ -32,8 +32,7 @@ import {
   Languages,
   ExternalLink,
 } from "lucide-react";
-import { useAuth } from "../hooks/useAuth";
-import { AUTH_URL, signOut, deleteAccount } from "../lib/auth";
+import { AUTH_URL, signOut, deleteAccount, type VoiceLabUser } from "../lib/auth";
 import MicPermissionWarning from "./ui/MicPermissionWarning";
 import MicrophoneSettings from "./ui/MicrophoneSettings";
 import PermissionCard from "./ui/PermissionCard";
@@ -118,6 +117,12 @@ interface SettingsPageProps {
   onNavigateToSection?: (section: SettingsSectionType) => void;
   /** When a legacy section ID was used (e.g. `meetings`), land on the matching sub-tab. */
   initialSubTab?: string;
+  /** The already-hydrated root auth state prevents a second account-loading pass. */
+  auth: {
+    isSignedIn: boolean;
+    isLoaded: boolean;
+    user: VoiceLabUser | null;
+  };
 }
 
 const UI_LANGUAGE_OPTIONS: LanguageOption[] = [
@@ -533,6 +538,7 @@ export default function SettingsPage({
   activeSection = "general",
   onNavigateToSection,
   initialSubTab,
+  auth,
 }: SettingsPageProps) {
   const { isCompact } = useSettingsLayout();
   const {
@@ -649,8 +655,10 @@ export default function SettingsPage({
   const isUpdateAvailable =
     !updateStatus.isDevelopment && (updateStatus.updateAvailable || updateStatus.updateDownloaded);
 
-  const permissionsHook = usePermissions(showAlertDialog);
-  const systemAudio = useSystemAudioPermission();
+  const isPreferencesSection = activeSection === "general";
+  const isHotkeySection = activeSection === "hotkeys";
+  const permissionsHook = usePermissions(showAlertDialog, { enabled: isPreferencesSection });
+  const systemAudio = useSystemAudioPermission({ enabled: isPreferencesSection });
   useClipboard(showAlertDialog);
   const [audioStorageUsage, setAudioStorageUsage] = useState<{
     fileCount: number;
@@ -720,8 +728,9 @@ export default function SettingsPage({
   }, []);
 
   useEffect(() => {
+    if (!isPreferencesSection) return;
     refreshYdotoolStatus();
-  }, [refreshYdotoolStatus]);
+  }, [isPreferencesSection, refreshYdotoolStatus]);
 
   const { theme, setTheme } = useTheme();
 
@@ -752,7 +761,7 @@ export default function SettingsPage({
   );
 
   const { isUsingNativeShortcut, isUsingHyprland, hyprlandConfigStatus, supportsPushToTalk } =
-    useHotkeyModeInfo("settings");
+    useHotkeyModeInfo("settings", isPreferencesSection || isHotkeySection);
   const [effectiveDefaultHotkey, setEffectiveDefaultHotkey] = useState<string | null>(null);
   const [linuxPttAvailable, setLinuxPttAvailable] = useState(true);
 
@@ -762,6 +771,7 @@ export default function SettingsPage({
   const [autoStartLoading, setAutoStartLoading] = useState(true);
 
   useEffect(() => {
+    if (!isPreferencesSection) return;
     if (platform === "linux") {
       setAutoStartLoading(false);
       return;
@@ -778,16 +788,23 @@ export default function SettingsPage({
       setAutoStartLoading(false);
     };
     loadAutoStart();
-  }, [platform]);
+  }, [isPreferencesSection, platform]);
 
   useEffect(() => {
+    if (!isPreferencesSection) return;
     window.electronAPI?.syncNotificationPreferences?.({
       notificationsEnabled,
       notifyMeetingDetection,
       notifyCalendarReminders,
       notifyUpdates,
     });
-  }, [notificationsEnabled, notifyMeetingDetection, notifyCalendarReminders, notifyUpdates]);
+  }, [
+    isPreferencesSection,
+    notificationsEnabled,
+    notifyMeetingDetection,
+    notifyCalendarReminders,
+    notifyUpdates,
+  ]);
 
   const handleAutoStartChange = async (enabled: boolean) => {
     if (window.electronAPI?.setAutoStartEnabled) {
@@ -809,11 +826,11 @@ export default function SettingsPage({
   const [noteFilesRebuilding, setNoteFilesRebuilding] = useState(false);
 
   useEffect(() => {
-    if (!noteFilesEnabled) return;
+    if (!isPreferencesSection || !noteFilesEnabled) return;
     window.electronAPI?.noteFilesGetDefaultPath?.().then((p) => {
       if (p) setNoteFilesDefaultPath(p);
     });
-  }, [noteFilesEnabled]);
+  }, [isPreferencesSection, noteFilesEnabled]);
 
   const handleNoteFilesToggle = useCallback(
     async (enabled: boolean) => {
@@ -847,6 +864,7 @@ export default function SettingsPage({
   }, [toast, t]);
 
   useEffect(() => {
+    if (activeSection !== "system") return;
     let mounted = true;
 
     const timer = setTimeout(async () => {
@@ -860,7 +878,7 @@ export default function SettingsPage({
       mounted = false;
       clearTimeout(timer);
     };
-  }, [getAppVersion]);
+  }, [activeSection, getAppVersion]);
 
   useEffect(() => {
     if (isUsingNativeShortcut && !supportsPushToTalk) {
@@ -869,6 +887,7 @@ export default function SettingsPage({
   }, [isUsingNativeShortcut, supportsPushToTalk, setActivationMode]);
 
   useEffect(() => {
+    if (!isPreferencesSection && !isHotkeySection) return;
     const loadEffectiveDefaultHotkey = async () => {
       try {
         const key = await window.electronAPI?.getEffectiveDefaultHotkey?.();
@@ -878,7 +897,7 @@ export default function SettingsPage({
       }
     };
     loadEffectiveDefaultHotkey();
-  }, []);
+  }, [isHotkeySection, isPreferencesSection]);
 
   useEffect(() => {
     const cleanup = window.electronAPI?.onLinuxPttPermissionDenied?.(() => {
@@ -982,7 +1001,7 @@ export default function SettingsPage({
     });
   }, [isRemovingModels, showConfirmDialog, showAlertDialog, t]);
 
-  const { isSignedIn, isLoaded, user } = useAuth();
+  const { isSignedIn, isLoaded, user } = auth;
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isOpeningBilling, setIsOpeningBilling] = useState(false);
@@ -1219,6 +1238,7 @@ export default function SettingsPage({
                 </div>
 
                 <UsageDisplay
+                  auth={{ isSignedIn, user }}
                   footerAction={
                     <Button
                       onClick={handleSignOut}

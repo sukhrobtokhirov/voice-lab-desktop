@@ -27,6 +27,11 @@ export interface UsePermissionsProps {
   showAlertDialog: (dialog: { title: string; description?: string }) => void;
 }
 
+export interface UsePermissionsOptions {
+  /** Avoid permission probes until the surface that displays them is visible. */
+  enabled?: boolean;
+}
+
 const stopTracks = (stream?: MediaStream) => {
   try {
     stream?.getTracks?.().forEach((track) => track.stop());
@@ -103,7 +108,8 @@ const describeMicError = (error: unknown, t: TFunction): string => {
 };
 
 export const usePermissions = (
-  showAlertDialog?: UsePermissionsProps["showAlertDialog"]
+  showAlertDialog?: UsePermissionsProps["showAlertDialog"],
+  { enabled = true }: UsePermissionsOptions = {}
 ): UsePermissionsReturn => {
   const { t } = useTranslation();
   const [micPermissionGranted, setMicPermissionGranted] = useLocalStorage(
@@ -284,29 +290,33 @@ export const usePermissions = (
 
   // Check paste tools on mount
   useEffect(() => {
+    if (!enabled) return;
     checkPasteToolsAvailability();
-  }, [checkPasteToolsAvailability]);
+  }, [checkPasteToolsAvailability, enabled]);
 
   // On macOS, re-validate microphone permission on mount to override stale
   // localStorage values (e.g. after TCC reset or app update).
   useEffect(() => {
+    if (!enabled) return;
     if (getPlatform() !== "darwin") return;
     window.electronAPI?.checkMicrophoneAccess?.().then((result) => {
       if (result) setMicPermissionGranted(result.granted);
     });
-  }, [setMicPermissionGranted]);
+  }, [enabled, setMicPermissionGranted]);
 
   // On macOS, re-validate accessibility permission on mount to override stale
   // localStorage values (e.g. after app update changes the code signature).
   useEffect(() => {
+    if (!enabled) return;
     if (getPlatform() !== "darwin") return;
     window.electronAPI?.checkAccessibilityPermission?.(true).then((granted) => {
       setAccessibilityPermissionGranted(granted);
     });
-  }, [setAccessibilityPermissionGranted]);
+  }, [enabled, setAccessibilityPermissionGranted]);
 
   // Poll for accessibility permission changes on macOS (e.g. user grants in System Settings)
   useEffect(() => {
+    if (!enabled) return;
     if (getPlatform() !== "darwin") return;
     if (accessibilityPermissionGranted) {
       setAccessibilityTroubleshooting(false);
@@ -331,7 +341,7 @@ export const usePermissions = (
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [accessibilityPermissionGranted, setAccessibilityPermissionGranted]);
+  }, [accessibilityPermissionGranted, enabled, setAccessibilityPermissionGranted]);
 
   return {
     micPermissionGranted,
