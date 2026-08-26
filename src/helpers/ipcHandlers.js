@@ -6,8 +6,6 @@ const crypto = require("crypto");
 const debugLogger = require("./debugLogger");
 const { createSecureHandler, createSecureListener } = require("./ipcSecurity");
 const { openExternalUrl } = require("./windowSecurity");
-const { ProviderService } = require("./providerService");
-const { registerProviderIpc } = require("./ipc/registerProviderIpc");
 const { registerAuthIpc } = require("./ipc/registerAuthIpc");
 const { registerSyncIpc } = require("./ipc/registerSyncIpc");
 const { registerUpdateIpc } = require("./ipc/registerUpdateIpc");
@@ -21,12 +19,9 @@ const DeepgramStreaming = require("./deepgramStreaming");
 const CortiStreaming = require("./cortiStreaming");
 const OpenAIRealtimeStreaming = require("./openaiRealtimeStreaming");
 const { getCortiToken } = require("./cortiAuth");
-const { createTinfoilRealtimeSocket } = require("./tinfoilSecureClient");
 const AudioStorageManager = require("./audioStorage");
 const { supportsRecordingIsland } = require("./recordingIslandSupport");
 
-// Tinfoil's only realtime STT model — fallback when the renderer omits one.
-const TINFOIL_REALTIME_MODEL = "voxtral-mini-4b-realtime";
 const liveSpeakerIdentifier = require("./liveSpeakerIdentifier");
 const MeetingEchoLeakDetector = require("./meetingEchoLeakDetector");
 const { partitionPendingMicFinals, isWithinRetractWindow } = require("./meetingMicHoldback");
@@ -181,7 +176,6 @@ class IPCHandlers {
             })
           : handler
       );
-    this.providerService = new ProviderService(this.environmentManager);
     this._authGeneration = 0;
     this.desktopAuthManager?.on?.("status", (status) => {
       this._authGeneration += 1;
@@ -716,7 +710,6 @@ class IPCHandlers {
   }
 
   setupHandlers() {
-    registerProviderIpc({ handle: this._handle, providerService: this.providerService });
     registerAuthIpc({ handle: this._handle, host: this });
     registerSyncIpc({ handle: this._handle, host: this });
     registerUpdateIpc({
@@ -4663,24 +4656,13 @@ class IPCHandlers {
             mode: options.mode,
             provider: options.provider,
           });
-          if (options.provider === "tinfoil-realtime") {
-            const model = options.model || TINFOIL_REALTIME_MODEL;
-            await streaming.connect({
-              apiKey,
-              model,
-              // The capture worklet emits 16kHz PCM; declare the true rate.
-              inputRate: 16000,
-              createSocket: () => createTinfoilRealtimeSocket({ model, apiKey }),
-            });
-          } else {
-            await streaming.connect({
-              apiKey,
-              model: options.model || "gpt-4o-mini-transcribe",
-              // OpenAI rejects rates below 24kHz; the 16kHz capture is upsampled instead.
-              captureRate: 16000,
-              preconfigured: isCloud,
-            });
-          }
+          await streaming.connect({
+            apiKey,
+            model: options.model || "gpt-4o-mini-transcribe",
+            // OpenAI rejects rates below 24kHz; the 16kHz capture is upsampled instead.
+            captureRate: 16000,
+            preconfigured: isCloud,
+          });
         } catch (err) {
           if (this._dictationStreaming === streaming) this._dictationStreaming = null;
           throw err;

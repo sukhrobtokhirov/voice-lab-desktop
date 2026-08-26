@@ -6,10 +6,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import VoiceLabIcon from "./ui/VoiceLabIcon";
 import { useUsage, type UseUsageResult } from "../hooks/useUsage";
 import { getCachedPlatform } from "../utils/platform";
-import { VOICELAB_AI_ENABLED } from "../lib/features";
 import historyIcon from "../assets/icons/history.svg";
 import bookmarkIcon from "../assets/icons/bookmark.svg";
-import speechToTextIcon from "../assets/icons/speech-to-text.svg";
 import settingsIcon from "../assets/icons/settings.svg";
 import downloadIcon from "../assets/icons/download.svg";
 import sidebarOpenIcon from "../assets/icons/sidebar-open.svg";
@@ -24,7 +22,7 @@ export const CONTROL_PANEL_SIDEBAR_WIDTH_PX = 240;
 export const CONTROL_PANEL_SIDEBAR_RAIL_WIDTH_PX = 88;
 
 export type ControlPanelView =
-  "home" | "chat" | "personal-notes" | "dictionary" | "upload" | "integrations";
+  "home" | "personal-notes" | "dictionary" | "upload" | "integrations";
 
 interface ControlPanelSidebarProps {
   activeView: ControlPanelView;
@@ -344,15 +342,6 @@ export default function ControlPanelSidebar({
       label: t("desktop.nav.vocabulary", { defaultValue: "Vocabulary" }),
       icon: bookmarkIcon,
     },
-    ...(VOICELAB_AI_ENABLED
-      ? [
-          {
-            id: "chat" as const,
-            label: "VoiceLab AI",
-            icon: speechToTextIcon,
-          },
-        ]
-      : []),
     {
       id: "personal-notes" as const,
       label: t("sidebar.notes", { defaultValue: "Notes" }),

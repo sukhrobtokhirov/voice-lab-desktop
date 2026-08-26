@@ -34,11 +34,7 @@ import {
 import { cn } from "../lib/utils";
 import type { NoteItem, FolderItem } from "../../types/electron";
 import { displayFolderName } from "./shared";
-import type { ActionProcessingState } from "../../hooks/useActionProcessing";
-import ActionProcessingOverlay from "./ActionProcessingOverlay";
 import NoteBottomBar from "./NoteBottomBar";
-import EmbeddedChat, { type EmbeddedChatMode } from "./EmbeddedChat";
-import { useEmbeddedChat } from "../../hooks/useEmbeddedChat";
 import { normalizeDbDate } from "../../utils/dateFormatting";
 import { parseTranscriptSegments } from "../../utils/parseTranscriptSegments";
 import {
@@ -160,9 +156,6 @@ interface NoteEditorProps {
   onExportNote?: (format: "md" | "txt") => void;
   onExportTranscript?: (format: "txt" | "srt" | "json" | "md") => void;
   enhancement?: Enhancement;
-  actionPicker?: React.ReactNode;
-  actionProcessingState?: ActionProcessingState;
-  actionName?: string | null;
   diarizationSessionId?: string | null;
   onLiveSpeakerLock?: (speakerId: string, displayName: string) => void;
   sessionDiarizationEnabled?: boolean;
@@ -189,9 +182,6 @@ export default function NoteEditor({
   onExportNote,
   onExportTranscript,
   enhancement,
-  actionPicker,
-  actionProcessingState,
-  actionName,
   diarizationSessionId,
   onLiveSpeakerLock,
   sessionDiarizationEnabled,
@@ -207,7 +197,6 @@ export default function NoteEditor({
 }: NoteEditorProps) {
   const { t } = useTranslation();
   const [viewMode, setViewMode] = useState<MeetingViewMode>("raw");
-  const [chatMode, setChatMode] = useState<EmbeddedChatMode>("hidden");
   const [folderSearch, setFolderSearch] = useState("");
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -223,16 +212,8 @@ export default function NoteEditor({
   const editorRef = useRef<Editor | null>(null);
   const displaySegmentsRef = useRef<TranscriptSegment[]>([]);
 
-  const embeddedChat = useEmbeddedChat({
-    noteId: note.id,
-    folderId: note.folder_id,
-    noteTitle: note.title,
-    noteContent: note.content,
-    noteTranscript: note.transcript ?? undefined,
-  });
   const titleRef = useRef<HTMLDivElement>(null);
   const prevNoteIdRef = useRef<number>(note.id);
-  const autoShowDoneRef = useRef(false);
 
   const segmentContainerRef = useRef<HTMLDivElement>(null);
   const [indicatorStyle, setIndicatorStyle] = useState<React.CSSProperties>({ opacity: 0 });
@@ -315,24 +296,10 @@ export default function NoteEditor({
     return () => observer.disconnect();
   }, [updateSegmentIndicator]);
 
-  const prevProcessingStateRef = useRef(actionProcessingState);
-  useEffect(() => {
-    let cancelScheduledUpdate: (() => void) | undefined;
-
-    if (prevProcessingStateRef.current === "processing" && actionProcessingState === "success") {
-      cancelScheduledUpdate = scheduleUiUpdate(() => setViewMode("enhanced"));
-    }
-    prevProcessingStateRef.current = actionProcessingState;
-
-    return cancelScheduledUpdate;
-  }, [actionProcessingState, scheduleUiUpdate]);
-
   useEffect(() => {
     if (note.id !== prevNoteIdRef.current) {
       prevNoteIdRef.current = note.id;
-      autoShowDoneRef.current = false;
       return scheduleUiUpdate(() => {
-        setChatMode("hidden");
         setDiarizedSegments(null);
         setIsDiarizing(false);
         setSpeakerMappings({});
@@ -355,17 +322,6 @@ export default function NoteEditor({
     });
     refreshSpeakerProfiles();
   }, [note.id, refreshSpeakerProfiles]);
-
-  useEffect(() => {
-    if (
-      !autoShowDoneRef.current &&
-      embeddedChat.activeConversationId &&
-      embeddedChat.messages.length > 0
-    ) {
-      autoShowDoneRef.current = true;
-      return scheduleUiUpdate(() => setChatMode("floating"));
-    }
-  }, [embeddedChat.activeConversationId, embeddedChat.messages.length, scheduleUiUpdate]);
 
   useEffect(() => {
     if (titleRef.current && titleRef.current.textContent !== note.title) {
@@ -608,22 +564,6 @@ export default function NoteEditor({
     },
     [enhancement]
   );
-
-  const handleAskSubmit = useCallback(
-    (text: string) => {
-      if (chatMode === "hidden") {
-        setChatMode("floating");
-      }
-      embeddedChat.sendMessage(text);
-    },
-    [chatMode, embeddedChat]
-  );
-
-  const handleChatInputFocus = useCallback(() => {
-    if (chatMode === "hidden") {
-      setChatMode("floating");
-    }
-  }, [chatMode]);
 
   const noteDate = formatNoteDate(note.created_at);
   const shortDate = formatShortDate(note.created_at);
@@ -977,14 +917,9 @@ export default function NoteEditor({
                 onChange={handleContentChange}
                 editorRef={editorRef}
                 placeholder={t("notes.editor.startWriting")}
-                disabled={actionProcessingState === "processing"}
               />
             )}
           </div>
-          <ActionProcessingOverlay
-            state={actionProcessingState ?? "idle"}
-            actionName={actionName ?? null}
-          />
           <div
             className="absolute bottom-0 left-0 right-0 h-20 pointer-events-none"
             style={{
@@ -1008,41 +943,9 @@ export default function NoteEditor({
             isProcessing={isProcessing}
             onStartRecording={onStartRecording}
             onStopRecording={onStopRecording}
-            onAskSubmit={handleAskSubmit}
-            onInputFocus={handleChatInputFocus}
-            actionPicker={isRecording ? undefined : actionPicker}
-            hideInput={chatMode !== "hidden"}
           />
-          {chatMode === "floating" && (
-            <EmbeddedChat
-              mode="floating"
-              onModeChange={setChatMode}
-              messages={embeddedChat.messages}
-              agentState={embeddedChat.agentState}
-              onTextSubmit={embeddedChat.sendMessage}
-              onCancel={embeddedChat.cancelStream}
-              noteConversations={embeddedChat.noteConversations}
-              activeConversationId={embeddedChat.activeConversationId}
-              onSwitchConversation={embeddedChat.switchConversation}
-              onNewChat={embeddedChat.startNewChat}
-            />
-          )}
         </div>
       </div>
-      {chatMode === "sidebar" && (
-        <EmbeddedChat
-          mode="sidebar"
-          onModeChange={setChatMode}
-          messages={embeddedChat.messages}
-          agentState={embeddedChat.agentState}
-          onTextSubmit={embeddedChat.sendMessage}
-          onCancel={embeddedChat.cancelStream}
-          noteConversations={embeddedChat.noteConversations}
-          activeConversationId={embeddedChat.activeConversationId}
-          onSwitchConversation={embeddedChat.switchConversation}
-          onNewChat={embeddedChat.startNewChat}
-        />
-      )}
       {SHARING_ENABLED && note.cloud_id && (
         <ShareNoteDialog open={shareDialogOpen} onOpenChange={setShareDialogOpen} note={note} />
       )}

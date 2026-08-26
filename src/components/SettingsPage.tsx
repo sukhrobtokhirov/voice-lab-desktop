@@ -12,10 +12,6 @@ import {
   Sun,
   Moon,
   Monitor,
-  Cloud,
-  Network,
-  Sparkles,
-  AlertTriangle,
   Loader2,
   Check,
   Mail,
@@ -25,11 +21,6 @@ import {
   Copy,
   Trash2,
   Info,
-  MessageSquare,
-  FileAudio,
-  Wand2,
-  Upload,
-  Languages,
   ExternalLink,
 } from "lucide-react";
 import { AUTH_URL, signOut, deleteAccount, type VoiceLabUser } from "../lib/auth";
@@ -56,32 +47,20 @@ import { useSystemAudioPermission } from "../hooks/useSystemAudioPermission";
 import { useClipboard } from "../hooks/useClipboard";
 import { useUpdater } from "../hooks/useUpdater";
 
-import PromptStudio from "./ui/PromptStudio";
-import { ProviderTabs } from "./ui/ProviderTabs";
 import { HotkeyListInput } from "./ui/HotkeyListInput";
 import { useHotkeyRegistration } from "../hooks/useHotkeyRegistration";
 import { useHotkeyModeInfo } from "../hooks/useHotkeyModeInfo";
-import { useLocalStorage } from "../hooks/useLocalStorage";
 import { validateHotkeyForSlot } from "../utils/hotkeyValidation";
 import { getPlatform, getCachedPlatform } from "../utils/platform";
 import { formatHotkeyLabel } from "../utils/hotkeys";
 import { ActivationModeSelector } from "./ui/ActivationModeSelector";
 import LinuxPttSetupInfo from "./ui/LinuxPttSetupInfo";
 import { Toggle } from "./ui/toggle";
-import DeveloperSection from "./DeveloperSection";
-import ChatAgentSettings from "./settings/ChatAgentSettings";
-import DictationAgentSettings from "./settings/DictationAgentSettings";
-import DictationTranslationSettings from "./settings/DictationTranslationSettings";
-import InferenceConfigEditor from "./settings/InferenceConfigEditor";
-import { MeetingTranscriptionPanel } from "./settings/MeetingSettings";
-import { UploadTranscriptionPanel } from "./settings/UploadSettings";
 import LanguageSelector from "./ui/LanguageSelector";
 import type { LanguageOption } from "../config/desktopLanguageOptions";
 import { Skeleton } from "./ui/skeleton";
-import { Progress } from "./ui/progress";
 import { useToast } from "./ui/useToast";
 import { useTheme } from "../hooks/useTheme";
-import type { GpuDevice, InferenceMode } from "../types/electron";
 import logger from "../utils/logger";
 import { SettingsRow } from "./ui/SettingsSection";
 import { useSettingsLayout } from "./ui/useSettingsLayout";
@@ -90,14 +69,14 @@ import type { UseUsageResult } from "../hooks/useUsage";
 import { cn } from "./lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { formatBytes } from "../utils/formatBytes";
-import { useSettingsStore } from "../stores/settingsStore";
 import { canManageSystemAudioInApp } from "../utils/systemAudioAccess";
 import WorkspaceSection from "./settings/WorkspaceSection";
 import { WORKSPACES_ENABLED } from "../lib/features";
 import VoiceLabIcon from "./ui/VoiceLabIcon";
-import notesIcon from "../assets/icons/notes.svg";
 import shieldIcon from "../assets/icons/shield.svg";
 import folderOpenIcon from "../assets/icons/folder-open.svg";
+import DeveloperSection from "./DeveloperSection";
+import notesIcon from "../assets/icons/notes.svg";
 
 const formatAmount = (cents: number, currency: string) =>
   (cents / 100).toLocaleString(undefined, { style: "currency", currency });
@@ -108,15 +87,12 @@ export type SettingsSectionType =
   | "workspace"
   | "general"
   | "hotkeys"
-  | "speechToText"
-  | "llms"
   | "privacyData"
   | "system";
 
 interface SettingsPageProps {
   activeSection?: SettingsSectionType;
   onNavigateToSection?: (section: SettingsSectionType) => void;
-  /** When a legacy section ID was used (e.g. `meetings`), land on the matching sub-tab. */
   initialSubTab?: string;
   /** The already-hydrated root auth state prevents a second account-loading pass. */
   auth: {
@@ -141,10 +117,8 @@ const UI_LANGUAGE_OPTIONS: LanguageOption[] = [
   { value: "zh-TW", label: "繁體中文", flag: "🇹🇼" },
 ];
 
-// Keep support tooling implemented without exposing it in customer settings.
+// Maintenance tooling stays implemented for support, but is not part of the customer UI.
 const SHOW_SYSTEM_MAINTENANCE_TOOLS = false;
-// This section remains implemented for a future return, but is intentionally unavailable for now.
-const SHOW_PRIVACY_SETTINGS = false;
 
 const noop = () => {};
 
@@ -194,348 +168,6 @@ function SectionHeader({
   );
 }
 
-function TranscriptionSection({
-  showTranscriptionPreview,
-  setShowTranscriptionPreview,
-}: {
-  showTranscriptionPreview: boolean;
-  setShowTranscriptionPreview: (value: boolean) => void;
-}) {
-  const { t } = useTranslation();
-
-  // VoiceLab Cloud is the only desktop speech transcription route.
-  return (
-    <div className="space-y-4">
-      <SettingsPanel>
-        <SettingsPanelRow>
-          <div className="flex items-start gap-3 w-full">
-            <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-              <Cloud className="w-4 h-4 text-primary" />
-            </div>
-            <div className="min-w-0 flex-1 space-y-1">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-foreground">
-                  {t("settingsPage.transcription.modes.openwhispr")}
-                </p>
-                <Badge variant="success">VoiceLab</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {t("settingsPage.transcription.modes.openwhisprDesc")}
-              </p>
-            </div>
-          </div>
-        </SettingsPanelRow>
-      </SettingsPanel>
-
-      <SettingsPanel>
-        <SettingsPanelRow>
-          <SettingsRow
-            label={t("settingsPage.transcription.transcriptionPreview")}
-            description={t("settingsPage.transcription.transcriptionPreviewDescription")}
-          >
-            <Toggle checked={showTranscriptionPreview} onChange={setShowTranscriptionPreview} />
-          </SettingsRow>
-        </SettingsPanelRow>
-      </SettingsPanel>
-    </div>
-  );
-}
-
-interface AiModelsSectionProps {
-  useCleanupModel: boolean;
-  setUseCleanupModel: (value: boolean) => void;
-  toast: (opts: {
-    title: string;
-    description: string;
-    variant?: "default" | "destructive" | "success";
-    duration?: number;
-  }) => void;
-}
-
-const CLEANUP_MODE_TOAST_KEY: Record<InferenceMode, string> = {
-  openwhispr: "switchedCloud",
-  voicelab: "switchedCloud",
-  providers: "switchedProviders",
-  local: "switchedLocal",
-  "self-hosted": "switchedSelfHosted",
-  enterprise: "switchedEnterprise",
-};
-
-function NoteFormattingSettings() {
-  const { t } = useTranslation();
-  const autoGenerateNoteTitle = useSettingsStore((s) => s.autoGenerateNoteTitle);
-  const setAutoGenerateNoteTitle = useSettingsStore((s) => s.setAutoGenerateNoteTitle);
-
-  return (
-    <div className="space-y-4">
-      <SettingsPanel>
-        <SettingsPanelRow>
-          <SettingsRow
-            label={t("settingsPage.noteFormatting.autoGenerateTitle")}
-            description={t("settingsPage.noteFormatting.autoGenerateTitleDescription")}
-          >
-            <Toggle checked={autoGenerateNoteTitle} onChange={setAutoGenerateNoteTitle} />
-          </SettingsRow>
-        </SettingsPanelRow>
-      </SettingsPanel>
-      <InferenceConfigEditor scope="noteFormatting" />
-    </div>
-  );
-}
-
-function AiModelsSection({ useCleanupModel, setUseCleanupModel, toast }: AiModelsSectionProps) {
-  const { t } = useTranslation();
-
-  const handleCleanupModeChange = (mode: InferenceMode) => {
-    const toastKey = CLEANUP_MODE_TOAST_KEY[mode];
-    toast({
-      title: t(`settingsPage.aiModels.toasts.${toastKey}.title`),
-      description: t(`settingsPage.aiModels.toasts.${toastKey}.description`),
-      variant: "success",
-      duration: 3000,
-    });
-  };
-
-  return (
-    <div className="space-y-4">
-      <SettingsPanel>
-        <SettingsPanelRow>
-          <SettingsRow
-            label={t("settingsPage.aiModels.enableTextCleanup")}
-            description={t("settingsPage.aiModels.enableTextCleanupDescription")}
-          >
-            <Toggle checked={useCleanupModel} onChange={setUseCleanupModel} />
-          </SettingsRow>
-        </SettingsPanelRow>
-      </SettingsPanel>
-
-      {useCleanupModel && (
-        <>
-          <InferenceConfigEditor scope="dictationCleanup" onModeChange={handleCleanupModeChange} />
-          <GpuDeviceSelector purpose="intelligence" />
-        </>
-      )}
-    </div>
-  );
-}
-
-type SpeechTab = "dictation" | "noteRecording" | "upload";
-type LlmTab =
-  | "dictationCleanup"
-  | "dictationAgent"
-  | "dictationTranslation"
-  | "noteFormatting"
-  | "chatIntelligence";
-
-const SPEECH_TABS: SpeechTab[] = ["dictation", "noteRecording", "upload"];
-const LLM_TABS: LlmTab[] = [
-  "dictationCleanup",
-  "dictationAgent",
-  "dictationTranslation",
-  "noteFormatting",
-  "chatIntelligence",
-];
-
-function useSubTab<T extends string>(storageKey: string, options: readonly T[], initial?: T) {
-  const [tab, setTab] = useLocalStorage<T>(storageKey, initial ?? options[0]);
-  useEffect(() => {
-    if (initial && initial !== tab) setTab(initial);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initial]);
-  const safeTab = options.includes(tab) ? tab : options[0];
-  return [safeTab, setTab] as const;
-}
-
-function VADLabelWithInfo({ label, description }: { label: string; description: string }) {
-  return (
-    <div className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
-      <span>{label}</span>
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            className="inline-flex items-center justify-center rounded-sm text-muted-foreground hover:text-foreground transition-colors"
-            aria-label={label}
-          >
-            <Info className="h-3.5 w-3.5" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent side="top" align="start" className="max-w-sm p-3">
-          <p className="text-xs leading-relaxed text-muted-foreground">{description}</p>
-        </PopoverContent>
-      </Popover>
-    </div>
-  );
-}
-
-function TabPanel({ active, children }: { active: boolean; children: React.ReactNode }) {
-  return <div className={active ? undefined : "hidden"}>{children}</div>;
-}
-
-function SpeechToTextTabs({
-  initialTab,
-  renderDictation,
-  renderNoteRecording,
-  renderUpload,
-}: {
-  initialTab?: SpeechTab;
-  renderDictation: () => React.ReactNode;
-  renderNoteRecording: () => React.ReactNode;
-  renderUpload: () => React.ReactNode;
-}) {
-  const { t } = useTranslation();
-  const [tab, setTab] = useSubTab<SpeechTab>("settings.speechToTextTab", SPEECH_TABS, initialTab);
-
-  const subTabs = [
-    { id: "dictation", name: t("settingsPage.speechToText.tabs.dictation") },
-    { id: "noteRecording", name: t("settingsPage.speechToText.tabs.noteRecording") },
-    { id: "upload", name: t("settingsPage.speechToText.tabs.upload") },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <SectionHeader
-        title={t("settingsPage.speechToText.title")}
-        description={t("settingsPage.speechToText.description")}
-      />
-      <ProviderTabs
-        providers={subTabs}
-        selectedId={tab}
-        onSelect={(id) => setTab(id as SpeechTab)}
-        renderIcon={(id) =>
-          id === "dictation" ? (
-            <Mic className="w-3.5 h-3.5" />
-          ) : id === "upload" ? (
-            <Upload className="w-3.5 h-3.5" />
-          ) : (
-            <FileAudio className="w-3.5 h-3.5" />
-          )
-        }
-      />
-      <TabPanel active={tab === "dictation"}>{renderDictation()}</TabPanel>
-      <TabPanel active={tab === "noteRecording"}>{renderNoteRecording()}</TabPanel>
-      <TabPanel active={tab === "upload"}>{renderUpload()}</TabPanel>
-    </div>
-  );
-}
-
-function LlmsTabs({
-  initialTab,
-  renderDictationCleanup,
-  renderDictationAgent,
-  renderDictationTranslation,
-  renderNoteFormatting,
-  renderChatIntelligence,
-}: {
-  initialTab?: LlmTab;
-  renderDictationCleanup: () => React.ReactNode;
-  renderDictationAgent: () => React.ReactNode;
-  renderDictationTranslation: () => React.ReactNode;
-  renderNoteFormatting: () => React.ReactNode;
-  renderChatIntelligence: () => React.ReactNode;
-}) {
-  const { t } = useTranslation();
-  const [tab, setTab] = useSubTab<LlmTab>("settings.llmsTab", LLM_TABS, initialTab);
-
-  const subTabs = [
-    { id: "dictationCleanup", name: t("settingsPage.llms.tabs.dictationCleanup") },
-    { id: "dictationAgent", name: t("settingsPage.llms.tabs.dictationAgent") },
-    { id: "dictationTranslation", name: t("settingsPage.llms.tabs.dictationTranslation") },
-    { id: "noteFormatting", name: t("settingsPage.llms.tabs.noteFormatting") },
-    { id: "chatIntelligence", name: t("settingsPage.llms.tabs.chatIntelligence") },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <SectionHeader
-        title={t("settingsPage.llms.title")}
-        description={t("settingsPage.llms.description")}
-      />
-      <ProviderTabs
-        providers={subTabs}
-        selectedId={tab}
-        onSelect={(id) => setTab(id as LlmTab)}
-        renderIcon={(id) => {
-          if (id === "dictationCleanup") return <Wand2 className="w-3.5 h-3.5" />;
-          if (id === "dictationAgent") return <Sparkles className="w-3.5 h-3.5" />;
-          if (id === "dictationTranslation") return <Languages className="w-3.5 h-3.5" />;
-          if (id === "noteFormatting") return <VoiceLabIcon source={notesIcon} className="w-3.5 h-3.5" />;
-          return <MessageSquare className="w-3.5 h-3.5" />;
-        }}
-      />
-      <TabPanel active={tab === "dictationCleanup"}>{renderDictationCleanup()}</TabPanel>
-      <TabPanel active={tab === "dictationAgent"}>{renderDictationAgent()}</TabPanel>
-      <TabPanel active={tab === "dictationTranslation"}>{renderDictationTranslation()}</TabPanel>
-      <TabPanel active={tab === "noteFormatting"}>{renderNoteFormatting()}</TabPanel>
-      <TabPanel active={tab === "chatIntelligence"}>{renderChatIntelligence()}</TabPanel>
-    </div>
-  );
-}
-
-function GpuDeviceSelector({ purpose }: { purpose: "intelligence" }) {
-  const { t } = useTranslation();
-  const [gpus, setGpus] = useState<GpuDevice[]>([]);
-  const [selectedUuid, setSelectedUuid] = useState("");
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    Promise.all([
-      window.electronAPI?.listGpus?.() ?? Promise.resolve([]),
-      window.electronAPI?.getGpuDeviceIndex?.(purpose) ?? Promise.resolve(""),
-    ])
-      .then(([gpuList, savedUuid]) => {
-        setGpus(gpuList);
-        setSelectedUuid(savedUuid || gpuList[0]?.uuid || "");
-        setLoaded(true);
-      })
-      .catch(() => setLoaded(true));
-  }, [purpose]);
-
-  if (!loaded || gpus.length < 2) return null;
-
-  return (
-    <div className="border-t border-border/40 pt-4 mt-4">
-      <SectionHeader
-        title={t(`settingsPage.${purpose}.gpuDevice.title`)}
-        description={t(`settingsPage.${purpose}.gpuDevice.description`)}
-      />
-      <SettingsPanel>
-        <SettingsPanelRow>
-          <div className="relative w-full">
-            <select
-              value={selectedUuid}
-              onChange={async (e) => {
-                const uuid = e.target.value;
-                setSelectedUuid(uuid);
-                await window.electronAPI?.setGpuDeviceIndex?.(purpose, uuid);
-              }}
-              className="w-full appearance-none rounded-md border border-border bg-background px-3 pr-10 py-2 text-sm"
-            >
-              {gpus.map((gpu) => (
-                <option key={gpu.uuid} value={gpu.uuid}>
-                  GPU {gpu.index}: {gpu.name} ({Math.round(gpu.vramMb / 1024)}GB)
-                </option>
-              ))}
-            </select>
-            <svg
-              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </div>
-        </SettingsPanelRow>
-      </SettingsPanel>
-    </div>
-  );
-}
-
 export default function SettingsPage({
   activeSection = "general",
   onNavigateToSection,
@@ -556,7 +188,7 @@ export default function SettingsPage({
   const {
     uiLanguage,
     preferredLanguage,
-    useCleanupModel,
+    updateTranscriptionSettings,
     dictationKey,
     activationMode,
     setActivationMode,
@@ -566,13 +198,9 @@ export default function SettingsPage({
     setPreferBuiltInMic,
     setSelectedMicDevice,
     setUiLanguage,
-    setUseCleanupModel,
     setDictationKey,
-    meetingKey,
     autoLearnCorrections,
     setAutoLearnCorrections,
-    updateTranscriptionSettings,
-    updateCleanupSettings,
     notificationsEnabled,
     setNotificationsEnabled,
     notifyMeetingDetection,
@@ -585,8 +213,6 @@ export default function SettingsPage({
     setAudioCuesEnabled,
     pauseMediaOnDictation,
     setPauseMediaOnDictation,
-    showTranscriptionPreview,
-    setShowTranscriptionPreview,
     autoPasteEnabled,
     setAutoPasteEnabled,
     keepTranscriptionInClipboard,
@@ -611,35 +237,14 @@ export default function SettingsPage({
     setNoteFilesEnabled,
     noteFilesPath,
     setNoteFilesPath,
-    dictationSileroEnabled,
-    setDictationSileroEnabled,
-    noteRecordingSileroEnabled,
-    setNoteRecordingSileroEnabled,
-    meetingSileroEnabled,
-    setMeetingSileroEnabled,
-    whisperVadThreshold,
-    setWhisperVadThreshold,
-    whisperVadMinSpeechDurationMs,
-    setWhisperVadMinSpeechDurationMs,
-    whisperVadMinSilenceDurationMs,
-    setWhisperVadMinSilenceDurationMs,
-    whisperVadMaxSpeechDurationS,
-    setWhisperVadMaxSpeechDurationS,
-    whisperVadSpeechPadMs,
-    setWhisperVadSpeechPadMs,
-    whisperVadSamplesOverlap,
-    setWhisperVadSamplesOverlap,
   } = useSettings();
-
-  const chatAgentKey = useSettingsStore((s) => s.chatAgentKey);
-  const voiceAgentKey = useSettingsStore((s) => s.voiceAgentKey);
-  const translationKey = useSettingsStore((s) => s.translationKey);
 
   const { t } = useTranslation();
   const { toast } = useToast();
 
   const [currentVersion, setCurrentVersion] = useState<string>("");
-  const [isRemovingModels, setIsRemovingModels] = useState(false);
+  const isRemovingModels = false;
+  const handleRemoveModels = () => {};
   const {
     status: updateStatus,
     info: updateInfo,
@@ -663,44 +268,24 @@ export default function SettingsPage({
   const permissionsHook = usePermissions(showAlertDialog, { enabled: isPreferencesSection });
   const systemAudio = useSystemAudioPermission({ enabled: isPreferencesSection });
   useClipboard(showAlertDialog);
-  const [audioStorageUsage, setAudioStorageUsage] = useState<{
-    fileCount: number;
-    totalBytes: number;
-  }>({ fileCount: 0, totalBytes: 0 });
+  const [audioStorageUsage, setAudioStorageUsage] = useState({ fileCount: 0, totalBytes: 0 });
 
   useEffect(() => {
     if (activeSection !== "privacyData") return;
     window.electronAPI
       ?.getAudioStorageUsage?.()
-      .then((usage: { fileCount: number; totalBytes: number }) => {
-        if (usage) setAudioStorageUsage(usage);
-      })
+      .then((usage: { fileCount: number; totalBytes: number }) => usage && setAudioStorageUsage(usage))
       .catch(() => {});
   }, [activeSection]);
-
-  // Lazy keep-alive: mount AI sections only after the user has visited them once,
-  // then keep them mounted so model-download progress and IPC listeners survive
-  // section switches. The setState-during-render pattern flips the flag in the
-  // same commit as the section change, so there's no blank frame on first visit.
-  const [hasMountedSpeechToText, setHasMountedSpeechToText] = useState(
-    activeSection === "speechToText"
-  );
-  const [hasMountedLlms, setHasMountedLlms] = useState(activeSection === "llms");
-  if (activeSection === "speechToText" && !hasMountedSpeechToText) {
-    setHasMountedSpeechToText(true);
-  }
-  if (activeSection === "llms" && !hasMountedLlms) {
-    setHasMountedLlms(true);
-  }
 
   const handleClearAllAudio = async () => {
     if (!window.electronAPI?.deleteAllAudio) return;
     try {
       await window.electronAPI.deleteAllAudio();
       setAudioStorageUsage({ fileCount: 0, totalBytes: 0 });
-      toast({ title: t("settingsPage.privacy.clearAllAudio"), variant: "default" });
+      toast({ title: t("settingsPage.privacy.clearAllAudio") });
     } catch {
-      // silent fail
+      // The next view refresh will report the current storage state.
     }
   };
 
@@ -749,18 +334,8 @@ export default function SettingsPage({
   });
 
   const validateDictationHotkey = useCallback(
-    (hotkey: string) =>
-      validateHotkeyForSlot(
-        hotkey,
-        {
-          "settingsPage.general.meetingHotkey.title": meetingKey,
-          "agentMode.settings.hotkey": chatAgentKey,
-          "settingsPage.general.voiceAgentHotkey.title": voiceAgentKey,
-          "settingsPage.general.translationHotkey.title": translationKey,
-        },
-        t
-      ),
-    [meetingKey, chatAgentKey, voiceAgentKey, translationKey, t]
+    (hotkey: string) => validateHotkeyForSlot(hotkey, {}, t),
+    [t]
   );
 
   const { isUsingNativeShortcut, isUsingHyprland, hyprlandConfigStatus, supportsPushToTalk } =
@@ -962,48 +537,6 @@ export default function SettingsPage({
     });
   };
 
-  const handleRemoveModels = useCallback(() => {
-    if (isRemovingModels) return;
-
-    showConfirmDialog({
-      title: t("settingsPage.developer.removeModels.title"),
-      description: t("settingsPage.developer.removeModels.description"),
-      confirmText: t("settingsPage.developer.removeModels.confirmText"),
-      variant: "destructive",
-      onConfirm: async () => {
-        setIsRemovingModels(true);
-        try {
-          const results = await Promise.allSettled([window.electronAPI?.modelDeleteAll?.()]);
-
-          const anyFailed = results.some(
-            (r) =>
-              r.status === "rejected" || (r.status === "fulfilled" && r.value && !r.value.success)
-          );
-
-          if (anyFailed) {
-            showAlertDialog({
-              title: t("settingsPage.developer.removeModels.failedTitle"),
-              description: t("settingsPage.developer.removeModels.failedDescription"),
-            });
-          } else {
-            window.dispatchEvent(new Event("openwhispr-models-cleared"));
-            showAlertDialog({
-              title: t("settingsPage.developer.removeModels.successTitle"),
-              description: t("settingsPage.developer.removeModels.successDescription"),
-            });
-          }
-        } catch {
-          showAlertDialog({
-            title: t("settingsPage.developer.removeModels.failedTitle"),
-            description: t("settingsPage.developer.removeModels.failedDescriptionShort"),
-          });
-        } finally {
-          setIsRemovingModels(false);
-        }
-      },
-    });
-  }, [isRemovingModels, showConfirmDialog, showAlertDialog, t]);
-
   const { isSignedIn, isLoaded, user } = auth;
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
@@ -1074,137 +607,9 @@ export default function SettingsPage({
     });
   }, [showConfirmDialog, showAlertDialog, t]);
 
-  const renderWhisperVadSettings = () => (
-    <div>
-      <SectionHeader
-        title={t("settingsPage.transcription.vad.title")}
-        description={t("settingsPage.transcription.vad.description")}
-      />
-      <SettingsPanel>
-        <SettingsPanelRow>
-          <SettingsRow
-            label={t("settingsPage.transcription.vad.toggles.dictation.title")}
-            description={t("settingsPage.transcription.vad.toggles.dictation.description")}
-          >
-            <Toggle checked={dictationSileroEnabled} onChange={setDictationSileroEnabled} />
-          </SettingsRow>
-        </SettingsPanelRow>
-        <SettingsPanelRow>
-          <SettingsRow
-            label={t("settingsPage.transcription.vad.toggles.noteRecording.title")}
-            description={t("settingsPage.transcription.vad.toggles.noteRecording.description")}
-          >
-            <Toggle checked={noteRecordingSileroEnabled} onChange={setNoteRecordingSileroEnabled} />
-          </SettingsRow>
-        </SettingsPanelRow>
-        <SettingsPanelRow>
-          <SettingsRow
-            label={t("settingsPage.transcription.vad.toggles.meeting.title")}
-            description={t("settingsPage.transcription.vad.toggles.meeting.description")}
-          >
-            <Toggle checked={meetingSileroEnabled} onChange={setMeetingSileroEnabled} />
-          </SettingsRow>
-        </SettingsPanelRow>
-        <SettingsPanelRow>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
-            <div className="space-y-1.5">
-              <VADLabelWithInfo
-                label={t("settingsPage.transcription.vad.fields.threshold.label")}
-                description={t("settingsPage.transcription.vad.fields.threshold.info")}
-              />
-              <Input
-                type="number"
-                step="0.01"
-                min="0.1"
-                max="0.95"
-                value={whisperVadThreshold}
-                onChange={(e) => setWhisperVadThreshold(Number(e.target.value))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <VADLabelWithInfo
-                label={t("settingsPage.transcription.vad.fields.minSpeechDurationMs.label")}
-                description={t("settingsPage.transcription.vad.fields.minSpeechDurationMs.info")}
-              />
-              <Input
-                type="number"
-                step="10"
-                min="50"
-                max="2000"
-                value={whisperVadMinSpeechDurationMs}
-                onChange={(e) => setWhisperVadMinSpeechDurationMs(Number(e.target.value))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <VADLabelWithInfo
-                label={t("settingsPage.transcription.vad.fields.minSilenceDurationMs.label")}
-                description={t("settingsPage.transcription.vad.fields.minSilenceDurationMs.info")}
-              />
-              <Input
-                type="number"
-                step="10"
-                min="50"
-                max="2000"
-                value={whisperVadMinSilenceDurationMs}
-                onChange={(e) => setWhisperVadMinSilenceDurationMs(Number(e.target.value))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <VADLabelWithInfo
-                label={t("settingsPage.transcription.vad.fields.maxSpeechDurationS.label")}
-                description={t("settingsPage.transcription.vad.fields.maxSpeechDurationS.info")}
-              />
-              <Input
-                type="number"
-                step="1"
-                min="5"
-                max="120"
-                value={whisperVadMaxSpeechDurationS}
-                onChange={(e) => setWhisperVadMaxSpeechDurationS(Number(e.target.value))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <VADLabelWithInfo
-                label={t("settingsPage.transcription.vad.fields.speechPadMs.label")}
-                description={t("settingsPage.transcription.vad.fields.speechPadMs.info")}
-              />
-              <Input
-                type="number"
-                step="10"
-                min="0"
-                max="1000"
-                value={whisperVadSpeechPadMs}
-                onChange={(e) => setWhisperVadSpeechPadMs(Number(e.target.value))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <VADLabelWithInfo
-                label={t("settingsPage.transcription.vad.fields.samplesOverlap.label")}
-                description={t("settingsPage.transcription.vad.fields.samplesOverlap.info")}
-              />
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                max="0.95"
-                value={whisperVadSamplesOverlap}
-                onChange={(e) => setWhisperVadSamplesOverlap(Number(e.target.value))}
-              />
-            </div>
-          </div>
-        </SettingsPanelRow>
-      </SettingsPanel>
-    </div>
-  );
-
   const renderSectionContent = () => {
-    if (!SHOW_PRIVACY_SETTINGS && activeSection === "privacyData") {
-      return null;
-    }
-
     switch (activeSection) {
       case "account":
-      case "plansBilling":
         return (
           <div className="space-y-5">
             {!isLoaded ? (
@@ -2210,10 +1615,6 @@ EOF`,
           </div>
         );
 
-      case "speechToText":
-      case "llms":
-        return null;
-
       case "privacyData":
         return (
           <div className="space-y-6">
@@ -2793,59 +2194,7 @@ EOF`,
         onOk={() => {}}
       />
 
-      <div className="mx-auto w-full max-w-3xl pb-6">
-        {/* Mounted on first visit and kept alive so model-download progress and IPC listeners survive section switches. */}
-        {hasMountedSpeechToText && (
-          <TabPanel active={activeSection === "speechToText"}>
-            <SpeechToTextTabs
-              initialTab={
-                activeSection === "speechToText"
-                  ? (initialSubTab as SpeechTab | undefined)
-                  : undefined
-              }
-              renderDictation={() => (
-                <div className="space-y-6">
-                  <TranscriptionSection
-                    showTranscriptionPreview={showTranscriptionPreview}
-                    setShowTranscriptionPreview={setShowTranscriptionPreview}
-                  />
-                </div>
-              )}
-              renderNoteRecording={() => (
-                <div className="space-y-6">
-                  <MeetingTranscriptionPanel />
-                </div>
-              )}
-              renderUpload={() => (
-                <div className="space-y-6">
-                  <UploadTranscriptionPanel />
-                </div>
-              )}
-            />
-          </TabPanel>
-        )}
-        {hasMountedLlms && (
-          <TabPanel active={activeSection === "llms"}>
-            <div className="space-y-4">
-              <SectionHeader
-                title={t("settingsPage.llms.title")}
-                description={t("settingsPage.llms.description")}
-              />
-              <SettingsPanel>
-                <SettingsPanelRow>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {t("settingsPage.llms.temporarilyDisabled", {
-                      defaultValue:
-                        "LLM provider settings are temporarily disabled. Speech uses VoiceLab Cloud only.",
-                    })}
-                  </p>
-                </SettingsPanelRow>
-              </SettingsPanel>
-            </div>
-          </TabPanel>
-        )}
-        {renderSectionContent()}
-      </div>
+      <div className="mx-auto w-full max-w-3xl pb-6">{renderSectionContent()}</div>
     </>
   );
 }

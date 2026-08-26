@@ -95,16 +95,18 @@ test("renderer branding and browser protocol guidance are VoiceLab-only", () => 
   }
 });
 
-test("VoiceLab AI remains hidden behind its disabled product flag", () => {
+test("retired AI navigation is absent from the desktop experience", () => {
   const features = read("src/lib/features.ts");
   const sidebar = read("src/components/ControlPanelSidebar.tsx");
   const controlPanel = read("src/components/ControlPanel.tsx");
   const history = read("src/components/HistoryView.tsx");
+  const router = read("src/AppRouter.jsx");
 
-  assert.match(features, /export const VOICELAB_AI_ENABLED = false/);
-  assert.match(sidebar, /VOICELAB_AI_ENABLED[\s\S]*label: "VoiceLab AI"/);
-  assert.match(controlPanel, /VOICELAB_AI_ENABLED && activeView === "chat"/);
-  assert.match(history, /VOICELAB_AI_ENABLED && !useCleanupModel/);
+  assert.doesNotMatch(features, /VOICELAB_AI_ENABLED/);
+  assert.doesNotMatch(sidebar, /VoiceLab AI|activeView: "chat"/);
+  assert.doesNotMatch(controlPanel, /ChatView|activeView === "chat"/);
+  assert.doesNotMatch(history, /useCleanupModel/);
+  assert.doesNotMatch(router, /AgentOverlay/);
 });
 
 test("usage UI uses the desktop entitlement and keeps website billing reachable", () => {

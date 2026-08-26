@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
 import {
   AlertTriangle,
-  Zap,
   ChevronLeft,
 } from "lucide-react";
 import PostMigrationOnboarding from "./PostMigrationOnboarding";
@@ -12,7 +11,6 @@ import { useDialogs } from "../hooks/useDialogs";
 import { useHotkey } from "../hooks/useHotkey";
 import { useToast } from "./ui/useToast";
 import { useUpdater } from "../hooks/useUpdater";
-import { useSettings } from "../hooks/useSettings";
 import { useAuth } from "../hooks/useAuth";
 import { useUsage } from "../hooks/useUsage";
 import { useCollapsibleSidebar } from "../hooks/useCollapsibleSidebar";
@@ -49,18 +47,15 @@ import {
   useActiveNoteId,
   initializeNotes,
 } from "../stores/noteStore";
-import { fetchProviders as fetchStreamingProviders } from "../stores/streamingProvidersStore";
-import { executeTranslationChain, shouldRunTranslateStep } from "../helpers/translationChain";
 import HistoryView from "./HistoryView";
 import BackgroundActionToastListener from "./notes/BackgroundActionToastListener";
 import { syncService } from "../services/SyncService.js";
-import logger from "../utils/logger";
 import AcceptInvitationModal from "./AcceptInvitationModal";
 import {
   consumePendingInvitationToken,
   clearPendingInvitationToken,
 } from "../utils/pendingInvitationToken";
-import { VOICELAB_AI_ENABLED, WORKSPACES_ENABLED } from "../lib/features";
+import { WORKSPACES_ENABLED } from "../lib/features";
 
 const platform = getCachedPlatform();
 
@@ -70,11 +65,14 @@ const platform = getCachedPlatform();
 const loadSettingsModal = () => import("./SettingsModal");
 const SettingsModal = React.lazy(loadSettingsModal);
 const ReferralModal = React.lazy(() => import("./ReferralModal"));
-const PersonalNotesView = React.lazy(() => import("./notes/PersonalNotesView"));
-const DictionaryView = React.lazy(() => import("./DictionaryView"));
-const UploadAudioView = React.lazy(() => import("./notes/UploadAudioView"));
-const IntegrationsView = React.lazy(() => import("./IntegrationsView"));
-const ChatView = React.lazy(() => import("./chat/ChatView"));
+const loadPersonalNotesView = () => import("./notes/PersonalNotesView");
+const loadDictionaryView = () => import("./DictionaryView");
+const loadUploadAudioView = () => import("./notes/UploadAudioView");
+const loadIntegrationsView = () => import("./IntegrationsView");
+const PersonalNotesView = React.lazy(loadPersonalNotesView);
+const DictionaryView = React.lazy(loadDictionaryView);
+const UploadAudioView = React.lazy(loadUploadAudioView);
+const IntegrationsView = React.lazy(loadIntegrationsView);
 const CommandSearch = React.lazy(() => import("./CommandSearch"));
 
 function PanelLoadingFallback() {
@@ -88,6 +86,35 @@ function PanelLoadingFallback() {
           <Skeleton className="mt-2 h-3 w-2/3" />
         </div>
       ))}
+    </div>
+  );
+}
+
+function ViewLoadingFallback({ view }: { view: "notes" | "dictionary" | "upload" | "integrations" }) {
+  if (view === "notes") {
+    return (
+      <div className="flex min-h-full w-full" aria-busy="true" aria-label="Loading notes">
+        <aside className="hidden w-60 shrink-0 border-r border-border/60 p-4 md:block">
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="mt-5 h-4 w-20" />
+          {[0, 1, 2].map((row) => <Skeleton key={row} className="mt-3 h-8 w-full" />)}
+        </aside>
+        <div className="min-w-0 flex-1 p-5">
+          <Skeleton className="h-7 w-44" />
+          <Skeleton className="mt-7 h-4 w-4/5" />
+          <Skeleton className="mt-3 h-4 w-3/5" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto min-h-full w-full max-w-5xl p-5" aria-busy="true" aria-label="Loading content">
+      <Skeleton className="h-7 w-40" />
+      <Skeleton className="mt-3 h-4 w-72 max-w-full" />
+      <div className="mt-7 space-y-3">
+        {[0, 1, 2].map((row) => <Skeleton key={row} className="h-14 w-full rounded-xl" />)}
+      </div>
     </div>
   );
 }
@@ -136,14 +163,10 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   const [settingsSection, setSettingsSection] = useState<string | undefined>(
     initialSettingsSection
   );
-  const [aiCTADismissed, setAiCTADismissed] = useState(
-    () => localStorage.getItem("aiCTADismissed") === "true"
-  );
   const [showReferrals, setShowReferrals] = useState(false);
   const [invitationToken, setInvitationToken] = useState<string | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const showDiscarded = useShowDiscarded();
-  const [showCloudMigrationBanner, setShowCloudMigrationBanner] = useState(false);
   const [savedDictationPage, setSavedDictationPage] = useState(0);
   const [hasMoreSavedDictations, setHasMoreSavedDictations] = useState(false);
   const [isLoadingMoreSavedDictations, setIsLoadingMoreSavedDictations] = useState(false);
@@ -165,26 +188,21 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     folderId: number;
     event: any;
   } | null>(null);
-  const [gpuAccelAvailable, setGpuAccelAvailable] = useState(false);
-  const [gpuBannerDismissed, setGpuBannerDismissed] = useState(
-    () => localStorage.getItem("gpuBannerDismissedUnified") === "true"
-  );
-  const cloudMigrationProcessed = useRef(false);
   const updateReadyToastShown = useRef(false);
   const updateErrorToastShown = useRef<Error | null>(null);
   const { hotkey } = useHotkey();
   const { toast } = useToast();
-  const { useCleanupModel, setUseLocalWhisper, setCloudTranscriptionMode } = useSettings();
   const { isSignedIn, isLoaded: authLoaded, user } = useAuth();
 
-  // Settings is opened often enough to justify warming its small code-split
-  // chunk once the primary screen is already usable. The timeout keeps the
-  // first render and initial transcription request ahead of this work.
+  // Optional views stay out of startup. Warm the screens most people open only
+  // after the history is usable, so their first navigation is immediate.
   useEffect(() => {
     if (isLoading) return;
     const timer = window.setTimeout(() => {
       void loadSettingsModal();
-    }, 600);
+      void loadPersonalNotesView();
+      void loadDictionaryView();
+    }, 700);
     return () => window.clearTimeout(timer);
   }, [isLoading]);
   const dataRetentionEnabled = useSettingsStore((state) => state.dataRetentionEnabled);
@@ -349,36 +367,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     }
   }, [authLoaded, isSignedIn]);
 
-  useEffect(() => {
-    if (!authLoaded || !isSignedIn || cloudMigrationProcessed.current) return;
-    const isPending = localStorage.getItem("pendingCloudMigration") === "true";
-    const alreadyShown = localStorage.getItem("cloudMigrationShown") === "true";
-    if (!isPending || alreadyShown) return;
-
-    cloudMigrationProcessed.current = true;
-    setUseLocalWhisper(false);
-    setCloudTranscriptionMode("openwhispr");
-    localStorage.removeItem("pendingCloudMigration");
-    setShowCloudMigrationBanner(true);
-  }, [authLoaded, isSignedIn, setUseLocalWhisper, setCloudTranscriptionMode]);
-
-  useEffect(() => {
-    if (platform === "darwin" || gpuBannerDismissed) return;
-    const detect = async () => {
-      let available = false;
-      if (useCleanupModel) {
-        try {
-          const [gpu, vulkan] = await Promise.all([
-            window.electronAPI?.detectVulkanGpu?.(),
-            window.electronAPI?.getLlamaVulkanStatus?.(),
-          ]);
-          available = Boolean(gpu?.available && !vulkan?.downloaded);
-        } catch {}
-      }
-      setGpuAccelAvailable(available);
-    };
-    detect();
-  }, [useCleanupModel, gpuBannerDismissed]);
 
   useEffect(() => {
     const drain = async () => {
@@ -426,10 +414,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       setShowSettings(true);
     });
     return () => cleanup?.();
-  }, []);
-
-  useEffect(() => {
-    fetchStreamingProviders();
   }, []);
 
   const handleMeetingRecordingRequestHandled = useCallback(
@@ -548,109 +532,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
           preferredLanguage: s.preferredLanguage,
         });
         if (result.success && result.transcription) {
-          const rawText = result.transcription.text;
-          let finalTranscription = result.transcription;
-
-          // A translation dictation must re-run cleanup-then-translate on retry, not plain cleanup.
-          let handledTranslation = false;
-          if (result.transcription.route_kind === "translation") {
-            handledTranslation = true;
-            try {
-              const [
-                { default: ReasoningService },
-                { resolveReasoningRoute },
-                { getEffectiveCleanupModel },
-              ] = await Promise.all([
-                import("../services/ReasoningService"),
-                import("../helpers/audioManager"),
-                import("../stores/settingsStore"),
-              ]);
-              const settings = useSettingsStore.getState();
-              const agentName = localStorage.getItem("agentName") || null;
-              const route = resolveReasoningRoute(rawText, settings, agentName, false, true);
-              if (route.kind === "translation") {
-                const { text } = await executeTranslationChain({
-                  text: rawText,
-                  cleanupReachable: route.cleanupReachable,
-                  runCleanup: (currentText: string) =>
-                    ReasoningService.processText(
-                      currentText,
-                      getEffectiveCleanupModel(),
-                      agentName,
-                      route.cleanupConfig
-                    ),
-                  runTranslate: (currentText: string) =>
-                    ReasoningService.processText(currentText, route.model, agentName, route.config),
-                  shouldTranslate: shouldRunTranslateStep(
-                    settings.translationSourceLanguage,
-                    settings.translationTargetLanguage
-                  ),
-                  onCleanupError: (cleanupError: Error) =>
-                    logger.warn(
-                      "Cleanup step failed in translation chain, translating raw transcript",
-                      { error: cleanupError.message },
-                      "transcription"
-                    ),
-                  onEmptyTranslate: () =>
-                    logger.warn(
-                      "Translation step returned empty text, keeping previous text",
-                      {},
-                      "transcription"
-                    ),
-                });
-                if (text !== rawText) {
-                  const updated = await window.electronAPI.updateTranscriptionText(
-                    id,
-                    text,
-                    rawText
-                  );
-                  if (updated.success && updated.transcription) {
-                    finalTranscription = updated.transcription;
-                  }
-                }
-              } else {
-                // Translation disabled/unreachable since recording — fall through to cleanup.
-                handledTranslation = false;
-              }
-            } catch {
-              // Reasoning failed — keep the raw STT result
-            }
-          }
-
-          // Apply AI reasoning if enabled
-          if (!handledTranslation && useCleanupModel) {
-            try {
-              const [
-                { default: ReasoningService },
-                { getEffectiveCleanupModel, isCloudCleanupMode, getSettings },
-              ] = await Promise.all([
-                import("../services/ReasoningService"),
-                import("../stores/settingsStore"),
-              ]);
-              const model = getEffectiveCleanupModel();
-              const isCloud = isCloudCleanupMode();
-              if (model || isCloud) {
-                const agentName = localStorage.getItem("agentName") || null;
-                const reasonedText = await ReasoningService.processText(rawText, model, agentName, {
-                  disableThinking: getSettings().cleanupDisableThinking,
-                });
-                if (reasonedText && reasonedText !== rawText) {
-                  const updated = await window.electronAPI.updateTranscriptionText(
-                    id,
-                    reasonedText,
-                    rawText
-                  );
-                  if (updated.success && updated.transcription) {
-                    finalTranscription = updated.transcription;
-                  }
-                }
-              }
-            } catch {
-              // Reasoning failed — keep the raw STT result
-            }
-          }
-
-          updateInStore(finalTranscription);
+          updateInStore(result.transcription);
           toast({
             title: t(
               options?.isRecover
@@ -672,7 +554,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
         });
       }
     },
-    [toast, t, useCleanupModel]
+    [toast, t]
   );
 
   const toggleShowDiscarded = useCallback(() => {
@@ -882,57 +764,11 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
             </div>
           )}
           <div className="flex-1 overflow-y-auto">
-            {gpuAccelAvailable && activeView === "home" && !gpuBannerDismissed && (
-              <div className="max-w-3xl mx-auto w-full mb-3">
-                <div className="rounded-lg border border-primary/20 dark:border-primary/15 bg-primary/5 p-3">
-                  <div className="flex items-start gap-3">
-                    <div className="shrink-0 w-8 h-8 rounded-md bg-primary/10 dark:bg-primary/15 flex items-center justify-center">
-                      <Zap size={16} className="text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground mb-0.5">
-                        {t("controlPanel.gpu.bannerTitle")}
-                      </p>
-                      <p className="text-xs text-muted-foreground mb-2">
-                        {t("controlPanel.gpu.bannerDescription")}
-                      </p>
-                      <div className="flex items-center gap-3">
-                        <Button
-                          variant="default"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => {
-                            setSettingsSection("intelligence");
-                            setShowSettings(true);
-                          }}
-                        >
-                          {t("controlPanel.gpu.enableButton")}
-                        </Button>
-                        <button
-                          onClick={() => {
-                            setGpuBannerDismissed(true);
-                            localStorage.setItem("gpuBannerDismissedUnified", "true");
-                          }}
-                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          {t("controlPanel.gpu.dismissButton")}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
             {activeView === "home" && (
               <HistoryView
                 history={history}
                 isLoading={isLoading}
                 hotkey={hotkey}
-                showCloudMigrationBanner={showCloudMigrationBanner}
-                setShowCloudMigrationBanner={setShowCloudMigrationBanner}
-                aiCTADismissed={aiCTADismissed}
-                setAiCTADismissed={setAiCTADismissed}
-                useCleanupModel={useCleanupModel}
                 copyToClipboard={copyToClipboard}
                 deleteTranscription={deleteTranscription}
                 clearAllTranscriptions={clearAllTranscriptions}
@@ -953,13 +789,8 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
                 }}
               />
             )}
-            {VOICELAB_AI_ENABLED && activeView === "chat" && (
-              <Suspense fallback={<PanelLoadingFallback />}>
-                <ChatView />
-              </Suspense>
-            )}
             {activeView === "personal-notes" && (
-              <Suspense fallback={<PanelLoadingFallback />}>
+              <Suspense fallback={<ViewLoadingFallback view="notes" />}>
                 <PersonalNotesView
                   onOpenSettings={(section) => {
                     setSettingsSection(section);
@@ -972,12 +803,12 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               </Suspense>
             )}
             {activeView === "dictionary" && (
-              <Suspense fallback={<PanelLoadingFallback />}>
+              <Suspense fallback={<ViewLoadingFallback view="dictionary" />}>
                 <DictionaryView />
               </Suspense>
             )}
             {activeView === "upload" && (
-              <Suspense fallback={<PanelLoadingFallback />}>
+              <Suspense fallback={<ViewLoadingFallback view="upload" />}>
                 <UploadAudioView
                   onNoteCreated={(noteId, folderId) => {
                     setActiveNoteId(noteId);
@@ -992,7 +823,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               </Suspense>
             )}
             {activeView === "integrations" && (
-              <Suspense fallback={<PanelLoadingFallback />}>
+              <Suspense fallback={<ViewLoadingFallback view="integrations" />}>
                 <IntegrationsView
                   isPaid={!!usage?.isSubscribed}
                   onUpgrade={() => {

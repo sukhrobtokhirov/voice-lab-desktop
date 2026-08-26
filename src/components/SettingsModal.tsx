@@ -11,12 +11,12 @@ export type { SettingsSectionType };
 
 // Legacy deep-links land on the matching visible settings section via SECTION_ALIASES.
 const SECTION_ALIASES: Record<string, SettingsSectionType> = {
-  aiModels: "llms",
-  agentConfig: "llms",
-  agentMode: "llms",
-  intelligence: "llms",
-  meetings: "llms",
-  prompts: "llms",
+  aiModels: "general",
+  agentConfig: "general",
+  agentMode: "general",
+  intelligence: "general",
+  meetings: "general",
+  prompts: "general",
   softwareUpdates: "system",
   developer: "system",
   plansBilling: "account",
@@ -30,15 +30,6 @@ const CANONICAL_SECTIONS = new Set<SettingsSectionType>([
   "hotkeys",
   "system",
 ]);
-
-const LEGACY_SUB_TAB: Record<string, string> = {
-  meetings: "noteFormatting",
-  intelligence: "dictationCleanup",
-  agentMode: "chatIntelligence",
-  agentConfig: "chatIntelligence",
-  aiModels: "dictationCleanup",
-  prompts: "dictationCleanup",
-};
 
 interface SettingsModalProps {
   open: boolean;
@@ -82,7 +73,7 @@ export default function SettingsModal({
         label: t("desktop.settings.shortcuts", { defaultValue: "Shortcuts" }),
         icon: keyboardIcon,
         description: t("desktop.settings.shortcutsDescription", {
-          defaultValue: "Dictation and VoiceLab AI shortcuts",
+          defaultValue: "Dictation hotkey and activation mode",
         }),
         group: t("settingsModal.groups.app", { defaultValue: "Flow" }),
       },
@@ -108,22 +99,16 @@ export default function SettingsModal({
   const [activeSection, setActiveSection] = React.useState<SettingsSectionType>(() =>
     resolveSection(initialSection)
   );
-  const [initialSubTab, setInitialSubTab] = useState<string | undefined>(() =>
-    initialSection ? LEGACY_SUB_TAB[initialSection] : undefined
-  );
   useEffect(() => {
     if (!open) {
-      setInitialSubTab(undefined);
       return;
     }
     if (!initialSection) return;
     setActiveSection(resolveSection(initialSection));
-    setInitialSubTab(LEGACY_SUB_TAB[initialSection]);
   }, [initialSection, open]);
 
   const handleSectionChange = (section: SettingsSectionType) => {
     setActiveSection(section);
-    setInitialSubTab(undefined);
   };
 
   return (
@@ -139,7 +124,7 @@ export default function SettingsModal({
       <SettingsPage
         activeSection={activeSection}
         onNavigateToSection={handleSectionChange}
-        initialSubTab={initialSubTab}
+        initialSubTab={undefined}
         auth={auth}
         usageState={usageState}
       />

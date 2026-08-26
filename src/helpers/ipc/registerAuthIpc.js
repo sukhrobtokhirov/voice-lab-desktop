@@ -1,6 +1,6 @@
 const { BrowserWindow } = require("electron");
 const { z } = require("zod");
-const { parse } = require("./providerContracts");
+const { parse } = require("./ipcValidation");
 
 const authProviderSchema = z.enum(["google"]).optional();
 

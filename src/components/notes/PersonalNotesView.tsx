@@ -8,7 +8,6 @@ import {
   Check,
   SquarePen,
   Search,
-  Sparkles,
   ExternalLink,
 } from "lucide-react";
 import { Button } from "../ui/button";
@@ -41,15 +40,8 @@ import { Input } from "../ui/input";
 import { useToast } from "../ui/useToast";
 import NoteListItem from "./NoteListItem";
 import NoteEditor from "./NoteEditor";
-import ActionPicker from "./ActionPicker";
-import ActionManagerDialog from "./ActionManagerDialog";
 import AddNotesToFolderDialog from "./AddNotesToFolderDialog";
-import { useActionProcessing } from "../../hooks/useActionProcessing";
-import {
-  useSettingsStore,
-  selectIsCloudNoteFormattingMode,
-  selectResolvedNoteFormatting,
-} from "../../stores/settingsStore";
+import { useSettingsStore } from "../../stores/settingsStore";
 import { useFolderManagement } from "../../hooks/useFolderManagement";
 import { useNoteDragAndDrop } from "../../hooks/useNoteDragAndDrop";
 import { cn } from "../lib/utils";
@@ -84,7 +76,6 @@ import {
   setSessionDiarizationEnabled,
   setSessionExpectedCount,
 } from "../../stores/meetingRecordingStore";
-import { isRegenerableNoteTitle } from "../../helpers/regenerableNoteTitle";
 
 const FOLDER_INPUT_CLASS =
   "w-full h-6 bg-foreground/5 dark:bg-white/5 rounded px-2 text-xs text-foreground outline-none border border-primary/30 focus:border-primary/50";
@@ -111,10 +102,6 @@ function NoteEditorSkeleton() {
       <Skeleton className="mt-3 h-3 w-4/5" />
     </div>
   );
-}
-
-function makeContentHash(content: string): string {
-  return String(content.length) + "-" + content.slice(0, 50);
 }
 
 interface PersonalNotesViewProps {
@@ -145,7 +132,6 @@ export default function PersonalNotesView({
   const [localTitle, setLocalTitle] = useState("");
   const [localContent, setLocalContent] = useState("");
   const [localEnhancedContent, setLocalEnhancedContent] = useState<string | null>(null);
-  const [showActionManager, setShowActionManager] = useState(false);
   const [showNewNoteDialog, setShowNewNoteDialog] = useState(false);
   const [newNoteFolderId, setNewNoteFolderId] = useState<string>("");
   const [isCreatingNewNoteFolder, setIsCreatingNewNoteFolder] = useState(false);
@@ -169,8 +155,6 @@ export default function PersonalNotesView({
     setSyncedNoteIdState(id);
   };
   const { toast } = useToast();
-  const isCloudMode = useSettingsStore(selectIsCloudNoteFormattingMode);
-  const effectiveModelId = useSettingsStore((s) => selectResolvedNoteFormatting(s).model);
   const noteFilesEnabled = useSettingsStore((s) => s.noteFilesEnabled);
   const fileManagerName = navigator.platform.startsWith("Mac")
     ? "Finder"
@@ -496,28 +480,11 @@ export default function PersonalNotesView({
     [loadFolders, toast, t]
   );
 
-  const {
-    state: actionProcessingState,
-    actionName,
-    runAction,
-  } = useActionProcessing(activeNoteId ?? null);
-
-  // Boolean flag so actions enable during recording without re-rendering on every transcript update.
-  const hasLiveTranscript = useMeetingRecordingStore(
-    (s) => s.recordingNoteId === activeNote?.id && !!s.transcript
-  );
-  const activeNoteRawTranscript = activeNote?.transcript || "";
-
   const isEnhancementStale = useMemo(() => {
     if (!activeNote?.enhanced_content || !activeNote?.enhanced_at_content_hash) return false;
-    const currentHash = makeContentHash(`${localContent}\n${activeNoteRawTranscript}`);
+    const currentHash = `${localContent.length}-${localContent.slice(0, 80)}`;
     return currentHash !== activeNote.enhanced_at_content_hash;
-  }, [
-    activeNote?.enhanced_content,
-    activeNote?.enhanced_at_content_hash,
-    localContent,
-    activeNoteRawTranscript,
-  ]);
+  }, [activeNote?.enhanced_content, activeNote?.enhanced_at_content_hash, localContent]);
 
   const handleExportNote = useCallback(
     async (format: "md" | "txt") => {
@@ -627,18 +594,6 @@ export default function PersonalNotesView({
                 {t("notes.sidebar.searchNotes")}
               </button>
             )}
-            <button
-              onClick={() => setShowActionManager(true)}
-              className={cn(
-                "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs",
-                "text-muted-foreground/80 hover:text-foreground hover:bg-foreground/5",
-                "transition-colors duration-150",
-                "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30"
-              )}
-            >
-              <Sparkles size={14} className="shrink-0" />
-              {t("notes.sidebar.actions")}
-            </button>
           </div>
 
           {/* Folders */}
@@ -905,71 +860,7 @@ export default function PersonalNotesView({
               folders={folders}
               onMoveToFolder={handleMoveToFolder}
               onCreateFolderAndMove={handleCreateFolderAndMove}
-              actionProcessingState={actionProcessingState}
-              actionName={actionName}
-              actionPicker={
-                <ActionPicker
-                  onRunAction={(action) => {
-                    if (!editorNote) return;
-                    const { recordingNoteId: liveNoteId, transcript: liveTranscript } =
-                      useMeetingRecordingStore.getState();
-                    const rawTranscript =
-                      (liveNoteId === activeNote?.id ? liveTranscript : "") ||
-                      activeNoteRawTranscript;
-                    const noteContent = editorNote.content;
-                    const hasNotes = !!noteContent.trim();
-                    if (!hasNotes && !rawTranscript) return;
-
-                    let formattedTranscript = "";
-                    let isMeetingNote = false;
-                    if (rawTranscript) {
-                      const segments = parseTranscriptSegments(rawTranscript);
-                      if (segments.length > 0) {
-                        isMeetingNote = true;
-                        formattedTranscript = segments
-                          .map(
-                            (s) =>
-                              `${s.source === "mic" ? t("notes.speaker.you") : t("notes.speaker.them")}: ${s.text}`
-                          )
-                          .join("\n");
-                      }
-                      if (!formattedTranscript) {
-                        formattedTranscript = rawTranscript;
-                      }
-                    }
-
-                    const parts = [
-                      hasNotes ? noteContent : "",
-                      formattedTranscript ? `## Meeting Transcript\n${formattedTranscript}` : "",
-                    ]
-                      .filter(Boolean)
-                      .join("\n\n");
-                    runAction(action, parts, makeContentHash(`${noteContent}\n${rawTranscript}`), {
-                      isCloudMode,
-                      modelId: effectiveModelId,
-                      isMeetingNote,
-                      allowTitleGeneration: isRegenerableNoteTitle(
-                        editorNote.title,
-                        [
-                          t("notes.list.untitledNote"),
-                          t("notes.list.newNote"),
-                          t("notes.sidebar.newNote"),
-                        ],
-                        calendarEventName
-                      ),
-                    });
-                  }}
-                  onManageActions={() => setShowActionManager(true)}
-                  disabled={
-                    (!editorNote?.content?.trim() &&
-                      !hasLiveTranscript &&
-                      !activeNoteRawTranscript) ||
-                    actionProcessingState === "processing"
-                  }
-                />
-              }
             />
-            <ActionManagerDialog open={showActionManager} onOpenChange={setShowActionManager} />
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center -mt-6">

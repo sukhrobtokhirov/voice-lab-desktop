@@ -76,7 +76,6 @@ export default defineConfig(({ mode }) => {
           "zlib",
           "tar",
           "unzipper",
-          "@aws-sdk/client-s3",
         ],
         output: {
           manualChunks(id) {

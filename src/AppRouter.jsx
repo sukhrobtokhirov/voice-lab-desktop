@@ -15,7 +15,6 @@ import { hasOnboardingProgress } from "./constants/onboarding";
 
 const ControlPanel = React.lazy(() => import("./components/ControlPanel.tsx"));
 const OnboardingFlow = React.lazy(() => import("./components/OnboardingFlow.tsx"));
-const AgentOverlay = React.lazy(() => import("./components/AgentOverlay.tsx"));
 
 export default function AppRouter() {
   useTheme();
@@ -41,23 +40,19 @@ function MainApp() {
   const [isLoading, setIsLoading] = useState(true);
   const [postOnboardingSettingsSection, setPostOnboardingSettingsSection] = useState(undefined);
 
-  const isAgentPanel = window.location.search.includes("agent=true");
   const isControlPanel =
-    !isAgentPanel &&
-    (window.location.pathname.includes("control") || window.location.search.includes("panel=true"));
-  const isDictationPanel = !isControlPanel && !isAgentPanel;
+    window.location.pathname.includes("control") || window.location.search.includes("panel=true");
+  const isDictationPanel = !isControlPanel;
 
   useEffect(() => {
-    if (isAgentPanel) {
-      import("./components/AgentOverlay.tsx").catch(() => {});
-    } else if (isControlPanel) {
+    if (isControlPanel) {
       import("./components/ControlPanel.tsx").catch(() => {});
 
       if (!localStorage.getItem("onboardingCompleted")) {
         import("./components/OnboardingFlow.tsx").catch(() => {});
       }
     }
-  }, [isAgentPanel, isControlPanel]);
+  }, [isControlPanel]);
 
   useEffect(() => {
     if (!authLoaded) return;
@@ -118,14 +113,6 @@ function MainApp() {
     const timer = window.setTimeout(() => setIsControlPanelEntering(false), 1000);
     return () => window.clearTimeout(timer);
   }, [isControlPanelEntering]);
-
-  if (isAgentPanel) {
-    return (
-      <Suspense fallback={<LoadingFallback />}>
-        <AgentOverlay />
-      </Suspense>
-    );
-  }
 
   if (isLoading) {
     return <LoadingFallback />;

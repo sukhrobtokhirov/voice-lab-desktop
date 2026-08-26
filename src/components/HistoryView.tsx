@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
-import { Sparkles, Cloud, X, Mic } from "lucide-react";
+import { Mic } from "lucide-react";
 import TranscriptionItem from "./ui/TranscriptionItem";
 import TranscriptionListSkeleton from "./ui/TranscriptionListSkeleton";
 import type { TranscriptionItem as TranscriptionItemType } from "../types/electron";
@@ -11,7 +11,6 @@ import { cn } from "./lib/utils";
 import { useUpcomingEvents } from "../hooks/useUpcomingEvents";
 import UpcomingMeetings from "./UpcomingMeetings";
 import { useSettingsStore } from "../stores/settingsStore";
-import { VOICELAB_AI_ENABLED } from "../lib/features";
 import SavedDictationDialog from "./SavedDictationDialog";
 import VoiceLabIcon from "./ui/VoiceLabIcon";
 import archiveIcon from "../assets/icons/archive.svg";
@@ -21,11 +20,6 @@ interface HistoryViewProps {
   history: TranscriptionItemType[];
   isLoading: boolean;
   hotkey: string;
-  showCloudMigrationBanner: boolean;
-  setShowCloudMigrationBanner: (show: boolean) => void;
-  aiCTADismissed: boolean;
-  setAiCTADismissed: (dismissed: boolean) => void;
-  useCleanupModel: boolean;
   copyToClipboard: (text: string) => Promise<boolean>;
   deleteTranscription: (id: number) => void;
   clearAllTranscriptions: () => void;
@@ -47,11 +41,6 @@ export default function HistoryView({
   history,
   isLoading,
   hotkey,
-  showCloudMigrationBanner,
-  setShowCloudMigrationBanner,
-  aiCTADismissed,
-  setAiCTADismissed,
-  useCleanupModel,
   copyToClipboard,
   deleteTranscription,
   clearAllTranscriptions,
@@ -124,82 +113,6 @@ export default function HistoryView({
         {!isLoading && history.length === 0 && (
           <div className="mb-2 flex justify-end">{discardedToggle}</div>
         )}
-        {showCloudMigrationBanner && (
-          <div className="mb-3 relative rounded-lg border border-primary/20 bg-primary/5 dark:bg-primary/10 p-3">
-            <button
-              onClick={() => {
-                setShowCloudMigrationBanner(false);
-                localStorage.setItem("cloudMigrationShown", "true");
-              }}
-              aria-label={t("common.close")}
-              className="absolute top-2 right-2 p-1 rounded-sm text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-            >
-              <X size={14} />
-            </button>
-            <div className="flex items-start gap-3 pr-6">
-              <div className="shrink-0 w-8 h-8 rounded-md bg-primary/10 dark:bg-primary/20 flex items-center justify-center">
-                <Cloud size={16} className="text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-foreground mb-0.5">
-                  {t("controlPanel.cloudMigration.title")}
-                </p>
-                <p className="text-xs text-muted-foreground mb-2">
-                  {t("controlPanel.cloudMigration.description")}
-                </p>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => {
-                    setShowCloudMigrationBanner(false);
-                    localStorage.setItem("cloudMigrationShown", "true");
-                    onOpenSettings("transcription");
-                  }}
-                >
-                  {t("controlPanel.cloudMigration.viewSettings")}
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {VOICELAB_AI_ENABLED && !useCleanupModel && !aiCTADismissed && (
-          <div className="mb-3 relative rounded-lg border border-primary/20 bg-primary/5 dark:bg-primary/10 p-3">
-            <button
-              onClick={() => {
-                localStorage.setItem("aiCTADismissed", "true");
-                setAiCTADismissed(true);
-              }}
-              aria-label={t("common.close")}
-              className="absolute top-2 right-2 p-1 rounded-sm text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-            >
-              <X size={14} />
-            </button>
-            <div className="flex items-start gap-3 pr-6">
-              <div className="shrink-0 w-8 h-8 rounded-md bg-primary/10 dark:bg-primary/20 flex items-center justify-center">
-                <Sparkles size={16} className="text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-foreground mb-0.5">
-                  {t("controlPanel.aiCta.title")}
-                </p>
-                <p className="text-xs text-muted-foreground mb-2">
-                  {t("controlPanel.aiCta.description")}
-                </p>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => onOpenSettings("intelligence")}
-                >
-                  {t("controlPanel.aiCta.enable")}
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
         <div className={cn(isConnected ? "flex gap-6" : "")}>
           <div className={cn("min-w-0", isConnected ? "flex-1" : "w-full")}>
             {isConnected && (

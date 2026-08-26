@@ -196,7 +196,6 @@ test("dictation, retry, meeting, and upload routes are pinned to VoiceLab cloud"
   const audioManager = read("src/helpers/audioManager.js");
   const fileTranscription = read("src/services/fileTranscription.ts");
   const ipcHandlers = read("src/helpers/ipcHandlers.js");
-  const providerIpc = read("src/helpers/ipc/registerProviderIpc.js");
 
   const processAudio = audioManager.slice(
     audioManager.indexOf("async processAudio("),
@@ -217,5 +216,8 @@ test("dictation, retry, meeting, and upload routes are pinned to VoiceLab cloud"
     ipcHandlers,
     /ipcMain\.on\("(?:dictation-realtime-send|dictation-preview-audio|assemblyai-streaming-send|deepgram-streaming-send|corti-streaming-send)"/
   );
-  assert.doesNotMatch(providerIpc, /provider-transcribe(?:-file)?/);
+  assert.equal(
+    fs.existsSync(path.join(root, "src", "helpers", "ipc", "registerProviderIpc.js")),
+    false
+  );
 });
