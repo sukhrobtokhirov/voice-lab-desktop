@@ -600,6 +600,9 @@ async function initializeCoreManagers() {
     apiBaseUrl: DESKTOP_AUTH_CONFIG.apiBaseUrl,
     authWebBaseUrl: DESKTOP_AUTH_CONFIG.authWebBaseUrl,
     authorizationOrigins: DESKTOP_AUTH_CONFIG.authorizationOrigins,
+    // A registered app link brings VoiceLab to the foreground after browser approval.
+    // Keep loopback as the fallback where an OS handler cannot be registered.
+    useCustomProtocol: protocolRegistered,
   });
   await desktopAuthManager.initialize();
   displayMediaGrantManager = new DisplayMediaGrantManager({

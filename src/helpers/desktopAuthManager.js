@@ -254,7 +254,15 @@ function normalizedUser(payload) {
 }
 
 class DesktopAuthManager extends EventEmitter {
-  constructor({ channel, scheme, appVersion, apiBaseUrl, authWebBaseUrl, authorizationOrigins }) {
+  constructor({
+    channel,
+    scheme,
+    appVersion,
+    apiBaseUrl,
+    authWebBaseUrl,
+    authorizationOrigins,
+    useCustomProtocol = false,
+  }) {
     super();
     if (!channel || !scheme || !appVersion || !apiBaseUrl || !authorizationOrigins?.length) {
       throw new Error("Desktop authentication runtime configuration is incomplete");
@@ -276,6 +284,9 @@ class DesktopAuthManager extends EventEmitter {
     if (!this.authorizationOrigins.has(this.authOrigin)) {
       throw new Error("Desktop authorization web origin is not trusted");
     }
+    // Prefer the OS-owned callback whenever VoiceLab registered its protocol.
+    // PKCE keeps the one-time code bound to this exact desktop installation.
+    this.useCustomProtocol = useCustomProtocol === true;
     this.status = "signed-out";
     this.user = null;
     this.errorCode = null;
@@ -651,6 +662,14 @@ class DesktopAuthManager extends EventEmitter {
     });
   }
 
+  async _createAuthorizationRedirectUri() {
+    if (this.useCustomProtocol) {
+      this._closeLoopbackCallbackServer();
+      return `${this.scheme}://auth/callback`;
+    }
+    return this._startLoopbackCallbackServer();
+  }
+
   _writeLoopbackResponse(response, statusCode, title, message) {
     const safeTitle = String(title).replace(/[<>&"']/g, "");
     const safeMessage = String(message).replace(/[<>&"']/g, "");
@@ -897,7 +916,7 @@ class DesktopAuthManager extends EventEmitter {
 
     let operationRedirectUri = null;
     try {
-      const redirectUri = await this._startLoopbackCallbackServer();
+      const redirectUri = await this._createAuthorizationRedirectUri();
       operationRedirectUri = redirectUri;
       this._assertAuthEpoch(epoch);
       const pending = {

@@ -93,7 +93,7 @@ function loadDesktopAuthManager(initialSession = null, { openExternal: openExter
   }
 }
 
-function managerFrom(DesktopAuthManager) {
+function managerFrom(DesktopAuthManager, { useCustomProtocol = false } = {}) {
   return new DesktopAuthManager({
     channel: "production",
     scheme: "voicelab",
@@ -101,6 +101,7 @@ function managerFrom(DesktopAuthManager) {
     apiBaseUrl: "https://api.voicelab.uz",
     authWebBaseUrl: "https://voicelab.uz",
     authorizationOrigins: ["https://voicelab.uz"],
+    useCustomProtocol,
   });
 }
 
@@ -164,6 +165,68 @@ test("starts system-browser PKCE authorization through the exact Go contract", a
   assert.equal(new URL(getOpenedUrl()).pathname, "/app/sign-in");
   assert.equal(new URL(getOpenedUrl()).searchParams.get("desktop_auth_id"), REQUEST_ID);
   assert.equal(new URL(getOpenedUrl()).searchParams.get("state"), null);
+});
+
+test("uses the registered VoiceLab protocol callback when the OS handler is available", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const { DesktopAuthManager, getPending } = loadDesktopAuthManager();
+  const manager = managerFrom(DesktopAuthManager, { useCustomProtocol: true });
+  let authorizationRequest = null;
+  global.fetch = async (_url, init) => {
+    authorizationRequest = JSON.parse(init.body);
+    return jsonResponse(201, {
+      authorization_request_id: REQUEST_ID,
+      authorization_url: `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`,
+      expires_in: 600,
+    });
+  };
+
+  await manager.startAuthorization();
+
+  assert.equal(authorizationRequest.redirect_uri, "voicelab://auth/callback");
+  assert.equal(getPending().redirectUri, "voicelab://auth/callback");
+  assert.equal(manager.callbackServer, null);
+});
+
+test("registered protocol callback exchanges code and PKCE verifier", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const { DesktopAuthManager, getPending, getStoredSession } = loadDesktopAuthManager();
+  const manager = managerFrom(DesktopAuthManager, { useCustomProtocol: true });
+  const calls = [];
+  global.fetch = async (url, init) => {
+    calls.push({ url, init });
+    if (url.endsWith("/authorizations")) {
+      return jsonResponse(201, {
+        authorization_request_id: REQUEST_ID,
+        authorization_url: `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`,
+        expires_in: 600,
+      });
+    }
+    return jsonResponse(200, {
+      access_token: "access-token-abcdefghijklmnopqrstuvwxyz",
+      refresh_token: "refresh-token-abcdefghijklmnopqrstuvwxyz",
+      expires_in: 900,
+      refresh_expires_in: 3600,
+      session_id: "desktop-session-custom-protocol",
+      user: { id: "user-7", email: "desktop@example.com" },
+    });
+  };
+
+  await manager.startAuthorization();
+  const pending = getPending();
+  const status = await manager.handleCallback(
+    `voicelab://auth/callback?code=${CALLBACK_CODE}&state=${pending.state}`
+  );
+
+  assert.equal(status.status, "authenticated");
+  assert.equal(JSON.parse(calls[1].init.body).redirect_uri, "voicelab://auth/callback");
+  assert.equal(getStoredSession().sessionId, "desktop-session-custom-protocol");
 });
 
 test("reopens and cancels an existing authorization without replacing PKCE state", async (t) => {
