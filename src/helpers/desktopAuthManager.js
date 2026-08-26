@@ -10,6 +10,7 @@ const tokenStore = require("./tokenStore");
 const CLIENT_ID = "voicelab-desktop";
 const PENDING_TTL_MS = 10 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 20_000;
+const BROWSER_OPEN_TIMEOUT_MS = 10_000;
 const MAX_AUTH_RESPONSE_BYTES = 1024 * 1024;
 const MAX_ACCESS_EXPIRES_IN_SECONDS = 24 * 60 * 60;
 const MAX_REFRESH_EXPIRES_IN_SECONDS = 30 * 24 * 60 * 60;
@@ -287,6 +288,8 @@ class DesktopAuthManager extends EventEmitter {
     this.callbackRedirectUri = null;
     this.refreshPromise = null;
     this.refreshPromiseEpoch = null;
+    this.authorizationPromise = null;
+    this.authorizationPromiseEpoch = null;
     this.accessRefreshTimer = null;
     this.refreshRetryTimer = null;
     this.refreshRetryAttempt = 0;
@@ -386,6 +389,28 @@ class DesktopAuthManager extends EventEmitter {
         "AUTH_OPERATION_SUPERSEDED",
         "Authentication operation was superseded"
       );
+    }
+  }
+
+  async _openAuthorizationUrl(authorizationUrl) {
+    let timeout = null;
+    try {
+      await Promise.race([
+        Promise.resolve().then(() => shell.openExternal(authorizationUrl, { activate: true })),
+        new Promise((_, reject) => {
+          timeout = setTimeout(() => {
+            reject(
+              new DesktopAuthError(
+                "AUTH_BROWSER_OPEN_TIMEOUT",
+                "Could not open your browser. Please try again."
+              )
+            );
+          }, BROWSER_OPEN_TIMEOUT_MS);
+          timeout.unref?.();
+        }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -831,10 +856,32 @@ class DesktopAuthManager extends EventEmitter {
     return value;
   }
 
-  async startAuthorization() {
-    if (this.status === "opening-browser" || this.status === "exchanging") {
-      return this.getPublicStatus();
+  startAuthorization() {
+    // More than one renderer action can arrive while an authorization request
+    // is being created. Share that real in-flight operation; returning a
+    // synthetic "opening-browser" status here used to leave the renderer
+    // spinning forever without ever calling shell.openExternal.
+    if (
+      this.authorizationPromise &&
+      this.authorizationPromiseEpoch === this.authEpoch
+    ) {
+      return this.authorizationPromise;
     }
+
+    const attempt = this._startAuthorization();
+    const trackedAttempt = attempt.finally(() => {
+      if (this.authorizationPromise === trackedAttempt) {
+        this.authorizationPromise = null;
+        this.authorizationPromiseEpoch = null;
+      }
+    });
+    this.authorizationPromise = trackedAttempt;
+    this.authorizationPromiseEpoch = this.authEpoch;
+    return trackedAttempt;
+  }
+
+  async _startAuthorization() {
+    if (this.status === "exchanging") return this.getPublicStatus();
     const existingPending = tokenStore.getPending();
     if (existingPending && this._isValidPending(existingPending)) {
       return this.reopenAuthorization();
@@ -906,7 +953,7 @@ class DesktopAuthManager extends EventEmitter {
         expiresAt,
       });
       this._schedulePendingExpiry(expiresAt);
-      await shell.openExternal(authorizationUrl, { activate: true });
+      await this._openAuthorizationUrl(authorizationUrl);
       this._assertAuthEpoch(epoch);
       this._setStatus("waiting-for-browser");
       return this.getPublicStatus();
@@ -945,9 +992,22 @@ class DesktopAuthManager extends EventEmitter {
       pending.authorizationUrl,
       pending.authorizationRequestId
     );
-    await shell.openExternal(authorizationUrl, { activate: true });
-    this._setStatus("waiting-for-browser");
-    return this.getPublicStatus();
+    this._setStatus("opening-browser");
+    try {
+      await this._openAuthorizationUrl(authorizationUrl);
+      this._setStatus("waiting-for-browser");
+      return this.getPublicStatus();
+    } catch (error) {
+      // Keep a still-valid authorization request so the person can use
+      // "Open browser" again, but never leave the UI in an endless loader.
+      this._setStatus("error", {
+        errorCode: error.code || "AUTH_BROWSER_OPEN_FAILED",
+        errorMessage: error.message,
+        errorRequestId: error.requestId,
+        errorFields: error.fields,
+      });
+      throw error;
+    }
   }
 
   cancelAuthorization() {

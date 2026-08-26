@@ -31,7 +31,7 @@ function jsonResponse(status, body, headers = {}) {
   });
 }
 
-function loadDesktopAuthManager(initialSession = null) {
+function loadDesktopAuthManager(initialSession = null, { openExternal: openExternalImpl } = {}) {
   const modulePath = require.resolve("../../src/helpers/desktopAuthManager");
   delete require.cache[modulePath];
   let pending = null;
@@ -67,6 +67,7 @@ function loadDesktopAuthManager(initialSession = null) {
           openExternal: async (url) => {
             openedUrl = url;
             openCount += 1;
+            return openExternalImpl?.(url);
           },
         },
       };
@@ -194,6 +195,122 @@ test("reopens and cancels an existing authorization without replacing PKCE state
   const cancelled = manager.cancelAuthorization();
   assert.equal(cancelled.status, "cancelled");
   assert.equal(cancelled.errorCode, "AUTH_CANCELLED_BY_USER");
+  assert.equal(getPending(), null);
+});
+
+test("recovers a stale opening-browser state by starting a real browser authorization", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const { DesktopAuthManager, getOpenCount } = loadDesktopAuthManager();
+  const manager = managerFrom(DesktopAuthManager);
+  manager.status = "opening-browser";
+  global.fetch = async () =>
+    jsonResponse(201, {
+      authorization_request_id: REQUEST_ID,
+      authorization_url: `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`,
+      expires_in: 600,
+    });
+
+  const status = await manager.startAuthorization();
+
+  assert.equal(status.status, "waiting-for-browser");
+  assert.equal(getOpenCount(), 1);
+});
+
+test("shares concurrent browser authorization attempts instead of reporting a phantom opening state", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const { DesktopAuthManager, getOpenCount } = loadDesktopAuthManager();
+  const manager = managerFrom(DesktopAuthManager);
+  let resolveAuthorization;
+  let authorizationRequests = 0;
+  global.fetch = () => {
+    authorizationRequests += 1;
+    return new Promise((resolve) => {
+      resolveAuthorization = resolve;
+    });
+  };
+
+  const first = manager.startAuthorization();
+  const second = manager.startAuthorization();
+  assert.strictEqual(second, first);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(authorizationRequests, 1);
+
+  resolveAuthorization(
+    jsonResponse(201, {
+      authorization_request_id: REQUEST_ID,
+      authorization_url: `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`,
+      expires_in: 600,
+    })
+  );
+  const status = await first;
+
+  assert.equal(status.status, "waiting-for-browser");
+  assert.equal(getOpenCount(), 1);
+});
+
+test("surfaces browser launch failures instead of leaving sign-in loading", async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+  const { DesktopAuthManager, getPending } = loadDesktopAuthManager(null, {
+    openExternal: async () => {
+      throw new Error("No browser available");
+    },
+  });
+  const manager = managerFrom(DesktopAuthManager);
+  global.fetch = async () =>
+    jsonResponse(201, {
+      authorization_request_id: REQUEST_ID,
+      authorization_url: `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`,
+      expires_in: 600,
+    });
+
+  await assert.rejects(manager.startAuthorization(), {
+    message: "No browser available",
+  });
+  assert.equal(manager.getPublicStatus().status, "error");
+  assert.equal(manager.getPublicStatus().errorCode, "AUTH_START_FAILED");
+  assert.equal(getPending(), null);
+});
+
+test("times out a hung browser launch instead of leaving sign-in loading", async (t) => {
+  const originalFetch = global.fetch;
+  const originalSetTimeout = global.setTimeout;
+  t.after(() => {
+    global.fetch = originalFetch;
+    global.setTimeout = originalSetTimeout;
+  });
+  global.setTimeout = (callback, delay, ...args) =>
+    originalSetTimeout(callback, delay === 10_000 ? 0 : delay, ...args);
+
+  const { DesktopAuthManager, getPending } = loadDesktopAuthManager(null, {
+    openExternal: () => new Promise(() => {}),
+  });
+  const manager = managerFrom(DesktopAuthManager);
+  global.fetch = async () =>
+    jsonResponse(201, {
+      authorization_request_id: REQUEST_ID,
+      authorization_url: `https://voicelab.uz/app/sign-in?desktop_auth_id=${REQUEST_ID}`,
+      expires_in: 600,
+    });
+
+  await assert.rejects(manager.startAuthorization(), {
+    code: "AUTH_BROWSER_OPEN_TIMEOUT",
+    message: "Could not open your browser. Please try again.",
+  });
+  assert.deepEqual(manager.getPublicStatus(), {
+    status: "error",
+    user: null,
+    errorCode: "AUTH_BROWSER_OPEN_TIMEOUT",
+    errorMessage: "Could not open your browser. Please try again.",
+  });
   assert.equal(getPending(), null);
 });
 
