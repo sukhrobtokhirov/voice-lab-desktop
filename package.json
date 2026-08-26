@@ -25,6 +25,7 @@
     "prestart": "npm run compile:native",
     "start": "electron .",
     "dev": "concurrently -k -r \"npm:dev:renderer\" \"npm:dev:main\"",
+    "dev:test-update": "cross-env VOICELAB_TEST_UPDATE_NOTIFICATION=1 npm run dev",
     "predev:main": "npm run generate:preloads && npm run compile:native",
     "dev:main": "cross-env NODE_ENV=development node scripts/run-electron.js --dev",
     "dev:renderer": "cd src && vite",

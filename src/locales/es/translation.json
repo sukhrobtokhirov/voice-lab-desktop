@@ -2999,7 +2999,25 @@
     "nativeBodyLinux": "La versión {{version}} está lista. Haz clic en esta notificación para descargarla.",
     "cta": "Actualizar ahora",
     "later": "Más tarde",
-    "update": "Actualizar"
+    "update": "Actualizar",
+    "messages": {
+      "betterListener": {
+        "title": "Ha llegado un mejor oyente.",
+        "description": "Unos cuantos cables sueltos maduraron."
+      },
+      "listenHarder": {
+        "title": "VoiceLab escucha mejor.",
+        "description": "Menos «ya sabes lo que quería decir»."
+      },
+      "improveItself": {
+        "title": "Preguntamos. VoiceLab escuchó.",
+        "description": "Menos giros inesperados."
+      },
+      "fixedEarly": {
+        "title": "Arreglado antes de convertirse en función.",
+        "description": "Los bordes ásperos se fueron sin hacer ruido."
+      }
+    }
   },
   "permissionsGate": {
     "title": "Permisos necesarios",

@@ -2946,7 +2946,25 @@
     "nativeBodyLinux": "版本 {{version}} 已准备就绪。点击此通知即可下载。",
     "cta": "立即更新",
     "later": "稍后",
-    "update": "更新"
+    "update": "更新",
+    "messages": {
+      "betterListener": {
+        "title": "更懂倾听的 VoiceLab 来了。",
+        "description": "一些小毛边已经悄悄处理好。"
+      },
+      "listenHarder": {
+        "title": "VoiceLab 现在听得更认真。",
+        "description": "少一点“你知道我的意思”。"
+      },
+      "improveItself": {
+        "title": "我们认真听了，VoiceLab 也改进了。",
+        "description": "少一些意外转折。"
+      },
+      "fixedEarly": {
+        "title": "在变成功能前就修好了。",
+        "description": "棱角已经悄悄离开。"
+      }
+    }
   },
   "permissionsGate": {
     "title": "需要权限",

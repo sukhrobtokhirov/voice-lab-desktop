@@ -2951,7 +2951,25 @@
     "nativeBodyLinux": "バージョン {{version}} の準備ができました。この通知をクリックしてダウンロードしてください。",
     "cta": "今すぐ更新",
     "later": "あとで",
-    "update": "更新"
+    "update": "更新",
+    "messages": {
+      "betterListener": {
+        "title": "よりよく聴く VoiceLab が届きました。",
+        "description": "気になる小さな部分を整えました。"
+      },
+      "listenHarder": {
+        "title": "VoiceLab は、もっとしっかり聴きます。",
+        "description": "「言いたいこと、わかるでしょ」が減ります。"
+      },
+      "improveItself": {
+        "title": "声を聞き、改善しました。",
+        "description": "意外な展開を少なく。"
+      },
+      "fixedEarly": {
+        "title": "機能になる前に直しました。",
+        "description": "粗い部分は静かに消えました。"
+      }
+    }
   },
   "permissionsGate": {
     "title": "権限が必要です",

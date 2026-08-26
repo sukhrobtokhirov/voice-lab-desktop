@@ -98,6 +98,39 @@ test("meeting prompts keep the custom notification surface while updates use nat
   assert.match(meetingOverlay, /PushNotificationCard/);
   assert.match(updater, /Notification\.isSupported\(\)/);
   assert.match(updater, /new Notification\(/);
-  assert.match(updater, /process\.platform === "linux"/);
+  assert.match(updater, /CREATIVE_UPDATE_MESSAGE_KEYS/);
+  assert.match(updater, /Math\.floor\(Math\.random\(\) \* CREATIVE_UPDATE_MESSAGE_KEYS\.length\)/);
+  assert.match(updater, /timeoutType: "never"/);
   assert.doesNotMatch(updater, /showUpdateNotification\(/);
+});
+
+test("creative native update copy is available in every supported locale", () => {
+  const messageKeys = ["betterListener", "listenHarder", "improveItself", "fixedEarly"];
+
+  for (const file of localeFiles) {
+    const locale = JSON.parse(fs.readFileSync(file, "utf8"));
+    for (const messageKey of messageKeys) {
+      for (const field of ["title", "description"]) {
+        const value = get(locale, `updateNotification.messages.${messageKey}.${field}`);
+        assert.equal(typeof value, "string", `${file} is missing ${messageKey}.${field}`);
+        assert.notEqual(value.trim(), "", `${file} has blank ${messageKey}.${field}`);
+      }
+    }
+  }
+});
+
+test("fake update notifications are explicitly limited to local development", () => {
+  const main = fs.readFileSync(path.join(root, "main.js"), "utf8");
+  const updater = fs.readFileSync(path.join(root, "src/updater.js"), "utf8");
+
+  assert.match(main, /process\.env\.NODE_ENV === "development"/);
+  assert.match(main, /process\.env\.VOICELAB_TEST_UPDATE_NOTIFICATION === "1"/);
+  assert.match(
+    main,
+    /showNativeUpdateNotification\(\{ version: "1\.0\.2-test" \}, \{ preview: true \}\)/
+  );
+  assert.match(updater, /if \(preview\) \{/);
+  assert.match(updater, /autoUpdater\.autoInstallOnAppQuit = false/);
+  assert.match(updater, /shouldRemindAboutUpdate\(info\?\.version\)/);
+  assert.match(updater, /actions:\s*\[\s*\{ type: "button", text: i18nMain\.t\("updateNotification\.update"\) \},\s*\]/);
 });

@@ -1028,6 +1028,18 @@ async function startApp() {
 
   updateManager.checkForUpdatesOnStartup();
 
+  // Local-only notification preview. This is deliberately opt-in and only
+  // available when Electron is started in development mode.
+  if (
+    process.env.NODE_ENV === "development" &&
+    process.env.VOICELAB_TEST_UPDATE_NOTIFICATION === "1"
+  ) {
+    setTimeout(() => {
+      console.info("[dev] Showing a fake native update notification");
+      updateManager.showNativeUpdateNotification({ version: "1.0.2-test" }, { preview: true });
+    }, 1_000);
+  }
+
   if (process.platform === "darwin") {
     const { isGlobeLikeHotkey, isMouseButtonHotkey } = require("./src/helpers/hotkeyManager");
     let globeKeyDownTime = 0;

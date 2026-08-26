@@ -4,6 +4,17 @@ const { i18nMain } = require("./helpers/i18nMain");
 const { publicUpdateInfo } = require("./helpers/releaseNotes");
 const { resolveUpdateFeed } = require("./helpers/updateFeedConfig");
 const { isAllowedUpdate } = require("./helpers/versionComparison");
+const {
+  shouldRemindAboutUpdate,
+  recordUpdateReminder,
+} = require("./helpers/updateReminderStore");
+
+const CREATIVE_UPDATE_MESSAGE_KEYS = [
+  "betterListener",
+  "listenHarder",
+  "improveItself",
+  "fixedEarly",
+];
 
 class UpdateManager {
   constructor() {
@@ -77,7 +88,9 @@ class UpdateManager {
     autoUpdater.allowDowngrade = true;
 
     autoUpdater.autoDownload = false;
-    autoUpdater.autoInstallOnAppQuit = true;
+    // Installation must remain an explicit user decision. A downloaded update
+    // is ready in the app, but never restarts VoiceLab just because it quits.
+    autoUpdater.autoInstallOnAppQuit = false;
     autoUpdater.logger = console;
 
     this.setupEventHandlers();
@@ -178,10 +191,16 @@ class UpdateManager {
     }
   }
 
-  showNativeUpdateNotification(info) {
+  showNativeUpdateNotification(info, { preview = false } = {}) {
     if (!Notification.isSupported()) {
       console.warn("Native notifications are not supported on this system");
-      return;
+      return false;
+    }
+
+    // A pending update remains available from the in-app update control.
+    // Native notifications are only a gentle reminder, once per version per day.
+    if (!preview && !shouldRemindAboutUpdate(info?.version)) {
+      return false;
     }
 
     if (this.nativeUpdateNotification) {
@@ -189,31 +208,55 @@ class UpdateManager {
       this.nativeUpdateNotification = null;
     }
 
+    const messageKey =
+      CREATIVE_UPDATE_MESSAGE_KEYS[
+        Math.floor(Math.random() * CREATIVE_UPDATE_MESSAGE_KEYS.length)
+      ];
+    const messagePath = `updateNotification.messages.${messageKey}`;
     const canUseActions = process.platform === "darwin" || process.platform === "win32";
     const notification = new Notification({
-      title: i18nMain.t("updateNotification.title"),
-      body:
-        process.platform === "linux"
-          ? i18nMain.t("updateNotification.nativeBodyLinux", { version: info.version })
-          : i18nMain.t("updateNotification.body", { version: info.version }),
+      id: `update-${info.version}`,
+      groupId: "updates",
+      title: i18nMain.t(`${messagePath}.title`),
+      body: i18nMain.t(`${messagePath}.description`),
       ...(canUseActions
         ? {
             actions: [
               { type: "button", text: i18nMain.t("updateNotification.update") },
-              { type: "button", text: i18nMain.t("updateNotification.later") },
             ],
           }
-        : { urgency: "normal", timeoutType: "default" }),
+        : { urgency: "normal", timeoutType: "never" }),
     });
 
     const download = () => {
+      if (preview) {
+        console.info("[dev] Fake update notification action selected");
+        return;
+      }
+
       void this.downloadUpdate().catch((error) => {
         console.error("Failed to start update download from native notification:", error);
       });
     };
 
+    const openUpdateAction = async () => {
+      if (preview) {
+        console.info("[dev] Fake update notification opened");
+        return;
+      }
+
+      try {
+        // The sidebar exposes a persistent Update action after this window opens.
+        await this.windowManager?.createControlPanelWindow?.();
+      } catch (error) {
+        console.error("Failed to open VoiceLab from native update notification:", error);
+      }
+    };
+
     this.nativeUpdateNotification = notification;
-    notification.on("click", download);
+    notification.on("click", () => {
+      void openUpdateAction();
+    });
     notification.on("action", (_event, actionIndex) => {
       if (actionIndex === 0) download();
     });
@@ -226,6 +269,15 @@ class UpdateManager {
       }
     });
     notification.show();
+    if (!preview) {
+      try {
+        recordUpdateReminder(info.version);
+      } catch (error) {
+        // A reminder is optional; a storage error must not affect updating.
+        console.warn("Failed to record native update reminder:", error);
+      }
+    }
+    return true;
   }
 
   async checkForUpdates() {
