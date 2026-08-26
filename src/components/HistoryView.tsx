@@ -2,8 +2,8 @@ import { Fragment, useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
 import { Sparkles, Cloud, X, Mic } from "lucide-react";
-import { Skeleton } from "./ui/skeleton";
 import TranscriptionItem from "./ui/TranscriptionItem";
+import TranscriptionListSkeleton from "./ui/TranscriptionListSkeleton";
 import type { TranscriptionItem as TranscriptionItemType } from "../types/electron";
 import { formatHotkeyLabel, parseHotkeyList } from "../utils/hotkeys";
 import { formatDateGroup } from "../utils/dateFormatting";
@@ -41,20 +41,6 @@ interface HistoryViewProps {
   onLoadMoreSavedDictations: () => void;
   onUpdateTranscription: (item: TranscriptionItemType) => void;
   onRemoveTranscription: (id: number) => void;
-}
-
-function TranscriptionHistorySkeleton() {
-  return (
-    <div className="space-y-1.5" aria-busy="true" aria-label="Loading transcriptions">
-      {[0, 1, 2, 3].map((row) => (
-        <div key={row} className="rounded-lg border border-border bg-card/50 px-4 py-3.5">
-          <Skeleton className="h-3.5 w-1/4" />
-          <Skeleton className="mt-3 h-3 w-full" />
-          <Skeleton className="mt-2 h-3 w-4/5" />
-        </div>
-      ))}
-    </div>
-  );
 }
 
 export default function HistoryView({
@@ -135,7 +121,9 @@ export default function HistoryView({
   return (
     <div className="px-4 pt-4 pb-6">
       <div className={cn("mx-auto", isConnected ? "max-w-5xl" : "max-w-3xl")}>
-        {history.length === 0 && <div className="mb-2 flex justify-end">{discardedToggle}</div>}
+        {!isLoading && history.length === 0 && (
+          <div className="mb-2 flex justify-end">{discardedToggle}</div>
+        )}
         {showCloudMigrationBanner && (
           <div className="mb-3 relative rounded-lg border border-primary/20 bg-primary/5 dark:bg-primary/10 p-3">
             <button
@@ -231,7 +219,7 @@ export default function HistoryView({
               </div>
             )}
             {isLoading && history.length === 0 ? (
-              <TranscriptionHistorySkeleton />
+              <TranscriptionListSkeleton />
             ) : history.length === 0 ? (
               <div className="rounded-lg border border-border bg-card/50 dark:bg-card/60 backdrop-blur-sm">
                 <div className="flex flex-col items-center justify-center py-16 px-4">

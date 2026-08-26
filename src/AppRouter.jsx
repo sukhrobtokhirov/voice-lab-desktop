@@ -6,6 +6,7 @@ import TranscriptionPreviewOverlay from "./components/TranscriptionPreviewOverla
 import WindowControls from "./components/WindowControls.tsx";
 import { Card, CardContent } from "./components/ui/card.tsx";
 import { Skeleton } from "./components/ui/skeleton.tsx";
+import TranscriptionListSkeleton from "./components/ui/TranscriptionListSkeleton.tsx";
 import { useAuth } from "./hooks/useAuth";
 import { useTheme } from "./hooks/useTheme";
 import ConnectionStatus from "./components/ConnectionStatus";
@@ -227,15 +228,8 @@ function LoadingFallback({ message }) {
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="h-12 shrink-0 border-b border-black/10 dark:border-white/12" />
           <div className="flex-1 overflow-hidden px-4 pt-5">
-            <div className="mx-auto max-w-3xl space-y-3">
-              <Skeleton className="h-3 w-16" />
-              {[0, 1, 2].map((row) => (
-                <div key={row} className="rounded-lg border border-border bg-card/50 px-4 py-3.5">
-                  <Skeleton className="h-3.5 w-1/4" />
-                  <Skeleton className="mt-3 h-3 w-full" />
-                  <Skeleton className="mt-2 h-3 w-4/5" />
-                </div>
-              ))}
+            <div className="mx-auto max-w-3xl">
+              <TranscriptionListSkeleton />
             </div>
           </div>
         </main>
