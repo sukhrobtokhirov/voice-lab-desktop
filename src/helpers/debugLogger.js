@@ -303,28 +303,12 @@ class DebugLogger {
     if (process.platform === "win32") {
       possiblePaths = [
         ffmpegPath,
-        ffmpegPath?.replace(/app\.asar([/\\])/, "app.asar.unpacked$1"),
-        path.join(
-          process.resourcesPath || "",
-          "app.asar.unpacked",
-          "node_modules",
-          "ffmpeg-static",
-          "ffmpeg.exe"
-        ),
         path.join(process.env.ProgramFiles || "C:\\Program Files", "ffmpeg", "bin", "ffmpeg.exe"),
         "C:\\ffmpeg\\bin\\ffmpeg.exe",
       ].filter(Boolean);
     } else {
       possiblePaths = [
         ffmpegPath,
-        ffmpegPath?.replace("app.asar", "app.asar.unpacked"),
-        path.join(
-          process.resourcesPath || "",
-          "app.asar.unpacked",
-          "node_modules",
-          "ffmpeg-static",
-          "ffmpeg"
-        ),
         "/usr/local/bin/ffmpeg",
         "/opt/homebrew/bin/ffmpeg",
         "/usr/bin/ffmpeg",

@@ -1,7 +1,7 @@
 import { RefreshCw } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { useUsage } from "../hooks/useUsage";
+import { useUsage, type UseUsageResult } from "../hooks/useUsage";
 import type { VoiceLabUser } from "../lib/auth";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -47,6 +47,11 @@ type UsageDisplayProps = {
   surface?: "settings" | "profile";
   autoRefresh?: boolean;
   footerAction?: ReactNode;
+  /**
+   * Lets transient surfaces (such as the profile popover) reuse an already
+   * hydrated usage request instead of starting a second request on every open.
+   */
+  usageState?: UseUsageResult | null;
   auth?: {
     isSignedIn: boolean;
     user: VoiceLabUser | null;
@@ -58,10 +63,18 @@ export default function UsageDisplay({
   surface = "settings",
   autoRefresh = false,
   footerAction,
+  usageState,
   auth,
 }: UsageDisplayProps) {
   const { t, i18n } = useTranslation();
-  const usage = useUsage({ auth });
+  // Keep this hook call unconditional. When a parent supplies its usage state,
+  // the dormant instance never performs auth or subscription work; it only
+  // preserves React's hook order while the supplied snapshot drives the UI.
+  const localUsage = useUsage({
+    loadOnMount: usageState === undefined,
+    auth: usageState !== undefined ? { isSignedIn: false, user: null } : auth,
+  });
+  const usage = usageState === undefined ? localUsage : usageState;
   const refreshUsage = usage?.refetch;
 
   useEffect(() => {

@@ -5,6 +5,7 @@ import SidebarModal, { type SidebarItem } from "./ui/SidebarModal";
 import SettingsPage, { SettingsSectionType } from "./SettingsPage";
 import keyboardIcon from "../assets/icons/keyboard.svg";
 import type { VoiceLabUser } from "../lib/auth";
+import type { UseUsageResult } from "../hooks/useUsage";
 
 export type { SettingsSectionType };
 
@@ -48,6 +49,7 @@ interface SettingsModalProps {
     isLoaded: boolean;
     user: VoiceLabUser | null;
   };
+  usageState?: UseUsageResult | null;
 }
 
 export default function SettingsModal({
@@ -55,6 +57,7 @@ export default function SettingsModal({
   onOpenChange,
   initialSection,
   auth,
+  usageState,
 }: SettingsModalProps) {
   const { t } = useTranslation();
   const sidebarItems: SidebarItem<SettingsSectionType>[] = useMemo(
@@ -138,6 +141,7 @@ export default function SettingsModal({
         onNavigateToSection={handleSectionChange}
         initialSubTab={initialSubTab}
         auth={auth}
+        usageState={usageState}
       />
     </SidebarModal>
   );

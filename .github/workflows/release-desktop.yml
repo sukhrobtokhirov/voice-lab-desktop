@@ -74,7 +74,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Build test runtime dependencies
-        run: npm rebuild better-sqlite3 ffmpeg-static
+        run: npm rebuild better-sqlite3
 
       - name: Run release workflow contract tests
         run: npm run test:release-contract
@@ -145,12 +145,6 @@ jobs:
 
           echo "APPLE_API_KEY=$api_key_path" >> "$GITHUB_ENV"
           echo "CSC_LINK=$certificate_path" >> "$GITHUB_ENV"
-
-      - name: Install target ffmpeg
-        if: matrix.arch == 'x64'
-        run: |
-          rm -f node_modules/ffmpeg-static/ffmpeg
-          npm_config_arch=x64 node node_modules/ffmpeg-static/install.js
 
       - name: Compile native helpers
         run: |

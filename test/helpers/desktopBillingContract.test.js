@@ -87,7 +87,9 @@ test("profile usage menu and settings show server plan limits and manual refresh
   const compactDisplay = display.slice(compactStart, compactEnd);
 
   assert.match(sidebar, /<PopoverContent[\s\S]*side="top"/);
-  assert.match(sidebar, /<UsageDisplay surface="profile" autoRefresh \/>/);
+  assert.match(sidebar, /<UsageDisplay surface="profile" autoRefresh=\{open\} usageState=\{usage\} \/>/);
+  assert.match(sidebar, /<PopoverContent\s+forceMount/);
+  assert.match(display, /usageState\?: UseUsageResult/);
   assert.match(display, /window\.setInterval\(\(\) => void refreshUsage\(\), 10_000\)/);
   assert.match(sidebar, /usedUsagePercentage/);
   assert.doesNotMatch(display, /usage\.plans|planPrice|formatPrice|priceCompact/);

@@ -86,6 +86,7 @@ import logger from "../utils/logger";
 import { SettingsRow } from "./ui/SettingsSection";
 import { useSettingsLayout } from "./ui/useSettingsLayout";
 import UsageDisplay from "./UsageDisplay";
+import type { UseUsageResult } from "../hooks/useUsage";
 import { cn } from "./lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { formatBytes } from "../utils/formatBytes";
@@ -123,6 +124,7 @@ interface SettingsPageProps {
     isLoaded: boolean;
     user: VoiceLabUser | null;
   };
+  usageState?: UseUsageResult | null;
 }
 
 const UI_LANGUAGE_OPTIONS: LanguageOption[] = [
@@ -539,6 +541,7 @@ export default function SettingsPage({
   onNavigateToSection,
   initialSubTab,
   auth,
+  usageState,
 }: SettingsPageProps) {
   const { isCompact } = useSettingsLayout();
   const {
@@ -1239,6 +1242,7 @@ export default function SettingsPage({
 
                 <UsageDisplay
                   auth={{ isSignedIn, user }}
+                  usageState={usageState}
                   footerAction={
                     <Button
                       onClick={handleSignOut}

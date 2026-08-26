@@ -98,7 +98,8 @@ test("release tests rebuild native modules for Node instead of Electron", () => 
   );
 
   assert.match(testGate, /npm ci --ignore-scripts/);
-  assert.match(testGate, /npm rebuild better-sqlite3 ffmpeg-static/);
+  assert.match(testGate, /npm rebuild better-sqlite3/);
+  assert.doesNotMatch(testGate, /ffmpeg-static/);
   assert.match(testGate, /ELECTRON_OVERRIDE_DIST_PATH: \/tmp/);
 });
 

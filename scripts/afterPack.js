@@ -10,8 +10,8 @@
 //    user flags from ~/.config/open-whispr-flags.conf, and fails closed when
 //    the Chromium sandbox is unavailable unless the user explicitly opts in
 //    to an insecure diagnostic launch.
-// 3. Fails the build if required binaries (ffmpeg-static, ps-list vendor exe,
-//    onnx worker script) are missing from app.asar.unpacked/.
+// 3. Fails the build if required binaries (ps-list vendor exe and the ONNX
+//    worker script) are missing from app.asar.unpacked/.
 
 const fs = require("fs");
 const crypto = require("crypto");
@@ -277,17 +277,6 @@ function verifyUnpackedBinaries(context) {
   const unpackedModulesDir = path.join(unpackedDir, "node_modules");
 
   const isWindows = context.electronPlatformName === "win32";
-
-  const ffmpegPath = path.join(
-    unpackedModulesDir,
-    "ffmpeg-static",
-    isWindows ? "ffmpeg.exe" : "ffmpeg"
-  );
-  if (!fs.existsSync(ffmpegPath)) {
-    throw new Error(
-      `afterPack: missing ${ffmpegPath} — ffmpeg-static was not unpacked from app.asar (asarUnpack/packaging failure); the packed app cannot spawn FFmpeg`
-    );
-  }
 
   const onnxWorkerPath = path.join(unpackedDir, "src", "workers", "onnxWorker.js");
   if (!fs.existsSync(onnxWorkerPath)) {

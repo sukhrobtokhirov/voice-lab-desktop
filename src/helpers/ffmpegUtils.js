@@ -9,53 +9,9 @@ let cachedFFmpegPath = null;
 function getFFmpegPath() {
   if (cachedFFmpegPath) return cachedFFmpegPath;
 
-  try {
-    let ffmpegPath = require("ffmpeg-static");
-    ffmpegPath = path.normalize(ffmpegPath);
-
-    if (process.platform === "win32" && !ffmpegPath.endsWith(".exe")) {
-      ffmpegPath += ".exe";
-    }
-
-    // Try unpacked ASAR path first (production builds unpack ffmpeg-static)
-    const unpackedPath = ffmpegPath.includes("app.asar")
-      ? ffmpegPath.replace(/app\.asar([/\\])/, "app.asar.unpacked$1")
-      : null;
-
-    if (unpackedPath && fs.existsSync(unpackedPath)) {
-      if (process.platform !== "win32") {
-        try {
-          fs.accessSync(unpackedPath, fs.constants.X_OK);
-        } catch {
-          try {
-            fs.chmodSync(unpackedPath, 0o755);
-          } catch (chmodErr) {
-            debugLogger.warn("Failed to chmod FFmpeg", { error: chmodErr.message });
-          }
-        }
-      }
-      cachedFFmpegPath = unpackedPath;
-      return unpackedPath;
-    }
-
-    // Try original path (development or if not in ASAR). An in-asar path passes
-    // existsSync but can never be spawned, so fall through to system FFmpeg instead.
-    if (!unpackedPath && fs.existsSync(ffmpegPath)) {
-      if (process.platform !== "win32") {
-        try {
-          fs.accessSync(ffmpegPath, fs.constants.X_OK);
-        } catch {
-          debugLogger.debug("FFmpeg exists but not executable", { ffmpegPath });
-          throw new Error("Not executable");
-        }
-      }
-      cachedFFmpegPath = ffmpegPath;
-      return ffmpegPath;
-    }
-  } catch (err) {
-    debugLogger.debug("Bundled FFmpeg not available", { error: err.message });
-  }
-
+  // Cloud transcription uploads the original recording and normalizes it on
+  // the VoiceLab API. FFmpeg is intentionally not bundled with the desktop
+  // app. This lookup remains only for legacy developer-only tools.
   const systemCandidates =
     process.platform === "darwin"
       ? ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"]

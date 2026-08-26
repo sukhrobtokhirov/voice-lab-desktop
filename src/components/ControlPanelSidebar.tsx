@@ -4,7 +4,7 @@ import { cn } from "./lib/utils";
 import UsageDisplay from "./UsageDisplay";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import VoiceLabIcon from "./ui/VoiceLabIcon";
-import { useUsage } from "../hooks/useUsage";
+import { useUsage, type UseUsageResult } from "../hooks/useUsage";
 import { getCachedPlatform } from "../utils/platform";
 import { VOICELAB_AI_ENABLED } from "../lib/features";
 import historyIcon from "../assets/icons/history.svg";
@@ -37,6 +37,8 @@ interface ControlPanelSidebarProps {
   userImage?: string | null;
   isSignedIn?: boolean;
   authLoaded?: boolean;
+  /** Shared app-level usage state keeps this persistent sidebar and its popover in sync. */
+  usageState?: UseUsageResult | null;
   updateAction?: {
     label: string;
     progress: number;
@@ -216,18 +218,20 @@ function UpdateActionButton({
   );
 }
 
-function ProfileUsageControl({
+const ProfileUsageControl = React.memo(function ProfileUsageControl({
   name,
   image,
   percentage,
   label,
   collapsed = false,
+  usage,
 }: {
   name: string;
   image?: string | null;
   percentage: number | null;
   label: string;
   collapsed?: boolean;
+  usage: NonNullable<ReturnType<typeof useUsage>>;
 }) {
   const [open, setOpen] = React.useState(false);
   const showUsageOnHover = percentage !== null;
@@ -273,19 +277,18 @@ function ProfileUsageControl({
           </span>
         </button>
       </PopoverTrigger>
-      {open && (
-        <PopoverContent
-          side="top"
-          align="start"
-          sideOffset={10}
-          className="w-[min(20rem,calc(100vw-2rem))] p-4"
-        >
-          <UsageDisplay surface="profile" autoRefresh />
-        </PopoverContent>
-      )}
+      <PopoverContent
+        forceMount
+        side="top"
+        align="start"
+        sideOffset={10}
+        className="w-[min(20rem,calc(100vw-2rem))] p-4"
+      >
+        <UsageDisplay surface="profile" autoRefresh={open} usageState={usage} />
+      </PopoverContent>
     </Popover>
   );
-}
+});
 
 function ProfileIdentitySkeleton({ collapsed = false }: { collapsed?: boolean }) {
   return (
@@ -316,13 +319,20 @@ export default function ControlPanelSidebar({
   userImage,
   isSignedIn,
   authLoaded,
+  usageState,
   updateAction,
 }: ControlPanelSidebarProps) {
   const { t } = useTranslation();
-  const usage = useUsage();
+  // Keep a local fallback for isolated previews/tests, but normal application
+  // usage is owned by ControlPanel so opening the profile menu does no new work.
+  const fallbackUsage = useUsage({
+    loadOnMount: usageState === undefined,
+    auth: usageState !== undefined ? { isSignedIn: false, user: null } : undefined,
+  });
+  const usage = usageState === undefined ? fallbackUsage : usageState;
   const profileName = userName || t("sidebar.defaultUser", { defaultValue: "VoiceLab user" });
   const usagePercentage = usedUsagePercentage(usage);
-  const isProfileLoading = !authLoaded;
+  const isProfileLoading = !authLoaded || (isSignedIn === true && usage === null);
   const primaryItems = [
     {
       id: "home" as const,
@@ -468,13 +478,14 @@ export default function ControlPanelSidebar({
           >
             {isProfileLoading ? (
               <ProfileIdentitySkeleton collapsed={collapsed} />
-            ) : isSignedIn ? (
+            ) : isSignedIn && usage ? (
               <ProfileUsageControl
                 name={profileName}
                 image={userImage}
                 percentage={usagePercentage}
                 label={`${profileName}: ${t("desktop.wallet.title")}`}
                 collapsed={collapsed}
+                usage={usage}
               />
             ) : (
               <div

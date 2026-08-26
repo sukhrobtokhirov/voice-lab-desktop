@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "./useAuth";
 import type { VoiceLabUser } from "../lib/auth";
 
@@ -31,7 +31,7 @@ export interface DesktopUsageData {
   entitlement: DesktopEntitlement | null;
 }
 
-interface UseUsageResult extends DesktopUsageData {
+export interface UseUsageResult extends DesktopUsageData {
   status: string;
   isSubscribed: boolean | null;
   isOverLimit: boolean | null;
@@ -409,31 +409,52 @@ export function useUsage({ loadOnMount = true, auth }: UseUsageOptions = {}): Us
 
   const entitlement = subscription.entitlement;
 
-  if (!isSignedIn) return null;
+  // Consumers use this object as a render boundary (the sidebar, profile menu,
+  // Settings, and Integrations). Keeping its identity stable prevents unrelated
+  // dashboard state changes from repainting every usage surface.
+  return useMemo<UseUsageResult | null>(() => {
+    if (!isSignedIn) return null;
 
-  const isSubscribed = entitlement ? entitlement.active : null;
-  const plan = entitlement?.active ? entitlement.planName || entitlement.planId : null;
-  return {
-    ...STATIC_DESKTOP_STT_DATA,
-    updatedAt,
-    sttUsage,
-    plan,
+    const isSubscribed = entitlement ? entitlement.active : null;
+    const plan = entitlement?.active ? entitlement.planName || entitlement.planId : null;
+    return {
+      ...STATIC_DESKTOP_STT_DATA,
+      updatedAt,
+      sttUsage,
+      plan,
+      entitlement,
+      status: entitlement ? (entitlement.active ? "active" : "inactive") : "unknown",
+      isSubscribed,
+      isOverLimit: sttUsage ? sttUsage.remaining_seconds <= 0 : null,
+      isLoading: subscription.isLoading,
+      isRefreshing,
+      hasLoaded: subscription.hasLoaded,
+      hasUsageData: sttUsage !== null,
+      hasSubscriptionData: subscription.hasLoaded && entitlement !== null,
+      error: billingError || subscription.error,
+      errorCode: subscription.errorCode,
+      errorRequestId: subscription.requestId,
+      checkoutLoading: isWaitingForBillingReturn || isPollingSubscription,
+      billingAvailable: true,
+      refetch,
+      openCheckout: openBilling,
+      openBillingPortal: openBilling,
+    };
+  }, [
+    billingError,
     entitlement,
-    status: entitlement ? (entitlement.active ? "active" : "inactive") : "unknown",
-    isSubscribed,
-    isOverLimit: sttUsage ? sttUsage.remaining_seconds <= 0 : null,
-    isLoading: subscription.isLoading,
+    isPollingSubscription,
     isRefreshing,
-    hasLoaded: subscription.hasLoaded,
-    hasUsageData: sttUsage !== null,
-    hasSubscriptionData: subscription.hasLoaded && entitlement !== null,
-    error: billingError || subscription.error,
-    errorCode: subscription.errorCode,
-    errorRequestId: subscription.requestId,
-    checkoutLoading: isWaitingForBillingReturn || isPollingSubscription,
-    billingAvailable: true,
+    isSignedIn,
+    isWaitingForBillingReturn,
+    openBilling,
     refetch,
-    openCheckout: openBilling,
-    openBillingPortal: openBilling,
-  };
+    sttUsage,
+    subscription.error,
+    subscription.errorCode,
+    subscription.hasLoaded,
+    subscription.isLoading,
+    subscription.requestId,
+    updatedAt,
+  ]);
 }

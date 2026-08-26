@@ -188,7 +188,10 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     return () => window.clearTimeout(timer);
   }, [isLoading]);
   const dataRetentionEnabled = useSettingsStore((state) => state.dataRetentionEnabled);
-  const usage = useUsage({ loadOnMount: activeView === "integrations" });
+  // One app-level usage owner feeds the sidebar, Account settings, and the
+  // optional Integrations view. This prevents each surface from fetching and
+  // rebuilding its own usage card when it opens.
+  const usage = useUsage({ auth: { isSignedIn, user } });
 
   const {
     status: updateStatus,
@@ -752,6 +755,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
             }}
             initialSection={settingsSection}
             auth={{ isSignedIn, isLoaded: authLoaded, user }}
+            usageState={usage}
           />
         </Suspense>
       )}
@@ -825,6 +829,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
             userImage={user?.image}
             isSignedIn={isSignedIn}
             authLoaded={authLoaded}
+            usageState={usage}
             updateAction={
               !updateStatus.isDevelopment &&
               (updateStatus.updateAvailable ||
