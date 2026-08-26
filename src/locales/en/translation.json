@@ -3063,6 +3063,7 @@
   "updateNotification": {
     "title": "VoiceLab Update Available",
     "body": "Version {{version}} is ready to download",
+    "nativeBodyLinux": "Version {{version}} is ready. Click this notification to download it.",
     "cta": "Update Now",
     "later": "Later",
     "update": "Update",

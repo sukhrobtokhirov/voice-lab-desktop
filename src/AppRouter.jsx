@@ -3,7 +3,6 @@ import App from "./App.jsx";
 import AuthenticationStep from "./components/AuthenticationStep.tsx";
 import MeetingNotificationOverlay from "./components/MeetingNotificationOverlay.tsx";
 import TranscriptionPreviewOverlay from "./components/TranscriptionPreviewOverlay.tsx";
-import UpdateNotificationOverlay from "./components/UpdateNotificationOverlay.tsx";
 import WindowControls from "./components/WindowControls.tsx";
 import { Card, CardContent } from "./components/ui/card.tsx";
 import { Skeleton } from "./components/ui/skeleton.tsx";
@@ -23,10 +22,6 @@ export default function AppRouter() {
 
   if (params.includes("meeting-notification=true")) {
     return <MeetingNotificationOverlay />;
-  }
-
-  if (params.includes("update-notification=true")) {
-    return <UpdateNotificationOverlay />;
   }
 
   if (params.includes("transcription-preview=true")) {

@@ -751,16 +751,9 @@ const fullElectronAPI = {
     (callback) => () => callback()
   ),
 
-  onUpdateNotificationData: registerListener(
-    "update-notification-data",
-    (callback) => (_event, data) => callback(data)
-  ),
-  getUpdateNotificationData: () => ipcRenderer.invoke("get-update-notification-data"),
-  updateNotificationReady: () => ipcRenderer.invoke("update-notification-ready"),
-  updateNotificationRespond: (action) => ipcRenderer.invoke("update-notification-respond", action),
 };
 
-const preloadCapabilities = new Set(["getMeetingNotificationData","getPlatform","getUpdateNotificationData","joinCalendarMeeting","meetingNotificationReady","meetingNotificationRespond","onMeetingNotificationData","onUpdateNotificationData","setNotificationInteractivity","updateNotificationReady","updateNotificationRespond"]);
+const preloadCapabilities = new Set(["getMeetingNotificationData","getPlatform","joinCalendarMeeting","meetingNotificationReady","meetingNotificationRespond","onMeetingNotificationData","setNotificationInteractivity"]);
 const exposedElectronAPI = Object.fromEntries(
   Object.entries(fullElectronAPI).filter(([name]) => preloadCapabilities.has(name))
 );

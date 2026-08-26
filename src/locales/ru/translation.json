@@ -2971,6 +2971,7 @@
   "updateNotification": {
     "title": "Доступно обновление VoiceLab",
     "body": "Версия {{version}} готова к загрузке",
+    "nativeBodyLinux": "Версия {{version}} готова. Нажмите на это уведомление, чтобы скачать её.",
     "cta": "Обновить",
     "later": "Позже",
     "update": "Обновить",

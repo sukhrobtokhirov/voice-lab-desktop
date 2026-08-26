@@ -3065,6 +3065,7 @@
   "updateNotification": {
     "title": "VoiceLab yangilanishi mavjud",
     "body": "{{version}} versiyasi yuklab olishga tayyor",
+    "nativeBodyLinux": "{{version}} versiyasi tayyor. Yuklab olish uchun bildirishnomani bosing.",
     "cta": "Hozir yangilash",
     "later": "Keyinroq",
     "update": "Yangilash",

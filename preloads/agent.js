@@ -751,13 +751,6 @@ const fullElectronAPI = {
     (callback) => () => callback()
   ),
 
-  onUpdateNotificationData: registerListener(
-    "update-notification-data",
-    (callback) => (_event, data) => callback(data)
-  ),
-  getUpdateNotificationData: () => ipcRenderer.invoke("get-update-notification-data"),
-  updateNotificationReady: () => ipcRenderer.invoke("update-notification-ready"),
-  updateNotificationRespond: (action) => ipcRenderer.invoke("update-notification-respond", action),
 };
 
 const preloadCapabilities = new Set(["acquireRecordingLock","addAgentMessage","agentOpenNote","agentWebSearch","archiveAgentConversation","checkLocalReasoningAvailable","createAgentConversation","deleteAgentConversation","getAgentConversation","getAgentConversations","getAgentConversationsWithPreview","getAgentMessages","getAgentWindowBounds","getConversationsForNote","getNote","getPlatform","hideAgentOverlay","llamaServerStart","onAgentStartRecording","onAgentStopRecording","onAgentStreamChunk","onAgentStreamEnd","onAgentStreamError","onAgentToggleRecording","onProviderStreamPart","processLocalReasoning","providerCredentialStatus","providerReason","providerStreamCancel","providerStreamStart","releaseRecordingLock","resizeAgentWindow","searchAgentConversations","searchNotes","semanticSearchConversations","semanticSearchNotes","setAgentWindowBounds","startAgentStream","unarchiveAgentConversation","updateAgentConversationCloudId","updateAgentConversationTitle","writeClipboard"]);

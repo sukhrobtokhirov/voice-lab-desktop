@@ -13,10 +13,6 @@ const windowSpecific = new Set([
   "meetingNotificationReady",
   "meetingNotificationRespond",
   "joinCalendarMeeting",
-  "onUpdateNotificationData",
-  "getUpdateNotificationData",
-  "updateNotificationReady",
-  "updateNotificationRespond",
   "onPreviewText",
   "onPreviewAppend",
   "onPreviewHold",
@@ -163,10 +159,6 @@ const notification = new Set([
   "meetingNotificationReady",
   "meetingNotificationRespond",
   "joinCalendarMeeting",
-  "onUpdateNotificationData",
-  "getUpdateNotificationData",
-  "updateNotificationReady",
-  "updateNotificationRespond",
 ]);
 
 const preview = new Set([

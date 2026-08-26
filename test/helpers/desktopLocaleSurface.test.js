@@ -88,14 +88,16 @@ test("compact overlay controls have localized accessible names", () => {
   }
 });
 
-test("desktop push windows share the notification surface", () => {
-  const overlays = [
-    "src/components/MeetingNotificationCard.tsx",
-    "src/components/UpdateNotificationOverlay.tsx",
-  ];
+test("meeting prompts keep the custom notification surface while updates use native notifications", () => {
+  const meetingOverlay = fs.readFileSync(
+    path.join(root, "src/components/MeetingNotificationCard.tsx"),
+    "utf8"
+  );
+  const updater = fs.readFileSync(path.join(root, "src/updater.js"), "utf8");
 
-  for (const relative of overlays) {
-    const source = fs.readFileSync(path.join(root, relative), "utf8");
-    assert.match(source, /PushNotificationCard/, `${relative} bypasses the shared push surface`);
-  }
+  assert.match(meetingOverlay, /PushNotificationCard/);
+  assert.match(updater, /Notification\.isSupported\(\)/);
+  assert.match(updater, /new Notification\(/);
+  assert.match(updater, /process\.platform === "linux"/);
+  assert.doesNotMatch(updater, /showUpdateNotification\(/);
 });

@@ -6549,28 +6549,6 @@ class IPCHandlers {
       this.windowManager?.showNotificationWindow();
     });
 
-    this._handle("get-update-notification-data", async () => {
-      return this.windowManager?._pendingUpdateNotificationData ?? null;
-    });
-
-    this._handle("update-notification-ready", async () => {
-      this.windowManager?.showUpdateNotificationWindow();
-    });
-
-    this._handle("update-notification-respond", async (_event, action) => {
-      this.windowManager?.dismissUpdateNotification();
-      if (action === "update") {
-        try {
-          await this.updateManager?.downloadUpdate();
-        } catch (error) {
-          debugLogger.error("Failed to start update download from notification", {
-            code: error?.code,
-          });
-        }
-      }
-      return { success: true };
-    });
-
     // Note files (markdown mirror) handlers
     this._handle("note-files-set-enabled", async (_event, enabled, customPath, options) => {
       try {

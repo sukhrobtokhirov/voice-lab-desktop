@@ -751,13 +751,6 @@ const fullElectronAPI = {
     (callback) => () => callback()
   ),
 
-  onUpdateNotificationData: registerListener(
-    "update-notification-data",
-    (callback) => (_event, data) => callback(data)
-  ),
-  getUpdateNotificationData: () => ipcRenderer.invoke("get-update-notification-data"),
-  updateNotificationReady: () => ipcRenderer.invoke("update-notification-ready"),
-  updateNotificationRespond: (action) => ipcRenderer.invoke("update-notification-respond", action),
 };
 
 const preloadCapabilities = new Set(["completeDictationPreview","dismissDictationPreview","getPlatform","hideDictationPreview","onPreviewAppend","onPreviewHide","onPreviewHold","onPreviewResult","onPreviewText","resizeTranscriptionPreviewWindow"]);

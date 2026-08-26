@@ -1,5 +1,6 @@
-const { app } = require("electron");
+const { app, Notification } = require("electron");
 const { autoUpdater } = require("electron-updater");
+const { i18nMain } = require("./helpers/i18nMain");
 const { publicUpdateInfo } = require("./helpers/releaseNotes");
 const { resolveUpdateFeed } = require("./helpers/updateFeedConfig");
 const { isAllowedUpdate } = require("./helpers/versionComparison");
@@ -17,6 +18,7 @@ class UpdateManager {
     this.updateCheckInterval = null;
     this.windowManager = null;
     this._suppressNotification = false;
+    this.nativeUpdateNotification = null;
 
     this.setupAutoUpdater();
   }
@@ -103,10 +105,8 @@ class UpdateManager {
         const nPrefs = this.windowManager?.notificationPrefs || {};
         const notifAllowed =
           nPrefs.notificationsEnabled !== false && nPrefs.notifyUpdates !== false;
-        if (this.windowManager && info && !this._suppressNotification && notifAllowed) {
-          this.windowManager.showUpdateNotification(publicInfo).catch((err) => {
-            console.error("Failed to show update notification:", err);
-          });
+        if (info && !this._suppressNotification && notifAllowed) {
+          this.showNativeUpdateNotification(publicInfo);
         }
         this._suppressNotification = false;
       },
@@ -176,6 +176,56 @@ class UpdateManager {
         win.webContents.send(channel, data);
       }
     }
+  }
+
+  showNativeUpdateNotification(info) {
+    if (!Notification.isSupported()) {
+      console.warn("Native notifications are not supported on this system");
+      return;
+    }
+
+    if (this.nativeUpdateNotification) {
+      this.nativeUpdateNotification.close();
+      this.nativeUpdateNotification = null;
+    }
+
+    const canUseActions = process.platform === "darwin" || process.platform === "win32";
+    const notification = new Notification({
+      title: i18nMain.t("updateNotification.title"),
+      body:
+        process.platform === "linux"
+          ? i18nMain.t("updateNotification.nativeBodyLinux", { version: info.version })
+          : i18nMain.t("updateNotification.body", { version: info.version }),
+      ...(canUseActions
+        ? {
+            actions: [
+              { type: "button", text: i18nMain.t("updateNotification.update") },
+              { type: "button", text: i18nMain.t("updateNotification.later") },
+            ],
+          }
+        : { urgency: "normal", timeoutType: "default" }),
+    });
+
+    const download = () => {
+      void this.downloadUpdate().catch((error) => {
+        console.error("Failed to start update download from native notification:", error);
+      });
+    };
+
+    this.nativeUpdateNotification = notification;
+    notification.on("click", download);
+    notification.on("action", (_event, actionIndex) => {
+      if (actionIndex === 0) download();
+    });
+    notification.on("failed", (_event, error) => {
+      console.error("Failed to display native update notification:", error);
+    });
+    notification.on("close", () => {
+      if (this.nativeUpdateNotification === notification) {
+        this.nativeUpdateNotification = null;
+      }
+    });
+    notification.show();
   }
 
   async checkForUpdates() {
@@ -362,6 +412,10 @@ class UpdateManager {
       autoUpdater.removeListener(event, handler);
     });
     this.eventListeners = [];
+    if (this.nativeUpdateNotification) {
+      this.nativeUpdateNotification.close();
+      this.nativeUpdateNotification = null;
+    }
     if (this.handleBeforeQuitForUpdate) {
       require("electron").autoUpdater.removeListener(
         "before-quit-for-update",

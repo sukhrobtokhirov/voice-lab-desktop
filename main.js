@@ -392,7 +392,6 @@ function isTrustedAppWebContents(contents) {
     windowManager?.agentWindow,
     windowManager?.notificationWindow,
     windowManager?.transcriptionPreviewWindow,
-    windowManager?.updateNotificationWindow,
   ].filter(Boolean);
   return (
     Boolean(senderWindow && knownWindows.includes(senderWindow)) &&

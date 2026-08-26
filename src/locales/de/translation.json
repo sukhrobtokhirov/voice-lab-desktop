@@ -2948,7 +2948,10 @@
   "updateNotification": {
     "title": "VoiceLab-Update verfügbar",
     "body": "Version {{version}} steht zum Download bereit",
-    "cta": "Jetzt aktualisieren"
+    "nativeBodyLinux": "Version {{version}} ist bereit. Klicke auf diese Benachrichtigung, um sie herunterzuladen.",
+    "cta": "Jetzt aktualisieren",
+    "later": "Später",
+    "update": "Aktualisieren"
   },
   "permissionsGate": {
     "title": "Berechtigungen erforderlich",

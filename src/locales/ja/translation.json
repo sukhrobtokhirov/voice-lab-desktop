@@ -2948,7 +2948,10 @@
   "updateNotification": {
     "title": "VoiceLab のアップデートあり",
     "body": "バージョン {{version}} がダウンロード可能です",
-    "cta": "今すぐ更新"
+    "nativeBodyLinux": "バージョン {{version}} の準備ができました。この通知をクリックしてダウンロードしてください。",
+    "cta": "今すぐ更新",
+    "later": "あとで",
+    "update": "更新"
   },
   "permissionsGate": {
     "title": "権限が必要です",

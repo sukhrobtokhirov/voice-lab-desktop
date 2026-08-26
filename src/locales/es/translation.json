@@ -2996,7 +2996,10 @@
   "updateNotification": {
     "title": "Actualización de VoiceLab disponible",
     "body": "La versión {{version}} está lista para descargar",
-    "cta": "Actualizar ahora"
+    "nativeBodyLinux": "La versión {{version}} está lista. Haz clic en esta notificación para descargarla.",
+    "cta": "Actualizar ahora",
+    "later": "Más tarde",
+    "update": "Actualizar"
   },
   "permissionsGate": {
     "title": "Permisos necesarios",
