@@ -166,9 +166,16 @@ export const useAudioRecording = (toast, options = {}) => {
                 type: "button",
                 className:
                   "rounded-md border border-current/20 px-2.5 py-1 text-xs font-semibold transition-colors hover:bg-white/10",
-                onClick: () => {
+                onClick: async () => {
                   if (recovery === "auth") {
-                    void signInWithSocial("google");
+                    const result = await signInWithSocial("google");
+                    if (result.error) {
+                      toast({
+                        title: t("auth.desktopFailed"),
+                        description: t("auth.desktopBrowserHint"),
+                        variant: "destructive",
+                      });
+                    }
                   } else if (recovery === "billing") {
                     void window.electronAPI?.openVoiceLabBilling?.("dictate");
                   } else if (recovery === "permission") {

@@ -29,6 +29,28 @@ function desktopAuthError(error: unknown, fallback: string): Error {
   return new Error(message || fallback);
 }
 
+/**
+ * Starting browser auth is only successful once the main process has either
+ * opened the browser or already completed authentication. Treat every other
+ * status as a failure so callers never silently wait for a browser that was
+ * not launched.
+ */
+function browserSignInStarted(status: { status?: string } | undefined): boolean {
+  return Boolean(
+    status &&
+      (status.status === "opening-browser" ||
+        status.status === "waiting-for-browser" ||
+        status.status === "authenticated")
+  );
+}
+
+function browserSignInError(
+  status: { errorCode?: string | null; errorMessage?: string | null } | undefined,
+  fallback: string
+): Error {
+  return new Error(status?.errorMessage || status?.errorCode || fallback);
+}
+
 const LAST_SIGN_IN_STORAGE_KEY = "voicelab:lastSignInTime";
 const GRACE_PERIOD_MS = 60_000;
 const GRACE_RETRY_COUNT = 6;
@@ -153,8 +175,8 @@ export async function signInWithPassword(
   void email;
   void password;
   const status = await window.electronAPI?.authStartBrowser?.();
-  if (status?.status === "error") {
-    return { error: new Error(status.errorCode || "Unable to open secure browser sign-in") };
+  if (!browserSignInStarted(status)) {
+    return { error: browserSignInError(status, "Unable to open secure browser sign-in") };
   }
   return { user: null };
 }
@@ -166,8 +188,8 @@ export async function signUpWithPassword(input: {
 }): Promise<{ error?: Error; requiresVerification?: boolean; user?: VoiceLabUser | null }> {
   void input;
   const status = await window.electronAPI?.authStartBrowser?.();
-  if (status?.status === "error") {
-    return { error: new Error(status.errorCode || "Unable to open secure browser registration") };
+  if (!browserSignInStarted(status)) {
+    return { error: browserSignInError(status, "Unable to open secure browser registration") };
   }
   return { requiresVerification: false, user: null };
 }
@@ -245,9 +267,9 @@ export async function signInWithSocial(
     }
 
     const status = await window.electronAPI?.authStartBrowser?.("google");
-    if (!status || status.status === "error") {
+    if (!browserSignInStarted(status)) {
       return {
-        error: new Error(status?.errorMessage || "Social sign-in failed"),
+        error: browserSignInError(status, "Social sign-in failed"),
         errorCode: status?.errorCode || null,
       };
     }
@@ -264,9 +286,9 @@ export async function signInWithSocial(
 export async function reopenBrowserSignIn(): Promise<{ error?: Error; errorCode?: string | null }> {
   try {
     const status = await window.electronAPI?.authReopenBrowser?.();
-    if (!status || status.status === "error" || status.status === "expired") {
+    if (!browserSignInStarted(status)) {
       return {
-        error: new Error(status?.errorMessage || "Unable to reopen browser sign-in"),
+        error: browserSignInError(status, "Unable to reopen browser sign-in"),
         errorCode: status?.errorCode || null,
       };
     }
@@ -294,8 +316,8 @@ export async function requestPasswordReset(email: string): Promise<{ error?: Err
   void email;
   try {
     const status = await window.electronAPI?.authStartBrowser?.();
-    if (!status || status.status === "error") {
-      throw new Error(status?.errorMessage || "Unable to open VoiceLab sign-in");
+    if (!browserSignInStarted(status)) {
+      throw browserSignInError(status, "Unable to open VoiceLab sign-in");
     }
     return {};
   } catch (error) {
@@ -307,8 +329,8 @@ export async function resendVerificationEmail(email: string): Promise<{ error?: 
   void email;
   try {
     const status = await window.electronAPI?.authStartBrowser?.();
-    if (!status || status.status === "error") {
-      throw new Error(status?.errorMessage || "Unable to open VoiceLab sign-in");
+    if (!browserSignInStarted(status)) {
+      throw browserSignInError(status, "Unable to open VoiceLab sign-in");
     }
     return {};
   } catch (error) {

@@ -193,6 +193,17 @@ test("onboarding setup asks only for needed access and saves the chosen shortcut
   assert.doesNotMatch(controlPanelPreload, /onShortcutTested|setShortcutTestMode/);
 });
 
+test("browser sign-in recovery waits for a confirmed browser launch", () => {
+  const auth = read("src/lib/auth.ts");
+  const recording = read("src/hooks/useAudioRecording.js");
+
+  assert.match(auth, /function browserSignInStarted/);
+  assert.match(auth, /status\.status === "waiting-for-browser"/);
+  assert.match(auth, /if \(!browserSignInStarted\(status\)\)/);
+  assert.match(recording, /const result = await signInWithSocial\("google"\)/);
+  assert.match(recording, /if \(result\.error\)/);
+});
+
 test("global error screen keeps internal error details out of the interface", () => {
   const boundary = read("src/components/ErrorBoundary.tsx");
 
