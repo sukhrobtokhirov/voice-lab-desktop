@@ -29,11 +29,11 @@
   },
   "tray": {
     "toggleDictation": {
-      "show": "Mostrar panel de dictado",
-      "hide": "Ocultar panel de dictado"
+      "show": "Mostrar",
+      "hide": "Ocultar"
     },
-    "openControlPanel": "Abrir panel de control",
-    "hideControlPanel": "Ocultar panel de control",
+    "openControlPanel": "Abrir VoiceLab",
+    "hideControlPanel": "Ocultar VoiceLab",
     "quit": "Salir de VoiceLab",
     "tooltip": "VoiceLab - Dictado por voz"
   },

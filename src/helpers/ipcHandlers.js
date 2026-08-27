@@ -763,6 +763,11 @@ class IPCHandlers {
       this.windowManager.hideDictationPanel();
     });
 
+    this._handle("quit-app", () => {
+      app.quit();
+      return { success: true };
+    });
+
     this._handle("show-dictation-panel", () => {
       this.windowManager.showDictationPanel();
     });
@@ -3767,7 +3772,10 @@ class IPCHandlers {
 
     const getMeetingSystemAudioMode = () => getMeetingSystemAudioCapabilityMode();
 
-    const getMeetingSystemAudioPlan = async () => {
+    const getMeetingSystemAudioPlan = async (enabled = true) => {
+      if (!enabled) {
+        return { mode: "unsupported", strategy: "unsupported" };
+      }
       const mode = getMeetingSystemAudioMode();
       if (mode === "unsupported") {
         return { mode, strategy: "unsupported" };
@@ -3795,9 +3803,14 @@ class IPCHandlers {
       return { mode, strategy: "unsupported" };
     };
 
-    const hasNativeMeetingSystemAudio = () => getMeetingSystemAudioMode() === "native";
+    const hasNativeMeetingSystemAudio = () =>
+      meetingSystemAudioCaptureEnabled && getMeetingSystemAudioMode() === "native";
 
-    const isMeetingStreamingConnected = (systemAudioMode = getMeetingSystemAudioCapabilityMode()) =>
+    const isMeetingStreamingConnected = (
+      systemAudioMode = meetingSystemAudioCaptureEnabled
+        ? getMeetingSystemAudioCapabilityMode()
+        : "unsupported"
+    ) =>
       !!this._meetingMicStreaming?.isConnected &&
       (systemAudioMode === "unsupported" || !!this._meetingSystemStreaming?.isConnected);
 
@@ -3821,7 +3834,9 @@ class IPCHandlers {
         keyterms: options.keyterms,
         sampleRate: MEETING_STREAM_SAMPLE_RATE,
       };
-      const { mode: systemAudioMode } = await getMeetingSystemAudioPlan();
+      const { mode: systemAudioMode } = await getMeetingSystemAudioPlan(
+        options.systemAudioCaptureEnabled !== false
+      );
       let pairs;
       if (systemAudioMode !== "unsupported") {
         const secrets = await fetchRealtimeToken(event, options, { streams: 2 });
@@ -3870,6 +3885,7 @@ class IPCHandlers {
     const MAX_MEETING_RECONNECTS = 5;
     let meetingConnectionOptions = null;
     let meetingConnectionWin = null;
+    let meetingSystemAudioCaptureEnabled = true;
 
     const fs = require("fs");
     let meetingDiarizationStream = null;
@@ -3977,6 +3993,7 @@ class IPCHandlers {
     };
 
     const dispatchMeetingAudioBuffer = (buffer, source) => {
+      if (source === "system" && !meetingSystemAudioCaptureEnabled) return;
       if (meetingLocalMode) {
         meetingLocalBuffers[source].push(buffer);
         return;
@@ -4552,6 +4569,7 @@ class IPCHandlers {
       meetingEchoLeakDetector.reset();
       meetingReconnecting = false;
       meetingReconnectCount = 0;
+      meetingSystemAudioCaptureEnabled = true;
       meetingConnectionOptions = null;
       meetingConnectionWin = null;
     };
@@ -4712,12 +4730,14 @@ class IPCHandlers {
 
       meetingTranscriptionStartInProgress = true;
       meetingStartedAt = Date.now();
+      options.systemAudioCaptureEnabled = options.systemAudioCaptureEnabled !== false;
+      meetingSystemAudioCaptureEnabled = options.systemAudioCaptureEnabled;
       meetingConnectionOptions = options;
       meetingConnectionWin = BrowserWindow.fromWebContents(event.sender);
       meetingReconnectCount = 0;
       this.meetingDetectionEngine?.setUserRecording(true);
       try {
-        const systemAudioPlan = await getMeetingSystemAudioPlan();
+        const systemAudioPlan = await getMeetingSystemAudioPlan(meetingSystemAudioCaptureEnabled);
         let { mode: systemAudioMode, strategy: systemAudioStrategy } = systemAudioPlan;
         meetingEchoLeakDetector.reset();
         meetingOneOnOneAttendee = resolveOneOnOneAttendeeForNote(options.noteId);
@@ -4780,6 +4800,7 @@ class IPCHandlers {
 
     const sendMeetingAudio = (audioBuffer, source) => {
       if (source !== "mic" && source !== "system") return;
+      if (source === "system" && !meetingSystemAudioCaptureEnabled) return;
       let outboundBuffer;
       try {
         outboundBuffer = toBoundedAudioBuffer(
@@ -4886,6 +4907,9 @@ class IPCHandlers {
       systemAudioStrategy,
       context
     ) => {
+      if (!meetingSystemAudioCaptureEnabled) {
+        return { systemAudioMode: "unsupported", systemAudioStrategy: "unsupported" };
+      }
       if (systemAudioMode === "native") {
         try {
           await startManagedMeetingSystemAudio(
@@ -4946,6 +4970,41 @@ class IPCHandlers {
         return { systemAudioMode: "unsupported", systemAudioStrategy: "unsupported" };
       }
     };
+
+    const stopActiveMeetingSystemAudio = async () => {
+      if (this.audioTapManager) {
+        await this.audioTapManager.stop().catch(() => {});
+      }
+      if (this.linuxPortalAudioManager) {
+        await this.linuxPortalAudioManager.stop().catch(() => {});
+      }
+      if (this.windowsLoopbackAudioManager) {
+        await this.windowsLoopbackAudioManager.stop().catch(() => {});
+      }
+      if (this._meetingSystemStreaming?.isConnected) {
+        await this._meetingSystemStreaming.disconnect().catch(() => {});
+      }
+      this._meetingSystemStreaming = null;
+      meetingLocalBuffers.system = [];
+      meetingEchoLeakDetector.reset();
+      await stopMeetingAec();
+      await stopLiveSpeakerIdentification().catch(() => {});
+      flushPendingMeetingMicChunks(true);
+    };
+
+    this._handle("meeting-transcription-set-system-audio-enabled", async (_event, enabled) => {
+      meetingSystemAudioCaptureEnabled = enabled !== false;
+      if (meetingConnectionOptions) {
+        meetingConnectionOptions = {
+          ...meetingConnectionOptions,
+          systemAudioCaptureEnabled: meetingSystemAudioCaptureEnabled,
+        };
+      }
+      if (!meetingSystemAudioCaptureEnabled) {
+        await stopActiveMeetingSystemAudio();
+      }
+      return { success: true };
+    });
 
     this._on("meeting-transcription-send", (_event, audioBuffer, source) => {
       sendMeetingAudio(audioBuffer, source);

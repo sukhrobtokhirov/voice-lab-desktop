@@ -512,6 +512,7 @@ declare global {
         }
       ) => Promise<void>;
       hideWindow: () => Promise<void>;
+      quitApp: () => Promise<{ success: boolean }>;
       showDictationPanel: () => Promise<void>;
       onToggleDictation: (callback: () => void) => () => void;
       onToggleVoiceAgent?: (callback: () => void) => () => void;
@@ -1600,6 +1601,7 @@ declare global {
         model?: string;
         language?: string;
         noteId?: number | null;
+        systemAudioCaptureEnabled?: boolean;
       }) => Promise<{
         success: boolean;
         error?: string;
@@ -1608,6 +1610,7 @@ declare global {
         oneOnOneAttendee?: { displayName: string; email: string | null } | null;
       }>;
       meetingTranscriptionSend?: (buffer: ArrayBuffer, source: "mic" | "system") => void;
+      meetingTranscriptionSetSystemAudioEnabled?: (enabled: boolean) => Promise<{ success: boolean }>;
       meetingTranscriptionStop?: () => Promise<{
         success: boolean;
         transcript?: string;

@@ -123,6 +123,7 @@ const getMeetingTranscriptionOptions = () => {
     localProvider: "voicelab",
     localModel: "voicelab-cloud",
     language,
+    systemAudioCaptureEnabled: state.systemAudioCaptureEnabled !== false,
   };
 };
 
@@ -173,8 +174,13 @@ const requestSystemAudioDisplayStream = async (mode: "loopback" | "portal") => {
   }
 };
 
-const prepareMeetingSystemAudioCapture = (initialSystemAudioAccess: SystemAudioAccessResult) => {
-  const initialSystemAudioStrategy = initialSystemAudioAccess.strategy ?? "unsupported";
+const prepareMeetingSystemAudioCapture = (
+  initialSystemAudioAccess: SystemAudioAccessResult,
+  systemAudioCaptureEnabled: boolean
+) => {
+  const initialSystemAudioStrategy = systemAudioCaptureEnabled
+    ? (initialSystemAudioAccess.strategy ?? "unsupported")
+    : "unsupported";
   const initialDisplayCaptureStrategy = isRendererSystemAudioStrategy(initialSystemAudioStrategy)
     ? initialSystemAudioStrategy
     : null;
@@ -195,11 +201,18 @@ const ensureRendererSystemAudioCapture = async ({
   initialDisplayCaptureStrategy,
   systemAudioStrategy,
   systemCaptureResult,
+  systemAudioCaptureEnabled,
 }: {
   initialDisplayCaptureStrategy: "loopback" | null;
   systemAudioStrategy: SystemAudioStrategy;
   systemCaptureResult: { stream: MediaStream | null; error: Error | null };
+  systemAudioCaptureEnabled: boolean;
 }) => {
+  if (!systemAudioCaptureEnabled) {
+    stopMediaStream(systemCaptureResult.stream);
+    return { stream: null, error: null };
+  }
+
   if (
     systemCaptureResult.stream ||
     systemCaptureResult.error ||
@@ -395,6 +408,7 @@ let systemContext: AudioContext | null = null;
 let systemSource: MediaStreamAudioSourceNode | null = null;
 let systemProcessor: AudioWorkletNode | null = null;
 let systemStream: MediaStream | null = null;
+let systemAudioCaptureEnabledForSession = true;
 let isRecordingFlag = false;
 let isStartingFlag = false;
 let isPrepared = false;
@@ -595,6 +609,35 @@ function assignProvisionalSpeaker(segment: TranscriptSegment): TranscriptSegment
   });
 }
 
+async function stopSystemAudioPipeline(): Promise<void> {
+  await flushAndDisconnectProcessor(systemProcessor);
+  systemProcessor = null;
+
+  systemSource?.disconnect();
+  systemSource = null;
+
+  stopMediaStream(systemStream);
+  systemStream = null;
+
+  try {
+    await systemContext?.close();
+  } catch {}
+  systemContext = null;
+
+  systemPartialSpeakerIdValue = null;
+  useMeetingRecordingStore.setState({
+    systemPartial: "",
+    systemPartialSpeakerId: null,
+    systemPartialSpeakerName: null,
+  });
+}
+
+export async function disableMeetingSystemAudioCapture(): Promise<void> {
+  systemAudioCaptureEnabledForSession = false;
+  await stopSystemAudioPipeline();
+  await window.electronAPI?.meetingTranscriptionSetSystemAudioEnabled?.(false);
+}
+
 async function cleanup(): Promise<void> {
   micRecovery?.stop();
   micRecovery = null;
@@ -617,19 +660,7 @@ async function cleanup(): Promise<void> {
   } catch {}
   micContext = null;
 
-  await flushAndDisconnectProcessor(systemProcessor);
-  systemProcessor = null;
-
-  systemSource?.disconnect();
-  systemSource = null;
-
-  stopMediaStream(systemStream);
-  systemStream = null;
-
-  try {
-    await systemContext?.close();
-  } catch {}
-  systemContext = null;
+  await stopSystemAudioPipeline();
 
   ipcCleanups.forEach((fn) => fn());
   ipcCleanups = [];
@@ -696,6 +727,8 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
     1,
     Math.min(MAX_SPEAKER_COUNT, args.expectedCount ?? DEFAULT_EXPECTED_SPEAKER_COUNT)
   );
+  const systemAudioCaptureEnabled = getSettings().systemAudioCaptureEnabled !== false;
+  systemAudioCaptureEnabledForSession = systemAudioCaptureEnabled;
 
   const systemAudioAccessPromise =
     window.electronAPI?.checkSystemAudioAccess?.() ?? Promise.resolve(DEFAULT_SYSTEM_AUDIO_ACCESS);
@@ -751,7 +784,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
     const initialSystemAudioAccess =
       (await systemAudioAccessPromise) ?? getFallbackSystemAudioAccess();
     const { initialSystemAudioStrategy, initialDisplayCaptureStrategy, systemCapturePromise } =
-      prepareMeetingSystemAudioCapture(initialSystemAudioAccess);
+      prepareMeetingSystemAudioCapture(initialSystemAudioAccess, systemAudioCaptureEnabled);
 
     const [startResult, micResult, initialSystemCaptureResult] = await Promise.all([
       window.electronAPI?.meetingTranscriptionStart?.({
@@ -798,6 +831,11 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
     ]);
     let systemCaptureResult = initialSystemCaptureResult;
 
+    if (!systemAudioCaptureEnabledForSession) {
+      stopMediaStream(systemCaptureResult.stream);
+      systemCaptureResult = { stream: null, error: null };
+    }
+
     const streamsMs = performance.now() - startTime;
     if (!isRecordingFlag) {
       logger.info("Meeting transcription aborted during setup (stop called)", {}, "meeting");
@@ -831,9 +869,12 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
       initialDisplayCaptureStrategy,
       systemAudioStrategy,
       systemCaptureResult,
+      systemAudioCaptureEnabled: systemAudioCaptureEnabledForSession,
     });
     const systemAudioHandledInMain =
-      systemAudioMode !== "unsupported" && !isRendererSystemAudioStrategy(systemAudioStrategy);
+      systemAudioCaptureEnabledForSession &&
+      systemAudioMode !== "unsupported" &&
+      !isRendererSystemAudioStrategy(systemAudioStrategy);
     if (systemAudioHandledInMain && systemCaptureResult.stream) {
       stopMediaStream(systemCaptureResult.stream);
       systemCaptureResult = { stream: null, error: null };
@@ -870,6 +911,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
         type: "partial" | "final" | "retract";
         timestamp?: number;
       }) => {
+        if (data.source === "system" && !systemAudioCaptureEnabledForSession) return;
         if (data.type === "retract") {
           const next = useMeetingRecordingStore
             .getState()
@@ -1118,7 +1160,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
       });
     }
 
-    if (systemCaptureResult.stream) {
+    if (systemCaptureResult.stream && systemAudioCaptureEnabledForSession) {
       const stream = systemCaptureResult.stream;
       systemStream = stream;
 
@@ -1130,7 +1172,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
         stream,
         context: ctx,
         onChunk: (chunk) => {
-          if (!isRecordingFlag) return;
+          if (!isRecordingFlag || !systemAudioCaptureEnabledForSession) return;
           if (socketReady) {
             window.electronAPI?.meetingTranscriptionSend?.(chunk, "system");
             return;
@@ -1173,8 +1215,10 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
     for (const chunk of pendingMicChunks) {
       window.electronAPI?.meetingTranscriptionSend?.(chunk, "mic");
     }
-    for (const chunk of pendingSystemChunks) {
-      window.electronAPI?.meetingTranscriptionSend?.(chunk, "system");
+    if (systemAudioCaptureEnabledForSession) {
+      for (const chunk of pendingSystemChunks) {
+        window.electronAPI?.meetingTranscriptionSend?.(chunk, "system");
+      }
     }
 
     const totalMs = performance.now() - startTime;

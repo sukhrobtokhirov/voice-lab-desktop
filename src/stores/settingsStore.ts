@@ -155,7 +155,7 @@ const BOOLEAN_SETTINGS = new Set([
   "meetingSileroEnabled",
   "isSignedIn",
   "autoPasteEnabled",
-  "keepTranscriptionInClipboard",
+  "systemAudioCaptureEnabled",
   "dataRetentionEnabled",
   "saveDiscardedTranscriptions",
   "noteFilesEnabled",
@@ -465,7 +465,7 @@ export interface SettingsState
   panelStartPosition: "bottom-right" | "center" | "bottom-left";
   showTranscriptionPreview: boolean;
   autoPasteEnabled: boolean;
-  keepTranscriptionInClipboard: boolean;
+  systemAudioCaptureEnabled: boolean;
   noteFilesEnabled: boolean;
   noteFilesPath: string;
 
@@ -726,7 +726,7 @@ export interface SettingsState
   setPanelStartPosition: (position: "bottom-right" | "center" | "bottom-left") => void;
   setShowTranscriptionPreview: (value: boolean) => void;
   setAutoPasteEnabled: (value: boolean) => void;
-  setKeepTranscriptionInClipboard: (value: boolean) => void;
+  setSystemAudioCaptureEnabled: (value: boolean) => void;
   setNoteFilesEnabled: (value: boolean) => void;
   setNoteFilesPath: (value: string) => void;
   setIsSignedIn: (value: boolean) => void;
@@ -1070,7 +1070,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   })(),
   showTranscriptionPreview: readBoolean("showTranscriptionPreview", false),
   autoPasteEnabled: readBoolean("autoPasteEnabled", true),
-  keepTranscriptionInClipboard: readBoolean("keepTranscriptionInClipboard", false),
+  systemAudioCaptureEnabled: readBoolean("systemAudioCaptureEnabled", true),
   noteFilesEnabled: readBoolean("noteFilesEnabled", false),
   noteFilesPath: readString("noteFilesPath", ""),
   isSignedIn: readBoolean("isSignedIn", false),
@@ -1828,7 +1828,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
 
   setShowTranscriptionPreview: createBooleanSetter("showTranscriptionPreview"),
   setAutoPasteEnabled: createBooleanSetter("autoPasteEnabled"),
-  setKeepTranscriptionInClipboard: createBooleanSetter("keepTranscriptionInClipboard"),
+  setSystemAudioCaptureEnabled: createBooleanSetter("systemAudioCaptureEnabled"),
   setNoteFilesEnabled: createBooleanSetter("noteFilesEnabled"),
   setNoteFilesPath: createStringSetter("noteFilesPath"),
 

@@ -29,11 +29,11 @@
   },
   "tray": {
     "toggleDictation": {
-      "show": "顯示語音輸入面板",
-      "hide": "隱藏語音輸入面板"
+      "show": "顯示",
+      "hide": "隱藏"
     },
-    "openControlPanel": "開啟控制面板",
-    "hideControlPanel": "隱藏控制面板",
+    "openControlPanel": "開啟 VoiceLab",
+    "hideControlPanel": "隱藏 VoiceLab",
     "quit": "結束 VoiceLab",
     "tooltip": "VoiceLab - 語音輸入"
   },

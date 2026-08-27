@@ -97,8 +97,9 @@ class WindowManager {
   async _createMainWindow() {
     const cursorPos = screen.getCursorScreenPoint();
     const display = screen.getDisplayNearestPoint(cursorPos);
-    const startAsRecordingIsland =
-      process.env.NODE_ENV === "development" && supportsRecordingIsland();
+    // The menu-bar island experiment remains dormant. The compact waveform
+    // control is now the sole shipped dictation surface in every environment.
+    const startAsRecordingIsland = false;
     const initialSize = startAsRecordingIsland ? WINDOW_SIZES.RECORDING_ISLAND : WINDOW_SIZES.BASE;
     const position = WindowPositionUtil.getMainWindowPosition(
       display,

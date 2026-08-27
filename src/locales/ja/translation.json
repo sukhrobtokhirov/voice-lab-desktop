@@ -29,11 +29,11 @@
   },
   "tray": {
     "toggleDictation": {
-      "show": "ディクテーションパネルを表示",
-      "hide": "ディクテーションパネルを非表示"
+      "show": "表示",
+      "hide": "非表示"
     },
-    "openControlPanel": "コントロールパネルを開く",
-    "hideControlPanel": "コントロールパネルを非表示",
+    "openControlPanel": "VoiceLab を開く",
+    "hideControlPanel": "VoiceLab を非表示",
     "quit": "VoiceLab を終了",
     "tooltip": "VoiceLab - 音声ディクテーション"
   },

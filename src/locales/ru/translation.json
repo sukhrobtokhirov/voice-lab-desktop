@@ -29,11 +29,11 @@
   },
   "tray": {
     "toggleDictation": {
-      "show": "Показать панель диктовки",
-      "hide": "Скрыть панель диктовки"
+      "show": "Показать",
+      "hide": "Скрыть"
     },
-    "openControlPanel": "Открыть панель управления",
-    "hideControlPanel": "Скрыть панель управления",
+    "openControlPanel": "Открыть VoiceLab",
+    "hideControlPanel": "Скрыть VoiceLab",
     "quit": "Закрыть VoiceLab",
     "tooltip": "VoiceLab — голосовая диктовка"
   },

@@ -9,6 +9,8 @@ interface PermissionsSectionProps {
   systemAudio: Pick<SystemAudioAccessResult, "granted" | "mode"> & {
     request: () => Promise<boolean>;
     isChecking?: boolean;
+    enabled?: boolean;
+    onEnabledChange?: (enabled: boolean) => void;
   };
 }
 
@@ -20,6 +22,8 @@ interface PermissionToggleRowProps {
   onRequest: () => void | Promise<unknown>;
   pending?: boolean;
   hasDivider?: boolean;
+  enabled?: boolean;
+  onEnabledChange?: (enabled: boolean) => void;
 }
 
 function PermissionToggleRow({
@@ -30,21 +34,26 @@ function PermissionToggleRow({
   onRequest,
   pending = false,
   hasDivider = false,
+  enabled,
+  onEnabledChange,
 }: PermissionToggleRowProps) {
+  const isEnabled = granted && (enabled ?? true);
+  const canToggle = granted && enabled !== undefined && onEnabledChange !== undefined;
+
   return (
     <div
       className={`flex min-h-16 items-center gap-3 px-4 py-2.5 ${
         hasDivider ? "border-t border-border" : ""
-      } ${granted ? "bg-foreground/[0.03]" : "bg-background"}`}
+      } ${isEnabled ? "bg-foreground/[0.03]" : "bg-background"}`}
     >
       <span
         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border ${
-          granted
+          isEnabled
             ? "border-foreground bg-foreground text-background"
             : "border-border bg-muted/50 text-muted-foreground"
         }`}
       >
-        {granted ? <Check className="h-4 w-4" strokeWidth={2.5} /> : <Icon className="h-4 w-4" />}
+        {isEnabled ? <Check className="h-4 w-4" strokeWidth={2.5} /> : <Icon className="h-4 w-4" />}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-medium">{title}</span>
@@ -54,19 +63,19 @@ function PermissionToggleRow({
         type="button"
         role="switch"
         aria-label={title}
-        aria-checked={granted}
+        aria-checked={isEnabled}
         aria-busy={pending || undefined}
-        disabled={granted || pending}
-        onClick={granted || pending ? undefined : onRequest}
+        disabled={pending || (granted && !canToggle)}
+        onClick={pending ? undefined : canToggle ? () => onEnabledChange(!enabled) : granted ? undefined : onRequest}
         className={`relative ml-auto h-6 w-10 shrink-0 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default ${
-          granted
+          isEnabled
             ? "border-foreground bg-foreground"
             : "border-border bg-muted/50 hover:border-foreground/40"
         }`}
       >
         <span
           className={`absolute top-0.5 h-4 w-4 rounded-full transition-[left] duration-150 ${
-            granted ? "left-5 bg-background" : "left-0.5 bg-muted-foreground/70"
+            isEnabled ? "left-5 bg-background" : "left-0.5 bg-muted-foreground/70"
           }`}
         />
       </button>
@@ -110,6 +119,8 @@ export default function PermissionsSection({ permissions, systemAudio }: Permiss
             granted: systemAudio.granted,
             onRequest: systemAudio.request,
             pending: systemAudio.isChecking,
+            enabled: systemAudio.enabled,
+            onEnabledChange: systemAudio.onEnabledChange,
           },
         ]
       : []),

@@ -23,3 +23,15 @@ test("transcription copy paths prefer Electron's clipboard bridge", () => {
   assert.doesNotMatch(controlPanel, /controlPanel\.history\.copiedTitle/);
   assert.match(transcriptionItem, /copiedTarget === "text" \? <Check/);
 });
+
+test("every completed dictation remains ready to paste", () => {
+  const recording = read("src/hooks/useAudioRecording.js");
+  const completion = recording.slice(
+    recording.indexOf("onTranscriptionComplete: async"),
+    recording.indexOf("onTranslationFallback")
+  );
+
+  assert.match(completion, /restoreClipboard:\s*false/);
+  assert.match(completion, /else\s*\{\s*\/\/ Dictation is always useful[\s\S]*writeTextToClipboard\(result\.text\)/);
+  assert.doesNotMatch(completion, /keepTranscriptionInClipboard/);
+});

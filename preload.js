@@ -25,6 +25,7 @@ const registerListener = (channel, handlerFactory) => {
 const fullElectronAPI = {
   pasteText: (text, options) => ipcRenderer.invoke("paste-text", text, options),
   hideWindow: () => ipcRenderer.invoke("hide-window"),
+  quitApp: () => ipcRenderer.invoke("quit-app"),
   showDictationPanel: () => ipcRenderer.invoke("show-dictation-panel"),
   onToggleDictation: registerListener("toggle-dictation", (callback) => () => callback()),
   onToggleVoiceAgent: registerListener("toggle-voice-agent", (callback) => () => callback()),
@@ -503,6 +504,8 @@ const fullElectronAPI = {
     ipcRenderer.invoke("meeting-transcription-start", options),
   meetingTranscriptionSend: (buffer, source) =>
     ipcRenderer.send("meeting-transcription-send", buffer, source),
+  meetingTranscriptionSetSystemAudioEnabled: (enabled) =>
+    ipcRenderer.invoke("meeting-transcription-set-system-audio-enabled", enabled),
   meetingTranscriptionStop: () => ipcRenderer.invoke("meeting-transcription-stop"),
   meetingTranscriptionCancel: () => ipcRenderer.invoke("meeting-transcription-cancel"),
   onMeetingTranscriptionSegment: registerListener(

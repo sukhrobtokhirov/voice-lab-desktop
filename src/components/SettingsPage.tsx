@@ -77,6 +77,7 @@ import shieldIcon from "../assets/icons/shield.svg";
 import folderOpenIcon from "../assets/icons/folder-open.svg";
 import DeveloperSection from "./DeveloperSection";
 import notesIcon from "../assets/icons/notes.svg";
+import { disableMeetingSystemAudioCapture } from "../stores/meetingRecordingStore";
 
 const formatAmount = (cents: number, currency: string) =>
   (cents / 100).toLocaleString(undefined, { style: "currency", currency });
@@ -215,8 +216,8 @@ export default function SettingsPage({
     setPauseMediaOnDictation,
     autoPasteEnabled,
     setAutoPasteEnabled,
-    keepTranscriptionInClipboard,
-    setKeepTranscriptionInClipboard,
+    systemAudioCaptureEnabled,
+    setSystemAudioCaptureEnabled,
     floatingIconAutoHide,
     setFloatingIconAutoHide,
     startMinimized,
@@ -242,6 +243,13 @@ export default function SettingsPage({
   const { t } = useTranslation();
   const { toast } = useToast();
 
+  const handleSystemAudioCaptureChange = useCallback(
+    (enabled: boolean) => {
+      setSystemAudioCaptureEnabled(enabled);
+      if (!enabled) void disableMeetingSystemAudioCapture();
+    },
+    [setSystemAudioCaptureEnabled]
+  );
   const [currentVersion, setCurrentVersion] = useState<string>("");
   const isRemovingModels = false;
   const handleRemoveModels = () => {};
@@ -267,6 +275,8 @@ export default function SettingsPage({
   const isHotkeySection = activeSection === "hotkeys";
   const permissionsHook = usePermissions(showAlertDialog, { enabled: isPreferencesSection });
   const systemAudio = useSystemAudioPermission({ enabled: isPreferencesSection });
+  const canShowSystemAudioCapture =
+    systemAudio.granted || canManageSystemAudioInApp(systemAudio);
   useClipboard(showAlertDialog);
   const [audioStorageUsage, setAudioStorageUsage] = useState({ fileCount: 0, totalBytes: 0 });
 
@@ -849,17 +859,6 @@ export default function SettingsPage({
                     description={t("settingsPage.general.clipboard.autoPasteDescription")}
                   >
                     <Toggle checked={autoPasteEnabled} onChange={setAutoPasteEnabled} />
-                  </SettingsRow>
-                </SettingsPanelRow>
-                <SettingsPanelRow>
-                  <SettingsRow
-                    label={t("settingsPage.general.clipboard.keepInClipboard")}
-                    description={t("settingsPage.general.clipboard.keepInClipboardDescription")}
-                  >
-                    <Toggle
-                      checked={keepTranscriptionInClipboard}
-                      onChange={setKeepTranscriptionInClipboard}
-                    />
                   </SettingsRow>
                 </SettingsPanelRow>
               </SettingsPanel>
@@ -1786,7 +1785,7 @@ EOF`,
                   buttonText={t("settingsPage.permissions.grantAccess")}
                 />
 
-                {(platform === "darwin" || canManageSystemAudioInApp(systemAudio)) && (
+                {(platform === "darwin" || canShowSystemAudioCapture) && (
                   <>
                     {platform === "darwin" && (
                       <PermissionCard
@@ -1803,13 +1802,15 @@ EOF`,
                         }
                       />
                     )}
-                    {canManageSystemAudioInApp(systemAudio) && (
+                    {canShowSystemAudioCapture && (
                       <PermissionCard
                         icon={Monitor}
                         title={t("settingsPage.permissions.systemAudioTitle")}
                         description={t("settingsPage.permissions.systemAudioDescription")}
                         granted={systemAudio.granted}
                         onRequest={systemAudio.request}
+                        enabled={systemAudioCaptureEnabled}
+                        onEnabledChange={handleSystemAudioCaptureChange}
                         buttonText={t("settingsPage.permissions.grantAccess")}
                         badge={t("settingsPage.permissions.optional")}
                       />

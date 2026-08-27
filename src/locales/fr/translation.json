@@ -29,11 +29,11 @@
   },
   "tray": {
     "toggleDictation": {
-      "show": "Afficher le panneau de dictée",
-      "hide": "Masquer le panneau de dictée"
+      "show": "Afficher",
+      "hide": "Masquer"
     },
-    "openControlPanel": "Ouvrir le panneau de contrôle",
-    "hideControlPanel": "Masquer le panneau de contrôle",
+    "openControlPanel": "Ouvrir VoiceLab",
+    "hideControlPanel": "Masquer VoiceLab",
     "quit": "Quitter VoiceLab",
     "tooltip": "VoiceLab - Dictée vocale"
   },

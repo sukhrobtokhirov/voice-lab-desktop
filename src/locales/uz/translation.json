@@ -29,11 +29,11 @@
   },
   "tray": {
     "toggleDictation": {
-      "show": "Diktant panelini ko‘rsatish",
-      "hide": "Diktant panelini yashirish"
+      "show": "Ko‘rsatish",
+      "hide": "Yashirish"
     },
-    "openControlPanel": "Boshqaruv panelini ochish",
-    "hideControlPanel": "Boshqaruv panelini yashirish",
+    "openControlPanel": "VoiceLab-ni ochish",
+    "hideControlPanel": "VoiceLab-ni yashirish",
     "quit": "VoiceLab-dan chiqish",
     "tooltip": "VoiceLab — ovozli diktant"
   },

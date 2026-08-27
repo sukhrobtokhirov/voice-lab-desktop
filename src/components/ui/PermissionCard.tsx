@@ -2,6 +2,7 @@ import { Button } from "./button";
 import { Check, LucideIcon } from "lucide-react";
 import { cn } from "../lib/utils";
 import VoiceLabIcon from "./VoiceLabIcon";
+import { Toggle } from "./toggle";
 
 interface PermissionCardProps {
   icon: LucideIcon | string;
@@ -12,6 +13,8 @@ interface PermissionCardProps {
   buttonText?: string;
   badge?: string;
   hint?: string;
+  enabled?: boolean;
+  onEnabledChange?: (enabled: boolean) => void;
 }
 
 export default function PermissionCard({
@@ -23,13 +26,18 @@ export default function PermissionCard({
   buttonText = "Grant Access",
   badge,
   hint,
+  enabled,
+  onEnabledChange,
 }: PermissionCardProps) {
+  const isEnabled = granted && (enabled ?? true);
+  const canToggle = granted && enabled !== undefined && onEnabledChange !== undefined;
+
   return (
     <div
       className={cn(
         "group relative rounded-md p-3 transition-colors duration-150",
         "border",
-        granted
+        isEnabled
           ? "bg-success/5 border-success/20 dark:bg-success/5 dark:border-success/15"
           : "bg-surface-1 border-border hover:bg-surface-2 hover:border-border-hover"
       )}
@@ -38,12 +46,12 @@ export default function PermissionCard({
         <div
           className={cn(
             "w-8 h-8 rounded-md flex items-center justify-center shrink-0 transition-colors duration-150",
-            granted
+            isEnabled
               ? "bg-success/10 dark:bg-success/15"
               : "bg-primary/10 dark:bg-primary/15 group-hover:bg-primary/15"
           )}
         >
-          {granted ? (
+          {isEnabled ? (
             <Check className="w-4 h-4 text-success" strokeWidth={2.5} />
           ) : typeof Icon === "string" ? (
             <VoiceLabIcon source={Icon} className="w-4 h-4 text-primary" />
@@ -64,11 +72,13 @@ export default function PermissionCard({
           <p className="mt-0.5 text-sm leading-5 text-muted-foreground">{description}</p>
         </div>
 
-        {!granted && (
+        {canToggle ? (
+          <Toggle checked={Boolean(enabled)} onChange={onEnabledChange} />
+        ) : !granted ? (
           <Button onClick={onRequest} size="sm" className="h-7 px-3 text-xs shrink-0">
             {buttonText}
           </Button>
-        )}
+        ) : null}
       </div>
 
       {hint && !granted && (

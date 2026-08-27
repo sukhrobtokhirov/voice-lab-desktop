@@ -68,6 +68,10 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const setTheme = useSettingsStore((state) => state.setTheme);
   const dictationKey = useSettingsStore((state) => state.dictationKey);
   const setDictationKey = useSettingsStore((state) => state.setDictationKey);
+  const systemAudioCaptureEnabled = useSettingsStore((state) => state.systemAudioCaptureEnabled);
+  const setSystemAudioCaptureEnabled = useSettingsStore(
+    (state) => state.setSystemAudioCaptureEnabled
+  );
   const platform = getPlatform();
   const needsTextInsertionPermission = platform === "darwin";
   const [hotkey, setHotkey] = useState(
@@ -451,21 +455,25 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                     ].map((permission, index) => {
                       const Icon = permission.icon;
                       const isPending = permission.pending ?? false;
+                      const isSystemAudio = permission.id === "system-audio";
+                      const isEnabled = permission.granted &&
+                        (!isSystemAudio || systemAudioCaptureEnabled);
+                      const canToggle = isSystemAudio && permission.granted && !isPending;
                       return (
                         <div
                           key={permission.id}
                           className={`flex min-h-14 items-center gap-3 px-4 py-2.5 text-left ${
                             index > 0 ? "border-t border-border" : ""
-                          } ${permission.granted ? "bg-foreground/[0.03]" : "bg-background"}`}
+                          } ${isEnabled ? "bg-foreground/[0.03]" : "bg-background"}`}
                         >
                           <span
                             className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border ${
-                              permission.granted
+                              isEnabled
                                 ? "border-foreground bg-foreground text-background"
                                 : "border-border bg-muted/50 text-muted-foreground"
                             }`}
                           >
-                            {permission.granted ? (
+                            {isEnabled ? (
                               <Check className="h-4 w-4" strokeWidth={2.5} />
                             ) : (
                               <Icon className="h-4 w-4" strokeWidth={1.7} />
@@ -480,26 +488,32 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                           <button
                             type="button"
                             role="switch"
-                            aria-checked={permission.granted}
+                            aria-checked={isEnabled}
                             aria-label={`${permission.title}: ${
-                              permission.granted
+                              isEnabled
                                 ? t("desktop.onboarding.permissions.granted")
                                 : t("desktop.onboarding.permissions.allow")
                             }`}
                             aria-busy={isPending || undefined}
-                            disabled={permission.granted || isPending}
+                            disabled={isPending || (permission.granted && !isSystemAudio)}
                             onClick={
-                              permission.granted || isPending ? undefined : permission.request
+                              isPending
+                                ? undefined
+                                : canToggle
+                                  ? () => setSystemAudioCaptureEnabled(!systemAudioCaptureEnabled)
+                                  : permission.granted
+                                    ? undefined
+                                    : permission.request
                             }
                             className={`relative ml-auto h-6 w-10 shrink-0 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default ${
-                              permission.granted
+                              isEnabled
                                 ? "border-foreground bg-foreground"
                                 : "border-border bg-muted/50 hover:border-foreground/40"
                             }`}
                           >
                             <span
                               className={`absolute top-0.5 h-4 w-4 rounded-full transition-[left] duration-150 ${
-                                permission.granted
+                                isEnabled
                                   ? "left-5 bg-background"
                                   : "left-0.5 bg-muted-foreground/70"
                               }`}

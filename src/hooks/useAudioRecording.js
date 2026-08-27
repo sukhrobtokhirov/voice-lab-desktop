@@ -233,14 +233,17 @@ export const useAudioRecording = (toast, options = {}) => {
           }
 
           const isStreaming = result.source?.includes("streaming");
-          const { autoPasteEnabled, keepTranscriptionInClipboard } = getSettings();
+          const { autoPasteEnabled } = getSettings();
           let textWasPlaced = false;
 
           if (autoPasteEnabled) {
             const pasteStart = performance.now();
             textWasPlaced = await audioManagerRef.current.safePaste(result.text, {
               ...(isStreaming ? { fromStreaming: true } : {}),
-              restoreClipboard: !keepTranscriptionInClipboard,
+              // Pasting writes this exact final text to the system clipboard first.
+              // Keep it there after the native paste so it is immediately available
+              // for a manual paste too.
+              restoreClipboard: false,
               allowClipboardFallback: isAccessibilitySkipped(),
             });
             logger.info(
@@ -252,7 +255,9 @@ export const useAudioRecording = (toast, options = {}) => {
               },
               "streaming"
             );
-          } else if (keepTranscriptionInClipboard) {
+          } else {
+            // Dictation is always useful as a pasteable result, even when automatic
+            // insertion is turned off.
             await writeTextToClipboard(result.text);
           }
 
