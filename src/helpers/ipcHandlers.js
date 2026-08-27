@@ -6480,29 +6480,20 @@ class IPCHandlers {
       }
     });
 
-    const NOTIFICATION_PREF_KEYS = new Set([
-      "notificationsEnabled",
-      "notifyMeetingDetection",
-      "notifyCalendarReminders",
-      "notifyUpdates",
-    ]);
-
     this._handle("sync-notification-preferences", async (_event, prefs) => {
       try {
         if (!prefs || typeof prefs !== "object") {
           return { success: false, error: "Invalid preferences" };
         }
-        for (const [k, v] of Object.entries(prefs)) {
-          if (NOTIFICATION_PREF_KEYS.has(k)) {
-            this.windowManager.notificationPrefs[k] = !!v;
-          }
-        }
+        this.windowManager.updateNotificationPreferences(prefs);
         // Detection only serves the notification, so the toggle also gates the detector.
         const { notificationsEnabled, notifyMeetingDetection } =
           this.windowManager.notificationPrefs;
         this.meetingDetectionEngine?.setPreferences({
           audioDetection: notificationsEnabled && notifyMeetingDetection,
         });
+        this.meetingDetectionEngine?.reconcileNotificationPreferences();
+        this.updateManager?.reconcileNativeUpdateNotification();
         return { success: true };
       } catch (error) {
         return { success: false, error: error.message };

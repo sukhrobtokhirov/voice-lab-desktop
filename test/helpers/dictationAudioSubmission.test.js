@@ -20,11 +20,12 @@ test("the start cue completes before microphone recording starts", () => {
   );
 });
 
-test("the start cue promise waits through the audible tone", () => {
+test("the start cue uses the bundled voice sound and waits through it", () => {
   const source = read("src/utils/dictationCues.js");
 
-  assert.match(source, /waitForCompletion: true/);
-  assert.match(source, /await new Promise\(\(resolve\) => setTimeout/);
+  assert.match(source, /assets\/audios\/voice\.wav/);
+  assert.match(source, /playAudioCue\("voice", \{ waitForCompletion: true \}\)/);
+  assert.match(source, /await completion/);
 });
 
 test("all locally detected non-speech is rejected before cloud upload", () => {

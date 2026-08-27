@@ -38,6 +38,17 @@ class UpdateManager {
     this.windowManager = windowManager;
   }
 
+  areNativeUpdateNotificationsEnabled() {
+    const preferences = this.windowManager?.notificationPrefs || {};
+    return preferences.notificationsEnabled !== false && preferences.notifyUpdates !== false;
+  }
+
+  reconcileNativeUpdateNotification() {
+    if (this.areNativeUpdateNotificationsEnabled() || !this.nativeUpdateNotification) return;
+    this.nativeUpdateNotification.close();
+    this.nativeUpdateNotification = null;
+  }
+
   setupAutoUpdater() {
     if (!app.isPackaged && process.env.NODE_ENV === "development") {
       return;
@@ -116,10 +127,7 @@ class UpdateManager {
         }
         const publicInfo = publicUpdateInfo(info);
         this.notifyRenderers("update-available", publicInfo);
-        const nPrefs = this.windowManager?.notificationPrefs || {};
-        const notifAllowed =
-          nPrefs.notificationsEnabled !== false && nPrefs.notifyUpdates !== false;
-        if (info && !this._suppressNotification && notifAllowed) {
+        if (info && !this._suppressNotification && this.areNativeUpdateNotificationsEnabled()) {
           this.showNativeUpdateNotification(publicInfo);
         }
         this._suppressNotification = false;
@@ -195,6 +203,12 @@ class UpdateManager {
   }
 
   showNativeUpdateNotification(info, { preview = false, readyToInstall = false } = {}) {
+    // Preview is an explicit developer action. Every ordinary native update
+    // notification, including the post-download one, obeys user preferences.
+    if (!preview && !this.areNativeUpdateNotificationsEnabled()) {
+      return false;
+    }
+
     if (!Notification.isSupported()) {
       console.warn("Native notifications are not supported on this system");
       return false;

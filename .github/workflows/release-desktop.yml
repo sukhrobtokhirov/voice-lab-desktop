@@ -450,15 +450,10 @@ jobs:
 
           mapfile -t assets < <(find staged-release -maxdepth 1 -type f -print | sort)
           test "${#assets[@]}" -gt 0
-          release_scope="macOS arm64/x64 and Linux x64"
-          if [ "$WINDOWS_ENABLED" = "true" ]; then
-            release_scope="$release_scope, and Windows x64"
-          fi
-
           gh release create "$TAG" "${assets[@]}" \
             --verify-tag \
             --title "VoiceLab Desktop $VERSION" \
-            --notes "Verified $release_scope release."
+            --notes-from-tag
 
           expected_count="${#assets[@]}"
           actual_count="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets | length')"

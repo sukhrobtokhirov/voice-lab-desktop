@@ -1,111 +1,77 @@
-import logger from "./logger";
+import errorCueUrl from "../assets/audios/error.wav";
+import notificationCueUrl from "../assets/audios/notification.wav";
+import voiceCueUrl from "../assets/audios/voice.wav";
 import { getSettings } from "../stores/settingsStore";
+import logger from "./logger";
 
-const START_NOTES = [523.25, 659.25];
-const STOP_NOTES = [587.33, 440];
-const NOTE_DURATION_SECONDS = 0.09;
-const NOTE_GAP_SECONDS = 0.025;
-const NOTE_ATTACK_SECONDS = 0.015;
-const MAX_GAIN = 0.2;
-const MIN_GAIN = 0.0001;
-const CUE_START_DELAY_SECONDS = 0.005;
-const CUE_TAIL_SECONDS = 0.02;
-
-let audioContext = null;
-
-const getAudioContext = () => {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextCtor) {
-    return null;
-  }
-
-  if (!audioContext || audioContext.state === "closed") {
-    audioContext = new AudioContextCtor();
-  }
-
-  return audioContext;
+const CUE_ASSETS = {
+  voice: voiceCueUrl,
+  notification: notificationCueUrl,
+  error: errorCueUrl,
 };
 
-export const resumeContextIfNeeded = async () => {
-  try {
-    const context = getAudioContext();
-    if (!context) {
-      return null;
-    }
+const CUE_DURATION_MS = 1000;
+const CUE_TIMEOUT_BUFFER_MS = 150;
+const MIN_REPLAY_INTERVAL_MS = 80;
 
-    if (context.state === "suspended") {
-      await context.resume();
-    }
-
-    return context.state === "running" ? context : null;
-  } catch (error) {
-    logger.debug(
-      "Failed to initialize dictation cue audio context",
-      { error: error instanceof Error ? error.message : String(error) },
-      "audio"
-    );
-    return null;
-  }
-};
-
-const scheduleTone = (context, frequency, startTime) => {
-  const oscillator = context.createOscillator();
-  const gainNode = context.createGain();
-  const stopTime = startTime + NOTE_DURATION_SECONDS;
-
-  oscillator.type = "sine";
-  oscillator.frequency.setValueAtTime(frequency, startTime);
-
-  gainNode.gain.setValueAtTime(MIN_GAIN, startTime);
-  gainNode.gain.linearRampToValueAtTime(MAX_GAIN, startTime + NOTE_ATTACK_SECONDS);
-  gainNode.gain.exponentialRampToValueAtTime(MIN_GAIN, stopTime);
-
-  oscillator.connect(gainNode);
-  gainNode.connect(context.destination);
-
-  oscillator.start(startTime);
-  oscillator.stop(stopTime + 0.01);
-};
+const audioByCue = new Map();
+const lastPlayedAtByCue = new Map();
 
 const isEnabled = () => getSettings().audioCuesEnabled;
 
-const playCue = async (notes, { waitForCompletion = false } = {}) => {
+const getAudio = (cue) => {
+  if (typeof Audio === "undefined") return null;
+
+  let audio = audioByCue.get(cue);
+  if (!audio) {
+    audio = new Audio(CUE_ASSETS[cue]);
+    audio.preload = "auto";
+    audioByCue.set(cue, audio);
+  }
+
+  return audio;
+};
+
+const waitForCompletion = (audio) =>
+  new Promise((resolve) => {
+    let timeout;
+    const done = () => {
+      clearTimeout(timeout);
+      audio.removeEventListener("ended", done);
+      resolve();
+    };
+
+    audio.addEventListener("ended", done, { once: true });
+    timeout = setTimeout(done, CUE_DURATION_MS + CUE_TIMEOUT_BUFFER_MS);
+  });
+
+export const playAudioCue = async (cue, { waitForCompletion: shouldWait = false } = {}) => {
+  if (!isEnabled() || !CUE_ASSETS[cue]) return;
+
+  const now = Date.now();
+  if (now - (lastPlayedAtByCue.get(cue) ?? 0) < MIN_REPLAY_INTERVAL_MS) return;
+  lastPlayedAtByCue.set(cue, now);
+
   try {
-    if (!isEnabled()) return;
+    const audio = getAudio(cue);
+    if (!audio) return;
 
-    const context = await resumeContextIfNeeded();
-    if (!context) {
-      return;
-    }
-
-    const baseTime = context.currentTime + CUE_START_DELAY_SECONDS;
-    notes.forEach((frequency, index) => {
-      const noteStart = baseTime + index * (NOTE_DURATION_SECONDS + NOTE_GAP_SECONDS);
-      scheduleTone(context, frequency, noteStart);
-    });
-
-    if (waitForCompletion) {
-      const cueDurationSeconds =
-        CUE_START_DELAY_SECONDS +
-        (notes.length - 1) * (NOTE_DURATION_SECONDS + NOTE_GAP_SECONDS) +
-        NOTE_DURATION_SECONDS +
-        CUE_TAIL_SECONDS;
-      await new Promise((resolve) => setTimeout(resolve, Math.ceil(cueDurationSeconds * 1000)));
-    }
+    audio.pause();
+    audio.currentTime = 0;
+    const completion = shouldWait ? waitForCompletion(audio) : null;
+    await audio.play();
+    if (completion) await completion;
   } catch (error) {
     logger.debug(
-      "Failed to play dictation cue",
-      { error: error instanceof Error ? error.message : String(error) },
+      "Failed to play application audio cue",
+      { cue, error: error instanceof Error ? error.message : String(error) },
       "audio"
     );
   }
 };
 
 // Wait for the start cue so the microphone recording never contains the cue itself.
-export const playStartCue = () => playCue(START_NOTES, { waitForCompletion: true });
-
-export const playStopCue = () => playCue(STOP_NOTES);
+export const playStartCue = () => playAudioCue("voice", { waitForCompletion: true });
+export const playStopCue = () => playAudioCue("voice");
+export const playNotificationCue = () => playAudioCue("notification");
+export const playErrorCue = () => playAudioCue("error");

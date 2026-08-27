@@ -428,6 +428,20 @@ class MeetingDetectionEngine {
     }
   }
 
+  reconcileNotificationPreferences() {
+    const isEnabledFor = (source) => this._notificationsEnabledFor(source);
+
+    this._notificationQueue = this._notificationQueue.filter(({ source }) => isEnabledFor(source));
+    for (const [detectionId, detection] of this.activeDetections) {
+      if (!isEnabledFor(detection.source)) this.activeDetections.delete(detectionId);
+    }
+
+    const visiblePrompt = this.windowManager?._pendingNotificationData;
+    if (visiblePrompt && !isEnabledFor(visiblePrompt.source)) {
+      this.windowManager.dismissMeetingNotification();
+    }
+  }
+
   getPreferences() {
     return { ...this.preferences };
   }

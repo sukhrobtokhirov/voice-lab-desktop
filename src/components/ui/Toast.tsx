@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { cn } from "../lib/utils";
 import { ToastContext, type ToastProps } from "./useToast";
 import { isDictationPanelWindow } from "../../utils/windowContext";
+import { playErrorCue, playNotificationCue } from "../../utils/dictationCues";
+import { getSettings } from "../../stores/settingsStore";
 
 interface ToastState extends ToastProps {
   id: string;
@@ -33,8 +35,14 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const toast = React.useCallback(
     (props: Omit<ToastProps, "id">): string => {
       const id = Math.random().toString(36).substring(2, 11);
+      const isError = props.variant === "destructive";
+
+      // The global preference intentionally keeps errors visible, but hides
+      // ordinary success/info toasts and their notification sound.
+      if (!isError && !getSettings().notificationsEnabled) return id;
       const newToast: ToastState = { ...props, id, createdAt: Date.now() };
 
+      void (isError ? playErrorCue() : playNotificationCue());
       setToasts((prev) => [...prev, newToast]);
 
       const duration = props.duration ?? (props.variant === "destructive" ? 6000 : 3500);

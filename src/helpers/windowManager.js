@@ -16,6 +16,11 @@ const { DEV_SERVER_PORT } = DevServerManager;
 const { supportsRecordingIsland } = require("./recordingIslandSupport");
 const { configureStatusPanel, restorePanelWindow } = require("./macosStatusPanel");
 const {
+  normalizeNotificationPreferences,
+  readNotificationPreferences,
+  saveNotificationPreferences,
+} = require("./notificationPreferencesStore");
+const {
   MAIN_WINDOW_CONFIG,
   CONTROL_PANEL_CONFIG,
   AGENT_OVERLAY_CONFIG,
@@ -37,12 +42,10 @@ class WindowManager {
     this.notificationWindow = null;
     this._notificationTimeout = null;
     this.transcriptionPreviewWindow = null;
-    this.notificationPrefs = {
-      notificationsEnabled: true,
-      notifyMeetingDetection: true,
-      notifyCalendarReminders: true,
-      notifyUpdates: true,
-    };
+    // Native notifications can be emitted before the renderer finishes loading.
+    // Keep their preferences in the main process as well as the renderer store so
+    // a disabled notification cannot reappear after an app restart.
+    this.notificationPrefs = readNotificationPreferences();
     this.tray = null;
     this.hotkeyManager = new HotkeyManager();
     this.dragManager = new DragManager();
@@ -63,6 +66,13 @@ class WindowManager {
       this.isQuitting = true;
       this.hotkeyManager.unregisterAll();
     });
+  }
+
+  updateNotificationPreferences(preferences) {
+    this.notificationPrefs = saveNotificationPreferences(
+      normalizeNotificationPreferences(preferences, this.notificationPrefs)
+    );
+    return { ...this.notificationPrefs };
   }
 
   async createMainWindow() {
