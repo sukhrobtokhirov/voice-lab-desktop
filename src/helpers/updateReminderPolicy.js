@@ -1,4 +1,6 @@
-const UPDATE_REMINDER_INTERVAL_MS = 24 * 60 * 60 * 1000;
+// Keep an available update visible without showing a notification on every
+// update check. Two hours matches the background update-check cadence.
+const UPDATE_REMINDER_INTERVAL_MS = 2 * 60 * 60 * 1000;
 
 function shouldShowUpdateReminder(lastShownAt, now = Date.now()) {
   if (!Number.isFinite(lastShownAt)) return true;

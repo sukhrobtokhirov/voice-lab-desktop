@@ -130,7 +130,9 @@ test("fake update notifications are explicitly limited to local development", ()
     /showNativeUpdateNotification\(\{ version: "1\.0\.2-test" \}, \{ preview: true \}\)/
   );
   assert.match(updater, /if \(preview\) \{/);
-  assert.match(updater, /autoUpdater\.autoInstallOnAppQuit = false/);
+  assert.match(updater, /autoUpdater\.autoInstallOnAppQuit = true/);
   assert.match(updater, /shouldRemindAboutUpdate\(info\?\.version\)/);
-  assert.match(updater, /actions:\s*\[\s*\{ type: "button", text: i18nMain\.t\("updateNotification\.update"\) \},\s*\]/);
+  assert.match(updater, /readyToInstall: true/);
+  assert.match(updater, /controlPanel\.update\.installButton/);
+  assert.match(updater, /const TWO_HOURS_MS = 2 \* 60 \* 60 \* 1000/);
 });

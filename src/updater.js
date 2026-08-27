@@ -88,9 +88,10 @@ class UpdateManager {
     autoUpdater.allowDowngrade = true;
 
     autoUpdater.autoDownload = false;
-    // Installation must remain an explicit user decision. A downloaded update
-    // is ready in the app, but never restarts VoiceLab just because it quits.
-    autoUpdater.autoInstallOnAppQuit = false;
+    // Never interrupt work: a downloaded update is offered through a native
+    // "Restart & install" action. If it is dismissed, apply it when the user
+    // next quits VoiceLab normally, then relaunch the updated app.
+    autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.logger = console;
 
     this.setupEventHandlers();
@@ -159,7 +160,9 @@ class UpdateManager {
         if (info) {
           this.lastUpdateInfo = publicUpdateInfo(info);
         }
-        this.notifyRenderers("update-downloaded", publicUpdateInfo(info));
+        const publicInfo = publicUpdateInfo(info);
+        this.notifyRenderers("update-downloaded", publicInfo);
+        this.showNativeUpdateNotification(publicInfo, { readyToInstall: true });
       },
     };
 
@@ -191,15 +194,16 @@ class UpdateManager {
     }
   }
 
-  showNativeUpdateNotification(info, { preview = false } = {}) {
+  showNativeUpdateNotification(info, { preview = false, readyToInstall = false } = {}) {
     if (!Notification.isSupported()) {
       console.warn("Native notifications are not supported on this system");
       return false;
     }
 
     // A pending update remains available from the in-app update control.
-    // Native notifications are only a gentle reminder, once per version per day.
-    if (!preview && !shouldRemindAboutUpdate(info?.version)) {
+    // Availability reminders are limited to once per version per two hours;
+    // completion notifications are always shown after a user starts a download.
+    if (!preview && !readyToInstall && !shouldRemindAboutUpdate(info?.version)) {
       return false;
     }
 
@@ -214,28 +218,43 @@ class UpdateManager {
       ];
     const messagePath = `updateNotification.messages.${messageKey}`;
     const canUseActions = process.platform === "darwin" || process.platform === "win32";
+    const title = readyToInstall
+      ? i18nMain.t("controlPanel.update.readyTitle")
+      : i18nMain.t(`${messagePath}.title`);
+    const body = readyToInstall
+      ? i18nMain.t("controlPanel.update.readyDescription")
+      : i18nMain.t(`${messagePath}.description`);
+    const primaryActionText = readyToInstall
+      ? i18nMain.t("controlPanel.update.installButton")
+      : i18nMain.t("updateNotification.update");
     const notification = new Notification({
       id: `update-${info.version}`,
       groupId: "updates",
-      title: i18nMain.t(`${messagePath}.title`),
-      body: i18nMain.t(`${messagePath}.description`),
+      title,
+      body,
       ...(canUseActions
         ? {
             actions: [
-              { type: "button", text: i18nMain.t("updateNotification.update") },
+              { type: "button", text: primaryActionText },
             ],
           }
         : { urgency: "normal", timeoutType: "never" }),
     });
 
-    const download = () => {
+    const runPrimaryAction = () => {
       if (preview) {
         console.info("[dev] Fake update notification action selected");
         return;
       }
 
-      void this.downloadUpdate().catch((error) => {
-        console.error("Failed to start update download from native notification:", error);
+      const action = readyToInstall ? this.installUpdate() : this.downloadUpdate();
+      void action.catch((error) => {
+        console.error(
+          readyToInstall
+            ? "Failed to install the downloaded update from native notification:"
+            : "Failed to start update download from native notification:",
+          error
+        );
       });
     };
 
@@ -258,7 +277,7 @@ class UpdateManager {
       void openUpdateAction();
     });
     notification.on("action", (_event, actionIndex) => {
-      if (actionIndex === 0) download();
+      if (actionIndex === 0) runPrimaryAction();
     });
     notification.on("failed", (_event, error) => {
       console.error("Failed to display native update notification:", error);
@@ -269,7 +288,7 @@ class UpdateManager {
       }
     });
     notification.show();
-    if (!preview) {
+    if (!preview && !readyToInstall) {
       try {
         recordUpdateReminder(info.version);
       } catch (error) {
@@ -445,13 +464,13 @@ class UpdateManager {
         });
       }, 3000);
 
-      const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
       this.updateCheckInterval = setInterval(() => {
         console.log("🔄 Periodic update check...");
         autoUpdater.checkForUpdates().catch((err) => {
           console.error("Periodic update check failed:", err);
         });
-      }, FOUR_HOURS_MS);
+      }, TWO_HOURS_MS);
     }
   }
 
